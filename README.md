@@ -7,9 +7,9 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 ## What works in v0.1
 
 - JSON station/route editor
-- CSV import for stations and route rows
-- downloadable example CSV files in `public/examples/`
-- Excel (.xlsx) import with `Stations` and `Lines` worksheets
+- Excel (.xlsx) input with `Stations` and `Lines` worksheets
+- downloadable Excel input template generated in the browser
+- transfer-coordinate formula validation plus optional VBA validator
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
 - automatic transfer-station grouping across different station IDs
@@ -48,9 +48,7 @@ Stations may repeat one physical interchange with different IDs:
 ]
 ```
 
-The original IDs stay distinct for route input (`G03`, `T01`), but the topology engine automatically groups them into one transfer node because the normalized station name matches and the coordinates are nearby.
-
-`complexId` remains optional as a manual override. Use it when two services refer to the same physical transfer with different names, such as `HSR Taichung` and `Xinwuri`, or to explicitly prevent two nearby same-name records from being merged by assigning different complex IDs.
+The original IDs stay distinct for route input (`G03`, `T01`), but the topology engine automatically groups them into one transfer node when the normalized station name matches. Duplicate names must use identical coordinates; otherwise generation stops with an explicit validation error.
 
 Routes:
 
@@ -121,46 +119,45 @@ The Vite base path is set to:
 ```
 
 
-## CSV / Excel import format
+## Excel input format
+
+The primary input is an Excel workbook with `Stations` and `Lines` worksheets.
 
 ### Stations
 
-Use these columns in `Stations.csv` or the Excel worksheet named `Stations`:
+`Stations` is intentionally only four columns:
 
 ```text
-id,name,lat,lon,complexId
-G01,Station A,24.123,120.456,
-G02,Transfer B,24.1240,120.4570,
-T02,Transfer B,24.1242,120.4571,
-H01,HSR Taichung,24.1120,120.6160,X_HSR
-T06,Xinwuri,24.1110,120.6150,X_HSR
+Station ID,Station Name,Latitude,Longitude
+G05,City Hall,24.154,120.663
+B03,City Hall,24.154,120.663
 ```
 
-The intended input model is **one row per service-specific station ID**, even when several IDs represent the same physical interchange.
+One physical interchange may appear multiple times with different service-specific station IDs. The station name is the transfer key.
 
-Automatic grouping rules are conservative:
+Rules:
 
-- stations within about 25 m are treated as the same physical point,
-- stations with the same normalized name within about 450 m are treated as the same transfer complex,
-- two different explicit `complexId` values are never auto-merged,
-- the same explicit `complexId` always forces grouping.
+- duplicate normalized station names are treated as one physical transfer station,
+- every ID belonging to the same transfer station must use the same latitude and longitude,
+- inconsistent coordinates cause graph generation/import to fail instead of silently averaging them,
+- route definitions continue to reference their original station IDs.
 
-Routes still reference the original service-specific IDs. The grouping only happens internally when building the union transit graph.
+The downloadable template contains a `TransferCheck` worksheet that checks duplicate station names with formulas.
+
+An optional `ValidateTransfers.bas` VBA module is also provided. To use it, save the workbook as an Excel Macro-Enabled Workbook (`.xlsm`) and import the module in the VBA editor.
 
 ### Lines
 
-Use long-form rows in `Lines.csv` or the Excel worksheet named `Lines`:
+The `Lines` worksheet uses long-form rows:
 
 ```text
-lineId,lineName,color,pathId,sequence,stationId
+Line ID,Line Name,Color,Path ID,Sequence,Station ID
 GREEN,Green Line,#16a34a,main,1,G01
-GREEN,Green Line,#16a34a,main,2,G02
-GREEN,Green Line,#16a34a,branchA,1,G02
-GREEN,Green Line,#16a34a,branchA,2,G08
-RAIL,Regional Rail,#2563eb,main,1,T02
+GREEN,Green Line,#16a34a,main,2,G05
+ORANGE,Orange Line,#f97316,main,3,B03
 ```
 
-Rows are grouped by `lineId + pathId` and ordered by `sequence`. This lets one line contain multiple paths for Y-shaped branches.
+Rows are grouped by `Line ID + Path ID` and ordered by `Sequence`. This supports main lines and Y-shaped branches while preserving each service's own station IDs.
 
 ## SVG completeness guarantee
 
@@ -185,14 +182,16 @@ The detector ranks all candidate cycles, but it does **not** automatically force
 The UI shows each selected ring's score, route IDs, route-change count, outward connections, area coverage, and station chain.
 
 
-## Downloadable CSV examples
+## Downloadable Excel template
 
-The deployed app exposes these ready-to-import examples:
+The deployed app provides a generated `metro-map-input-template.xlsx` containing:
 
-- `public/examples/stations.csv`
-- `public/examples/lines.csv`
+- `Stations` — four-column station input,
+- `Lines` — route/path order input,
+- `TransferCheck` — same-name coordinate consistency formulas,
+- `說明` — usage notes.
 
-They demonstrate transfer complexes, a Y-shaped branch using multiple `pathId` values, and a composite ring candidate formed across different services.
+The repository also includes `public/examples/ValidateTransfers.bas` for optional VBA validation.
 
 
 ## Route completeness invariant
