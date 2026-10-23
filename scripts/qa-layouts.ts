@@ -763,8 +763,8 @@ const selfCrossingPathDiagnostics = graph.lines.flatMap((line) =>
   }),
 );
 console.log(
-  'Moscow self-crossing route paths:',
-  selfCrossingPathDiagnostics,
+  'Moscow self-crossing route paths JSON:',
+  JSON.stringify(selfCrossingPathDiagnostics, null, 2),
 );
 
 const moscowResult = results.find((result) => result.style === 'moscow');
