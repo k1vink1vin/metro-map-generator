@@ -429,6 +429,11 @@ for (const result of results) {
       `moscow: ${result.doglegs} alternating doglegs > 3`,
     );
   }
+  if (result.style === 'moscow' && result.terminalHooks > 0) {
+    failures.push(
+      `moscow: ${result.terminalHooks} terminal hooks > 0`,
+    );
+  }
 
   const allowedCrossings = result.style === 'moscow' ? 4 : 0;
   if (result.crossings > allowedCrossings) {
