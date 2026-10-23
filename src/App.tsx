@@ -28,12 +28,12 @@ const STATION_STYLE_OPTIONS: Array<{
 ];
 
 const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
-  { id: 'geographic', label: 'Geographic', note: '真實相對位置基準' },
-  { id: 'taipei', label: 'Taipei 45°', note: '地理位置權重較高' },
-  { id: 'london', label: 'London 45°', note: '拓撲與等距優先' },
-  { id: 'moscow', label: 'Moscow Ring', note: '環由 XLSM 定義並驗證，最多 3 個' },
-  { id: 'concentric', label: 'Concentric', note: '同心圓量化' },
-  { id: 'hex', label: 'Hex 60°', note: '六方向 / triangular grid' },
+  { id: 'geographic', label: 'Geographic', note: '真實相對位置基準 / north-up' },
+  { id: 'taipei', label: 'Taipei 45°', note: '45° 折衷：地理優先、走廊整線' },
+  { id: 'london', label: 'London 45°', note: '45° 拓撲：中心放大、等距與轉乘優先' },
+  { id: 'moscow', label: 'Moscow Ring', note: '獨立正圓環線 + 平滑放射 / 切向接入' },
+  { id: 'concentric', label: 'Concentric', note: '真正 radial shells：同心圓分層與角度避碰' },
+  { id: 'hex', label: 'Hex 60°', note: '60° 三軸網格：路徑整線、抑制 zig-zag' },
 ];
 
 function pretty(value: unknown) {
