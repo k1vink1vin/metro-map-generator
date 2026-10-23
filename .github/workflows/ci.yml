@@ -44,3 +44,13 @@ jobs:
 
       - name: TPE Metro layout QA
         run: npm run qa:layouts
+
+      - name: Render TPE Metro QA SVGs
+        run: npm run qa:render
+
+      - name: Upload TPE Metro QA SVGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpe-metro-style-qa
+          path: qa-artifacts/*.svg
+          if-no-files-found: error
