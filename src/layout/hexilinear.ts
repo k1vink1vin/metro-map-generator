@@ -37,7 +37,7 @@ export function layoutHexilinear(
       runBlend: 0.52,
       geographyTether: 0.17,
       equalSpacingWeight: 0.58,
-      bendAnchorDegrees: 44,
+      bendAnchorDegrees: 68,
     },
   );
 
