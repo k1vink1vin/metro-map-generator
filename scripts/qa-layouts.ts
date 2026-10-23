@@ -207,11 +207,15 @@ function moscowTerminalHookDetails(
   graph: GraphModel,
   positions: Record<string, Point>,
 ) {
+  const ringNodeSet = new Set(rings.flatMap((ring) => ring.nodes));
   const details: Array<{
     line: string;
     path: string;
     stations: string[];
     angle: number;
+    middleDegree: number;
+    middleStationIds: string[];
+    middleInRing: boolean;
   }> = [];
 
   const inspect = (
@@ -239,6 +243,9 @@ function moscowTerminalHookDetails(
         (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
       ),
       angle: degrees,
+      middleDegree: graph.adjacency.get(bId)?.length ?? 0,
+      middleStationIds: graph.nodeById.get(bId)?.stationIds ?? [],
+      middleInRing: ringNodeSet.has(bId),
     });
   };
 
