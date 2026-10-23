@@ -291,3 +291,12 @@ Rules:
 - `RING_1 / RING_2 / RING_3` should be listed in inner-to-outer order.
 
 The embedded VBA validates the ring sheet and marks rows OK/ERROR. The web importer validates again before Moscow layout is generated, so invalid ring definitions cannot silently produce a broken map.
+
+
+## Canonical workbook template
+
+From now on, the only official workbook template is:
+
+`TPE_Metro.xlsm`
+
+at the repository root. The website must not generate a parallel workbook template in browser code. Changes to workbook schema, VBA validation, transfer fields, Y-branch examples, or Moscow ring definitions should be made in `TPE_Metro.xlsm` first.
