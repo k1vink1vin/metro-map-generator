@@ -82,6 +82,7 @@ function labelRect(
   y: number,
   width: number,
   textAnchor: LabelPlacement['textAnchor'],
+  scale = 1,
 ): Rect {
   const left =
     textAnchor === 'start'
@@ -92,9 +93,9 @@ function labelRect(
 
   return {
     x: left,
-    y: y - 13,
+    y: y - 13 * scale,
     width,
-    height: 16,
+    height: 16 * scale,
   };
 }
 
@@ -183,8 +184,9 @@ function buildLabelPlacements(
         candidate.y,
         width,
         candidate.anchor,
+        visualScale,
       );
-      const paddedRect = padded(rect, 3);
+      const paddedRect = padded(rect, 3 * visualScale);
 
       let labelOverlap = 0;
       for (const used of occupied) {
@@ -196,7 +198,7 @@ function buildLabelPlacements(
         if (obstacle.nodeId === node.id) continue;
         stationOverlap += overlapArea(
           paddedRect,
-          padded(obstacle.rect, 2),
+          padded(obstacle.rect, 2 * visualScale),
         );
       }
 
@@ -225,7 +227,9 @@ function buildLabelPlacements(
 
     if (!best) continue;
     placements.push(best.placement);
-    occupied.push(padded(best.placement.rect, 3));
+    occupied.push(
+      padded(best.placement.rect, 3 * visualScale),
+    );
   }
 
   return placements;
