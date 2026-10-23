@@ -1,19 +1,17 @@
 import type { GraphModel, Point } from '../types';
 import {
   inflateCentralArea,
-  regularizeRouteCorridors,
-  relaxPathKinks,
+  relaxPathKinksSafely,
   schematizeOnAngularGrid,
 } from './common';
 
 /**
- * Taipei style: octolinear, but geographically anchored.
+ * Taipei 45° compromise.
  *
- * 1. Keep the projected north-up geography as the strong reference.
- * 2. Snap route directions to the 45° family.
- * 3. Rebuild ordinary degree-2 station runs as one/two-axis corridors so
- *    the result does not inherit edge-by-edge saw-tooth kinks.
- * 4. Keep interchange / branch nodes as structural anchors.
+ * Geography remains the primary frame: the network is north-up and retains
+ * relative district placement. Edges are attracted to the octolinear axis
+ * family, then a conservative corner optimizer removes the worst U-turns only
+ * when doing so does not introduce crossings or crowd another station.
  */
 export function layoutTaipei(
   graph: GraphModel,
@@ -21,83 +19,49 @@ export function layoutTaipei(
 ): Record<string, Point> {
   const snapped = schematizeOnAngularGrid(graph, geographic, {
     angleStep: 45,
-    geographyWeight: 0.52,
-    equalSpacingWeight: 0.34,
-    iterations: 90,
+    geographyWeight: 0.46,
+    equalSpacingWeight: 0.4,
+    iterations: 100,
   });
 
-  const corridors = regularizeRouteCorridors(
-    graph,
-    snapped,
-    geographic,
-    {
-      angleStep: 45,
-      passes: 6,
-      runBlend: 0.72,
-      geographyTether: 0.18,
-      equalSpacingWeight: 0.48,
-    },
-  );
-
-  return relaxPathKinks(graph, corridors, geographic, {
-    passes: 7,
-    ordinaryBlend: 0.56,
-    structuralBlend: 0.16,
-    geographyTether: 0.12,
-    maxShift: 20,
-    thresholdDegrees: 78,
+  return relaxPathKinksSafely(graph, snapped, {
+    passes: 5,
+    thresholdDegrees: 96,
+    minimumNodeDistance: 29,
+    maxShift: 28,
+    structuralMaxShift: 15,
   });
 }
 
 /**
- * London style: topology first.
+ * London 45° topology diagram.
  *
- * Beck's diagram deliberately enlarged the dense centre and used only
- * horizontal, vertical and 45° axes. Here the geographic projection is first
- * centrally inflated, then only lightly tethered while ordinary route runs
- * are aggressively regularized into clean octolinear corridors.
+ * Unlike Taipei, the dense centre is deliberately enlarged first. Geography
+ * is then a weak reference while the 45° grid and near-equal station spacing
+ * dominate. The final conservative corner pass keeps Beck-style topology
+ * clean without creating new edge crossings.
  */
 export function layoutLondon(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  const schematicReference = inflateCentralArea(geographic, 0.5);
-
+  const schematicReference = inflateCentralArea(geographic, 0.52);
   const snapped = schematizeOnAngularGrid(
     graph,
     schematicReference,
     {
       angleStep: 45,
-      geographyWeight: 0.2,
-      equalSpacingWeight: 0.72,
+      geographyWeight: 0.22,
+      equalSpacingWeight: 0.68,
       iterations: 135,
     },
   );
 
-  const corridors = regularizeRouteCorridors(
-    graph,
-    snapped,
-    schematicReference,
-    {
-      angleStep: 45,
-      passes: 8,
-      runBlend: 0.9,
-      geographyTether: 0.04,
-      equalSpacingWeight: 0.84,
-    },
-  );
-
-  return relaxPathKinks(
-    graph,
-    corridors,
-    schematicReference,
-    {
-      passes: 9,
-      ordinaryBlend: 0.62,
-      structuralBlend: 0.22,
-      geographyTether: 0.025,
-      maxShift: 24,
-      thresholdDegrees: 72,
-    },
-  );
+  return relaxPathKinksSafely(graph, snapped, {
+    passes: 7,
+    thresholdDegrees: 90,
+    minimumNodeDistance: 29,
+    maxShift: 34,
+    structuralMaxShift: 20,
+  });
 }
