@@ -34,9 +34,11 @@ jobs:
         run: npm run qa:layouts
 
       - name: Render TPE Metro QA SVGs
+        if: always()
         run: npm run qa:render
 
       - name: Upload TPE Metro QA SVGs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tpe-metro-style-qa
