@@ -714,55 +714,113 @@ export function layoutMoscow(
     };
   });
 
-  // Blend the circle deformation into nearby spokes instead of leaving a
-  // hard elbow at the first non-ring station. Only the nearest few graph
-  // hops move, so regional north-up geography remains intact.
-  for (const node of graph.nodes) {
-    if (ringNodeSet.has(node.id)) continue;
+  // Blend circle deformation along actual route paths. This avoids the
+  // discontinuities caused by assigning each nearby station to whichever
+  // ring node happens to be geographically closest. A corridor between two
+  // ring anchors receives a smooth interpolation of both anchor movements;
+  // tails beyond a single anchor decay gradually back toward geography.
+  const ringDeltaByNode = new Map<string, Point>();
+  for (const transform of ringTransforms) {
+    for (const [nodeId, delta] of transform.deltas) {
+      ringDeltaByNode.set(nodeId, delta);
+    }
+  }
 
-    let chosen:
-      | {
-          transform: (typeof ringTransforms)[number];
-          hops: number;
+  const displacementSum = new Map<
+    string,
+    { x: number; y: number; weight: number }
+  >();
+
+  const addDisplacement = (
+    nodeId: string,
+    dx: number,
+    dy: number,
+    weight: number,
+  ) => {
+    if (ringNodeSet.has(nodeId) || weight <= 0) return;
+    const current = displacementSum.get(nodeId) ?? {
+      x: 0,
+      y: 0,
+      weight: 0,
+    };
+    current.x += dx * weight;
+    current.y += dy * weight;
+    current.weight += weight;
+    displacementSum.set(nodeId, current);
+  };
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      const anchors = path
+        .map((nodeId, index) => ({
+          index,
+          delta: ringDeltaByNode.get(nodeId),
+        }))
+        .filter(
+          (
+            item,
+          ): item is {
+            index: number;
+            delta: Point;
+          } => Boolean(item.delta),
+        );
+
+      if (!anchors.length) continue;
+
+      const first = anchors[0];
+      for (let index = first.index - 1; index >= 0; index -= 1) {
+        const steps = first.index - index;
+        const weight = Math.exp(-steps / 3.2);
+        if (weight < 0.08) break;
+        addDisplacement(
+          path[index],
+          first.delta.x,
+          first.delta.y,
+          weight,
+        );
+      }
+
+      for (
+        let anchorIndex = 0;
+        anchorIndex < anchors.length - 1;
+        anchorIndex += 1
+      ) {
+        const a = anchors[anchorIndex];
+        const b = anchors[anchorIndex + 1];
+        const span = b.index - a.index;
+        if (span <= 1) continue;
+
+        for (let index = a.index + 1; index < b.index; index += 1) {
+          const t = (index - a.index) / span;
+          addDisplacement(
+            path[index],
+            a.delta.x * (1 - t) + b.delta.x * t,
+            a.delta.y * (1 - t) + b.delta.y * t,
+            1,
+          );
         }
-      | undefined;
+      }
 
-    for (const transform of ringTransforms) {
-      const hops = transform.hops.get(node.id);
-      if (hops == null || hops > 3) continue;
-      if (!chosen || hops < chosen.hops) {
-        chosen = { transform, hops };
+      const last = anchors[anchors.length - 1];
+      for (let index = last.index + 1; index < path.length; index += 1) {
+        const steps = index - last.index;
+        const weight = Math.exp(-steps / 3.2);
+        if (weight < 0.08) break;
+        addDisplacement(
+          path[index],
+          last.delta.x,
+          last.delta.y,
+          weight,
+        );
       }
     }
+  }
 
-    if (!chosen) continue;
-
-    const decay =
-      chosen.hops === 1
-        ? 0.62
-        : chosen.hops === 2
-          ? 0.32
-          : 0.14;
-
-    let nearestRingId = chosen.transform.definition.nodes[0];
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const ringId of chosen.transform.definition.nodes) {
-      const distance = Math.hypot(
-        geographic[node.id].x - geographic[ringId].x,
-        geographic[node.id].y - geographic[ringId].y,
-      );
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestRingId = ringId;
-      }
-    }
-
-    const delta = chosen.transform.deltas.get(nearestRingId);
-    if (!delta) continue;
-
-    positions[node.id] = {
-      x: geographic[node.id].x + delta.x * decay,
-      y: geographic[node.id].y + delta.y * decay,
+  for (const [nodeId, sum] of displacementSum) {
+    if (sum.weight <= 0) continue;
+    positions[nodeId] = {
+      x: geographic[nodeId].x + sum.x / sum.weight,
+      y: geographic[nodeId].y + sum.y / sum.weight,
     };
   }
 
