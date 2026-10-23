@@ -21,13 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Build embedded VBA project
-        run: bash scripts/build-vba-project.sh
+      - name: Verify canonical TPE_Metro.xlsm
+        run: |
+          test -s TPE_Metro.xlsm
+          unzip -l TPE_Metro.xlsm | grep -q 'xl/vbaProject.bin'
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,11 +34,11 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
+      - name: Passenger-map QA
+        run: npm run qa:layouts
+
       - name: Build
         run: npm run build
-
-      - name: Verify VBA is in Pages artifact
-        run: test -s dist/examples/vbaProject.bin
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
