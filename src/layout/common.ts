@@ -971,17 +971,11 @@ export function repairIntroducedPathSelfCrossings(
         candidate,
       );
 
-      // A route crossing itself is far more harmful to wayfinding than an
-      // ordinary crossing between two different routes. Prefer eliminating
-      // self-crossings even if that introduces a very small number of clean
-      // inter-route crossings; the global QA still enforces the overall
-      // crossing budget.
-      const removedSelf = currentSelf - candidateSelf;
-      if (
-        removedSelf > 0 &&
-        candidateExternal <=
-          currentExternal + removedSelf * 2
-      ) {
+      // Topology preservation is a hard constraint: a schematic transform
+      // must not introduce a self-crossing on a path that is clean in the
+      // reference layout. Inter-route crossings remain a global soft
+      // criterion and are validated by the whole-map QA afterwards.
+      if (candidateSelf < currentSelf) {
         for (const nodeId of path.slice(1, -1)) {
           positions[nodeId] = candidate[nodeId];
         }
