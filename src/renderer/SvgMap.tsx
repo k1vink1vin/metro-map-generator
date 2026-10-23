@@ -296,11 +296,8 @@ function renderBounds(
 }
 
 export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
-  const visualScale = zoom > 1 ? 1 / zoom : 1;
+  const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
   const definedRings = layout.moscowRings ?? [];
-  const ringSet = new Set(
-    definedRings.flatMap((ring) => ring.nodes),
-  );
   const geometricBundles = buildGeometricBundleMap(
     graph,
     layout.positions,
@@ -360,27 +357,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
         className="map-background"
       />
 
-      {definedRings.length ? (
-        <g className="ring-guide" aria-hidden="true">
-          {definedRings.flatMap((ring) =>
-            ring.nodes.map((nodeId, index) => {
-              const nextId =
-                ring.nodes[(index + 1) % ring.nodes.length];
-              const a = layout.positions[nodeId];
-              const b = layout.positions[nextId];
-              return (
-                <line
-                  key={`${ring.id}-${nodeId}-${nextId}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                />
-              );
-            }),
-          )}
-        </g>
-      ) : null}
+
 
       <g id="lines" data-route-count={graph.lines.length}>
         {graph.lines.map((line) => {
@@ -428,20 +405,17 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
               {isInterchange ? (
                 <>
                   <circle
-                    r={11}
+                    r={11 * visualScale}
                     className="station interchange-outer"
                   />
                   <circle
-                    r={5}
+                    r={5 * visualScale}
                     className="station interchange-inner"
                   />
                 </>
               ) : (
                 <circle r={6 * visualScale} className="station station-normal" />
               )}
-              {ringSet.has(node.id) ? (
-                <circle r={15 * visualScale} className="ring-node-marker" />
-              ) : null}
             </g>
           );
         })}

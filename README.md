@@ -264,3 +264,30 @@ Rules:
 The embedded VBA validates the ring sheet and marks rows OK/ERROR. The web importer validates again before Moscow layout is generated, so invalid ring definitions cannot silently produce a broken map.
 
 
+
+
+## Passenger-map regression QA
+
+`TPE_Metro.xlsm` is also the fixed regression fixture for layout quality.
+
+CI runs all six styles from the real workbook:
+
+- Geographic
+- Taipei 45°
+- London 45°
+- Moscow
+- Concentric
+- Hex 60°
+
+For each style it checks station spacing, short segments, non-transfer geometric crossings, angular error where applicable, and a composite passenger-readability score. It also renders six SVG artifacts for visual inspection.
+
+Current baseline requirements are intentionally strict:
+
+- passenger readability score >= 90
+- minimum station-to-station distance >= 38 layout units
+- short edges <= 6
+- zero non-transfer crossings for all styles except Moscow
+- Moscow may have at most 4 geometric crossings because the physical Taipei network contains ring/line over-under crossings that are not transfer stations
+- 45° / 60° angular error <= 12°
+
+Both CI and GitHub Pages deployment run the workbook QA, so a code change that makes the official Taipei workbook materially less readable will not deploy.

@@ -21,7 +21,12 @@ function finish(
     >
   > = {},
 ): LayoutResult {
-  const finalized = finalizeLayoutPositions(graph, proposed, geographic);
+  const finalized = finalizeLayoutPositions(
+    graph,
+    style,
+    proposed,
+    geographic,
+  );
 
   return {
     style,

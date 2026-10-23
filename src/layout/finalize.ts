@@ -1,5 +1,5 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
-import type { GraphModel, LayoutIntegrity, Point } from '../types';
+import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -99,7 +99,27 @@ function separateOverlappingNodes(
   return { positions, separatedNodePairs };
 }
 
+function passengerCanvasScale(
+  graph: GraphModel,
+  style: StyleId,
+): number {
+  const nodeFactor = Math.sqrt(graph.nodes.length / 45);
+  const edgeFactor = Math.sqrt(graph.edges.length / 55);
+  const base = Math.max(1, Math.max(nodeFactor, edgeFactor));
+  const styleMultiplier: Record<StyleId, number> = {
+    geographic: 1,
+    taipei: 1,
+    london: 1.1,
+    moscow: 1.6,
+    concentric: 1,
+    hex: 1.08,
+  };
+  return Math.min(3.2, base * styleMultiplier[style]);
+}
+
 function fitToCanvas(
+  graph: GraphModel,
+  style: StyleId,
   positions: Record<string, Point>,
   padding = 86,
 ): Record<string, Point> {
@@ -124,8 +144,13 @@ function fitToCanvas(
 
   const sourceWidth = maxX - minX;
   const sourceHeight = maxY - minY;
-  const availableWidth = CANVAS_WIDTH - padding * 2;
-  const availableHeight = CANVAS_HEIGHT - padding * 2;
+  const passengerScale = passengerCanvasScale(graph, style);
+  const targetWidth = CANVAS_WIDTH * passengerScale;
+  const targetHeight = CANVAS_HEIGHT * passengerScale;
+  const scaledPadding = padding * Math.max(1, Math.sqrt(passengerScale));
+
+  const availableWidth = targetWidth - scaledPadding * 2;
+  const availableHeight = targetHeight - scaledPadding * 2;
   const scale = Math.min(
     availableWidth / sourceWidth,
     availableHeight / sourceHeight,
@@ -133,8 +158,8 @@ function fitToCanvas(
 
   const usedWidth = sourceWidth * scale;
   const usedHeight = sourceHeight * scale;
-  const offsetX = (CANVAS_WIDTH - usedWidth) / 2;
-  const offsetY = (CANVAS_HEIGHT - usedHeight) / 2;
+  const offsetX = (targetWidth - usedWidth) / 2;
+  const offsetY = (targetHeight - usedHeight) / 2;
 
   return Object.fromEntries(
     entries.map(([id, point]) => [
@@ -213,12 +238,13 @@ function validateEveryRouteIsDrawable(
 
 export function finalizeLayoutPositions(
   graph: GraphModel,
+  style: StyleId,
   proposed: Record<string, Point>,
   geographic: Record<string, Point>,
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
   const separated = separateOverlappingNodes(graph, completed.positions);
-  const positions = fitToCanvas(separated.positions);
+  const positions = fitToCanvas(graph, style, separated.positions);
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {

@@ -438,21 +438,6 @@ select {
   stroke-linejoin: round;
 }
 
-.ring-guide line {
-  stroke: #94a3b8;
-  stroke-width: 2;
-  stroke-dasharray: 5 8;
-  opacity: 0.45;
-}
-
-.ring-node-marker {
-  fill: none;
-  stroke: #111827;
-  stroke-width: 1.5;
-  stroke-dasharray: 2 3;
-  opacity: 0.35;
-}
-
 .status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(90px, 120px)) minmax(260px, 1fr);

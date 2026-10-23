@@ -303,10 +303,15 @@ function worksheetToRows(worksheet: Worksheet): string[][] {
   return rows;
 }
 
-export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
-  const ExcelJS = await import('exceljs');
+export async function importExcelBuffer(
+  data: Uint8Array,
+): Promise<NetworkInput> {
+  const imported = await import('exceljs');
+  const ExcelJS = (
+    (imported as unknown as { default?: typeof import('exceljs') }).default ??
+    imported
+  ) as typeof import('exceljs');
   const workbook = new ExcelJS.Workbook();
-  const data = new Uint8Array(await file.arrayBuffer());
   await workbook.xlsx.load(data as never);
 
   const findSheet = (aliases: string[]) => {
@@ -338,4 +343,10 @@ export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
   if (!lines.length) throw new Error('「路線 / Lines」工作表沒有資料。');
 
   return { stations, lines, moscowRings };
+}
+
+export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
+  return importExcelBuffer(
+    new Uint8Array(await file.arrayBuffer()),
+  );
 }
