@@ -1,14 +1,5 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
-import type { GraphModel, Point } from '../types';
-
-export interface LayoutIntegrity {
-  routeCount: number;
-  pathCount: number;
-  segmentCount: number;
-  repairedNodeCount: number;
-  separatedNodePairs: number;
-  valid: boolean;
-}
+import type { GraphModel, LayoutIntegrity, Point } from '../types';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
