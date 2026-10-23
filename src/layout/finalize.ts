@@ -1,0 +1,232 @@
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
+import type { GraphModel, LayoutIntegrity, Point } from '../types';
+
+function isFinitePoint(point?: Point): point is Point {
+  return Boolean(
+    point &&
+      Number.isFinite(point.x) &&
+      Number.isFinite(point.y),
+  );
+}
+
+function deterministicFallback(index: number): Point {
+  const columns = 8;
+  const spacing = 54;
+  return {
+    x: 100 + (index % columns) * spacing,
+    y: 100 + Math.floor(index / columns) * spacing,
+  };
+}
+
+function ensureEveryNodeHasPosition(
+  graph: GraphModel,
+  proposed: Record<string, Point>,
+  geographic: Record<string, Point>,
+): { positions: Record<string, Point>; repairedNodeCount: number } {
+  const positions: Record<string, Point> = {};
+  let repairedNodeCount = 0;
+
+  graph.nodes.forEach((node, index) => {
+    if (isFinitePoint(proposed[node.id])) {
+      positions[node.id] = { ...proposed[node.id] };
+      return;
+    }
+
+    repairedNodeCount += 1;
+    positions[node.id] = isFinitePoint(geographic[node.id])
+      ? { ...geographic[node.id] }
+      : deterministicFallback(index);
+  });
+
+  return { positions, repairedNodeCount };
+}
+
+/**
+ * Prevents distinct topology nodes from collapsing to effectively the same
+ * screen location. It only acts on very close pairs and therefore serves as a
+ * repair pass, not a primary layout algorithm.
+ */
+function separateOverlappingNodes(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  minimumDistance = 24,
+  iterations = 10,
+): { positions: Record<string, Point>; separatedNodePairs: number } {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  let separatedNodePairs = 0;
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    let moved = false;
+
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const aId = graph.nodes[i].id;
+        const bId = graph.nodes[j].id;
+        const a = positions[aId];
+        const b = positions[bId];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distance = Math.hypot(dx, dy);
+
+        if (distance >= minimumDistance) continue;
+
+        if (distance < 1e-6) {
+          const angle = ((i * 37 + j * 91) % 360) * (Math.PI / 180);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+
+        const push = (minimumDistance - distance) / 2;
+        const nx = dx / distance;
+        const ny = dy / distance;
+
+        a.x -= nx * push;
+        a.y -= ny * push;
+        b.x += nx * push;
+        b.y += ny * push;
+
+        separatedNodePairs += 1;
+        moved = true;
+      }
+    }
+
+    if (!moved) break;
+  }
+
+  return { positions, separatedNodePairs };
+}
+
+function fitToCanvas(
+  positions: Record<string, Point>,
+  padding = 86,
+): Record<string, Point> {
+  const entries = Object.entries(positions);
+  if (!entries.length) return positions;
+
+  const xs = entries.map(([, point]) => point.x);
+  const ys = entries.map(([, point]) => point.y);
+  let minX = Math.min(...xs);
+  let maxX = Math.max(...xs);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+
+  if (Math.abs(maxX - minX) < 1e-9) {
+    minX -= 0.5;
+    maxX += 0.5;
+  }
+  if (Math.abs(maxY - minY) < 1e-9) {
+    minY -= 0.5;
+    maxY += 0.5;
+  }
+
+  const sourceWidth = maxX - minX;
+  const sourceHeight = maxY - minY;
+  const availableWidth = CANVAS_WIDTH - padding * 2;
+  const availableHeight = CANVAS_HEIGHT - padding * 2;
+  const scale = Math.min(
+    availableWidth / sourceWidth,
+    availableHeight / sourceHeight,
+  );
+
+  const usedWidth = sourceWidth * scale;
+  const usedHeight = sourceHeight * scale;
+  const offsetX = (CANVAS_WIDTH - usedWidth) / 2;
+  const offsetY = (CANVAS_HEIGHT - usedHeight) / 2;
+
+  return Object.fromEntries(
+    entries.map(([id, point]) => [
+      id,
+      {
+        x: offsetX + (point.x - minX) * scale,
+        y: offsetY + (point.y - minY) * scale,
+      },
+    ]),
+  );
+}
+
+function validateEveryRouteIsDrawable(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+): Omit<LayoutIntegrity, 'repairedNodeCount' | 'separatedNodePairs'> {
+  let pathCount = 0;
+  let segmentCount = 0;
+  const failures: string[] = [];
+
+  for (const line of graph.lines) {
+    if (!line.paths.length) {
+      failures.push(`${line.id}: no paths`);
+      continue;
+    }
+
+    line.paths.forEach((path, pathIndex) => {
+      pathCount += 1;
+
+      if (path.length < 2) {
+        failures.push(`${line.id} path ${pathIndex + 1}: fewer than 2 nodes`);
+        return;
+      }
+
+      for (let index = 0; index < path.length; index += 1) {
+        const nodeId = path[index];
+        if (!isFinitePoint(positions[nodeId])) {
+          failures.push(
+            `${line.id} path ${pathIndex + 1}: missing position for ${nodeId}`,
+          );
+        }
+      }
+
+      for (let index = 0; index < path.length - 1; index += 1) {
+        const a = positions[path[index]];
+        const b = positions[path[index + 1]];
+        segmentCount += 1;
+
+        if (
+          !isFinitePoint(a) ||
+          !isFinitePoint(b) ||
+          Math.hypot(b.x - a.x, b.y - a.y) < 0.5
+        ) {
+          failures.push(
+            `${line.id} path ${pathIndex + 1}: invisible segment ${index + 1}`,
+          );
+        }
+      }
+    });
+  }
+
+  if (failures.length) {
+    throw new Error(
+      `Layout completeness validation failed: ${failures.slice(0, 8).join('; ')}` +
+        (failures.length > 8 ? `; +${failures.length - 8} more` : ''),
+    );
+  }
+
+  return {
+    routeCount: graph.lines.length,
+    pathCount,
+    segmentCount,
+    valid: true,
+  };
+}
+
+export function finalizeLayoutPositions(
+  graph: GraphModel,
+  proposed: Record<string, Point>,
+  geographic: Record<string, Point>,
+): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
+  const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
+  const separated = separateOverlappingNodes(graph, completed.positions);
+  const positions = fitToCanvas(separated.positions);
+  const validated = validateEveryRouteIsDrawable(graph, positions);
+
+  return {
+    positions,
+    integrity: {
+      ...validated,
+      repairedNodeCount: completed.repairedNodeCount,
+      separatedNodePairs: separated.separatedNodePairs,
+    },
+  };
+}

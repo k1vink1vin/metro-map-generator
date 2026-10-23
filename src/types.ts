@@ -84,6 +84,15 @@ export interface RingCandidateDiagnostic {
   radialConsistency: number;
 }
 
+export interface LayoutIntegrity {
+  routeCount: number;
+  pathCount: number;
+  segmentCount: number;
+  repairedNodeCount: number;
+  separatedNodePairs: number;
+  valid: boolean;
+}
+
 export interface LayoutResult {
   style: StyleId;
   positions: Record<string, Point>;
@@ -91,4 +100,5 @@ export interface LayoutResult {
   primaryRing?: string[];
   primaryRingCandidateId?: string;
   ringCandidates?: RingCandidateDiagnostic[];
+  integrity: LayoutIntegrity;
 }

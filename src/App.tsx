@@ -172,7 +172,9 @@ export function App() {
           pathCount: line.paths.length,
         })),
       );
-      setNotice(`SVG 完整性驗證通過：${graph.lines.length} 條路線皆已包含。`);
+      setNotice(
+        `SVG 完整性驗證通過：${layout.integrity.routeCount} 條路線、${layout.integrity.pathCount} 個 paths、${layout.integrity.segmentCount} 個 segments 皆已包含且位於 viewBox 內。`,
+      );
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -369,6 +371,24 @@ export function App() {
               <span>Routes</span>
               <strong>{graph.lines.length}</strong>
             </div>
+            <div className="coverage-status">
+              <span>Route coverage</span>
+              <strong>
+                {layout.integrity.valid
+                  ? `${layout.integrity.routeCount}/${graph.lines.length}`
+                  : 'ERROR'}
+              </strong>
+              <small>
+                {layout.integrity.pathCount} paths · {layout.integrity.segmentCount} segments
+              </small>
+              {layout.integrity.repairedNodeCount ||
+              layout.integrity.separatedNodePairs ? (
+                <small>
+                  repaired {layout.integrity.repairedNodeCount} nodes · separated{' '}
+                  {layout.integrity.separatedNodePairs} overlaps
+                </small>
+              ) : null}
+            </div>
             <div className="ring-status">
               <span>Moscow rings</span>
               {style !== 'moscow' ? (
@@ -408,7 +428,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.3 selectable Moscow rings + CSV examples</span>
+        <span>V0.3 route completeness + selectable Moscow rings + CSV examples</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
