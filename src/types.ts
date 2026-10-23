@@ -12,11 +12,12 @@ export interface Station {
   lat: number;
   lon: number;
   /**
-   * Optional manual transfer-complex override.
+   * Stable transfer-complex / topology key, normally XFER_###.
    *
-   * Different station IDs can be auto-grouped when they describe the same
-   * nearby physical station. complexId is useful when station names differ,
-   * or when the user wants to force/prevent automatic grouping.
+   * Different station IDs with the same physical coordinates can be
+   * auto-grouped when this field is blank. Once assigned, this ID takes
+   * precedence over station names so renaming a station does not change
+   * transfer topology.
    */
   complexId?: string;
 }
