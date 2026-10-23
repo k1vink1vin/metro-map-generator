@@ -626,95 +626,21 @@ export function layoutMoscow(
   positions: Record<string, Point>;
   moscowRings: ValidatedMoscowRing[];
 } {
-  if (!definedRings.length) {
-    return {
-      positions: Object.fromEntries(
-        Object.entries(geographic).map(([id, point]) => [id, { ...point }]),
-      ),
-      moscowRings: [],
-    };
-  }
-
-  // Moscow style should emphasize every validated loop without pretending
-  // that unrelated loops share one city centre. Each ring therefore keeps
-  // its own geographic centroid and is regularized locally. This is
-  // especially important for Taipei/New Taipei vs. Taoyuan ring services:
-  // they remain visibly separate and north-up.
-  const positions: Record<string, Point> = Object.fromEntries(
-    Object.entries(geographic).map(([id, point]) => [id, { ...point }]),
-  );
-  const ringNodeSet = new Set<string>();
-
-  const ringInfos = definedRings.map((definition) => {
-    const rawPoints = definition.nodes.map((id) => geographic[id]);
-    const localCenter = {
-      x:
-        rawPoints.reduce((sum, point) => sum + point.x, 0) /
-        Math.max(1, rawPoints.length),
-      y:
-        rawPoints.reduce((sum, point) => sum + point.y, 0) /
-        Math.max(1, rawPoints.length),
-    };
-    const ring = orientRing(definition.nodes, geographic, localCenter);
-    const points = ring.map((id) => geographic[id]);
-    const minX = Math.min(...points.map((point) => point.x));
-    const maxX = Math.max(...points.map((point) => point.x));
-    const minY = Math.min(...points.map((point) => point.y));
-    const maxY = Math.max(...points.map((point) => point.y));
-    const width = Math.max(1, maxX - minX);
-    const height = Math.max(1, maxY - minY);
-
-    // Expand just enough to make the closure readable while preserving the
-    // ring's actual geographic footprint. Very flat geographic loops are
-    // allowed to stay elliptical instead of being forced into a circle.
-    const radiusX = Math.max(88, width * 0.58);
-    const radiusY = Math.max(72, height * 0.58);
-    const slot = (Math.PI * 2) / ring.length;
-
-    ring.forEach((id, index) => {
-      ringNodeSet.add(id);
-      const equalAngle = -Math.PI / 2 + slot * index;
-      const geoAngle = Math.atan2(
-        geographic[id].y - localCenter.y,
-        geographic[id].x - localCenter.x,
-      );
-      const geoAdjustment = clamp(
-        signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.38,
-        slot * 0.38,
-      );
-      const angle = equalAngle + geoAdjustment;
-      const target = {
-        x: localCenter.x + Math.cos(angle) * radiusX,
-        y: localCenter.y + Math.sin(angle) * radiusY,
-      };
-
-      // Keep a little of the original geographic position so the loop stays
-      // recognisable and north-up even when station spacing is uneven.
-      const geoWeight = 0.18;
-      positions[id] = {
-        x: target.x * (1 - geoWeight) + geographic[id].x * geoWeight,
-        y: target.y * (1 - geoWeight) + geographic[id].y * geoWeight,
-      };
-    });
-
-    return {
-      definition: { ...definition, nodes: ring },
-      center: localCenter,
-      radiusX,
-      radiusY,
-    };
-  });
-
-  const smoothedPositions = smoothMoscowCorridors(
-    graph,
-    positions,
-    ringNodeSet,
-  );
-
+  // Regional Moscow style: preserve the true north-up geographic topology.
+  // The validated rings are emphasized by the renderer instead of forcing
+  // unrelated Taipei/New Taipei and Taoyuan loops into artificial circles.
+  // This avoids pulling every spoke and transfer corridor into zig-zags.
   return {
-    positions: smoothedPositions,
-    moscowRings: ringInfos.map((info) => info.definition),
+    positions: Object.fromEntries(
+      graph.nodes.map((node) => [
+        node.id,
+        { ...geographic[node.id] },
+      ]),
+    ),
+    moscowRings: definedRings.map((ring) => ({
+      ...ring,
+      nodes: [...ring.nodes],
+    })),
   };
 }
 
