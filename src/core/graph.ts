@@ -243,6 +243,8 @@ export function buildGraph(input: NetworkInput): GraphModel {
       name: line.name?.trim() || line.id,
       color: line.color || '#64748b',
       paths,
+      pathIds: line.pathIds ? [...line.pathIds] : undefined,
+      pathColors: line.pathColors ? [...line.pathColors] : undefined,
     });
 
     for (const path of paths) {

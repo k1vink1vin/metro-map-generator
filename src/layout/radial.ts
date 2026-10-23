@@ -241,6 +241,187 @@ function multiSourceHopDistance(graph: GraphModel, sources: string[]): Map<strin
   return result;
 }
 
+function smoothMoscowCorridors(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  ringNodes: Set<string>,
+): Record<string, Point> {
+  let current = Object.fromEntries(
+    Object.entries(positions).map(([id, point]) => [id, { ...point }]),
+  );
+
+  const protectedNodes = new Set<string>(ringNodes);
+  for (const node of graph.nodes) {
+    const incidentLines = new Set<string>();
+    for (const neighbor of graph.adjacency.get(node.id) ?? []) {
+      const edge = graph.edgeByKey.get(edgeKey(node.id, neighbor));
+      for (const lineId of edge?.lineIds ?? []) {
+        incidentLines.add(lineId);
+      }
+    }
+
+    if (
+      (graph.adjacency.get(node.id)?.length ?? 0) !== 2 ||
+      node.stationIds.length > 1 ||
+      incidentLines.size > 1
+    ) {
+      protectedNodes.add(node.id);
+    }
+  }
+
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    for (const node of graph.nodes) {
+      if (protectedNodes.has(node.id)) continue;
+
+      const neighbors = graph.adjacency.get(node.id) ?? [];
+      if (neighbors.length !== 2) continue;
+
+      const previous = current[neighbors[0]];
+      const point = current[node.id];
+      const following = current[neighbors[1]];
+      if (!previous || !point || !following) continue;
+
+      const inVector = {
+        x: point.x - previous.x,
+        y: point.y - previous.y,
+      };
+      const outVector = {
+        x: following.x - point.x,
+        y: following.y - point.y,
+      };
+      const inLength = Math.hypot(inVector.x, inVector.y);
+      const outLength = Math.hypot(outVector.x, outVector.y);
+      if (inLength < 1 || outLength < 1) continue;
+
+      const cosine = clamp(
+        (inVector.x * outVector.x + inVector.y * outVector.y) /
+          (inLength * outLength),
+        -1,
+        1,
+      );
+      const turn = Math.acos(cosine);
+
+      // Do not disturb already-straight corridors. Only remove visible
+      // doglegs / alternating bends on ordinary intermediate stations.
+      if (turn < (22 * Math.PI) / 180) continue;
+
+      const midpoint = {
+        x: (previous.x + following.x) / 2,
+        y: (previous.y + following.y) / 2,
+      };
+      const dx = midpoint.x - point.x;
+      const dy = midpoint.y - point.y;
+      const shiftLength = Math.hypot(dx, dy);
+      if (shiftLength < 1) continue;
+
+      const maxShift = Math.min(inLength, outLength) * 0.26;
+      const applied = Math.min(shiftLength * 0.66, maxShift);
+      const scale = applied / shiftLength;
+
+      next[node.id] = {
+        x: point.x + dx * scale,
+        y: point.y + dy * scale,
+      };
+    }
+
+    current = next;
+  }
+
+  // A second pass specifically removes S-shaped A-B-C-D doglegs. These are
+  // visually distracting on passenger maps because the line changes side
+  // twice within only a few stations.
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (let index = 0; index < path.length - 3; index += 1) {
+          const ids = path.slice(index, index + 4);
+          const [aId, bId, cId, dId] = ids;
+          if (
+            protectedNodes.has(bId) ||
+            protectedNodes.has(cId)
+          ) {
+            continue;
+          }
+
+          const a = current[aId];
+          const b = current[bId];
+          const c = current[cId];
+          const d = current[dId];
+          if (!a || !b || !c || !d) continue;
+
+          const signedTurn = (p0: Point, p1: Point, p2: Point) => {
+            const first = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+            const second = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            let delta = second - first;
+            while (delta > Math.PI) delta -= Math.PI * 2;
+            while (delta < -Math.PI) delta += Math.PI * 2;
+            return delta;
+          };
+
+          const firstTurn = signedTurn(a, b, c);
+          const secondTurn = signedTurn(b, c, d);
+          const strong =
+            Math.abs(firstTurn) > (24 * Math.PI) / 180 &&
+            Math.abs(secondTurn) > (24 * Math.PI) / 180;
+          const alternating =
+            Math.sign(firstTurn) !== Math.sign(secondTurn);
+
+          if (!strong || !alternating) continue;
+
+          const targetB = {
+            x: a.x + (d.x - a.x) / 3,
+            y: a.y + (d.y - a.y) / 3,
+          };
+          const targetC = {
+            x: a.x + ((d.x - a.x) * 2) / 3,
+            y: a.y + ((d.y - a.y) * 2) / 3,
+          };
+
+          const moveToward = (
+            point: Point,
+            target: Point,
+            localLength: number,
+          ): Point => {
+            const dx = target.x - point.x;
+            const dy = target.y - point.y;
+            const length = Math.hypot(dx, dy);
+            if (length < 1) return { ...point };
+            const applied = Math.min(length * 0.78, localLength * 0.3);
+            return {
+              x: point.x + (dx / length) * applied,
+              y: point.y + (dy / length) * applied,
+            };
+          };
+
+          const bLocal = Math.min(
+            Math.hypot(b.x - a.x, b.y - a.y),
+            Math.hypot(c.x - b.x, c.y - b.y),
+          );
+          const cLocal = Math.min(
+            Math.hypot(c.x - b.x, c.y - b.y),
+            Math.hypot(d.x - c.x, d.y - c.y),
+          );
+
+          next[bId] = moveToward(b, targetB, bLocal);
+          next[cId] = moveToward(c, targetC, cLocal);
+        }
+      }
+    }
+
+    current = next;
+  }
+
+  return current;
+}
+
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
@@ -379,8 +560,14 @@ export function layoutMoscow(
     };
   }
 
-  return {
+  const smoothedPositions = smoothMoscowCorridors(
+    graph,
     positions,
+    ringNodeSet,
+  );
+
+  return {
+    positions: smoothedPositions,
     moscowRings: ringInfos.map((info) => info.definition),
   };
 }

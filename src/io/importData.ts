@@ -236,12 +236,25 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
     const existing = lineMap.get(bucket.lineId);
     if (existing) {
       existing.paths.push(path);
+      existing.pathIds ??= [];
+      existing.pathColors ??= [];
+      existing.pathIds.push(bucket.pathId);
+      existing.pathColors.push(bucket.color || existing.color);
+
+      if (
+        /^(main|trunk|主線)$/i.test(bucket.pathId) &&
+        bucket.color
+      ) {
+        existing.color = bucket.color;
+      }
     } else {
       lineMap.set(bucket.lineId, {
         id: bucket.lineId,
         name: bucket.lineName || bucket.lineId,
         color: bucket.color || '#64748b',
         paths: [path],
+        pathIds: [bucket.pathId],
+        pathColors: [bucket.color || '#64748b'],
       });
     }
   }

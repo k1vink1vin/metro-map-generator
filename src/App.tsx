@@ -421,7 +421,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.14 乘客圖 QA + 六風格回歸驗證</span>
+        <span>V0.15 Moscow 線形修正 + 支線獨立配色</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
