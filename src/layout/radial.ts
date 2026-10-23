@@ -714,113 +714,162 @@ export function layoutMoscow(
     };
   });
 
-  // Blend circle deformation along actual route paths. This avoids the
-  // discontinuities caused by assigning each nearby station to whichever
-  // ring node happens to be geographically closest. A corridor between two
-  // ring anchors receives a smooth interpolation of both anchor movements;
-  // tails beyond a single anchor decay gradually back toward geography.
-  const ringDeltaByNode = new Map<string, Point>();
-  for (const transform of ringTransforms) {
-    for (const [nodeId, delta] of transform.deltas) {
-      ringDeltaByNode.set(nodeId, delta);
-    }
-  }
-
-  const displacementSum = new Map<
-    string,
-    { x: number; y: number; weight: number }
-  >();
-
-  const addDisplacement = (
-    nodeId: string,
-    dx: number,
-    dy: number,
-    weight: number,
-  ) => {
-    if (ringNodeSet.has(nodeId) || weight <= 0) return;
-    const current = displacementSum.get(nodeId) ?? {
-      x: 0,
-      y: 0,
-      weight: 0,
-    };
-    current.x += dx * weight;
-    current.y += dy * weight;
-    current.weight += weight;
-    displacementSum.set(nodeId, current);
+  // Warp the whole local region around each loop, not only the ring or
+  // individual route paths. This preserves topology much better: stations
+  // inside/near the loop move coherently with the circle instead of having
+  // unrelated corridors cut across it.
+  const normalizeAngle = (angle: number) => {
+    const tau = Math.PI * 2;
+    let value = angle % tau;
+    if (value < 0) value += tau;
+    return value;
   };
 
-  for (const line of graph.lines) {
-    for (const path of line.paths) {
-      const anchors = path
-        .map((nodeId, index) => ({
-          index,
-          delta: ringDeltaByNode.get(nodeId),
-        }))
-        .filter(
-          (
-            item,
-          ): item is {
-            index: number;
-            delta: Point;
-          } => Boolean(item.delta),
-        );
+  const polarTransforms = ringTransforms.map((transform) => {
+    const samples = transform.definition.nodes.map((nodeId, index) => {
+      const point = geographic[nodeId];
+      return {
+        nodeId,
+        geoAngle: normalizeAngle(
+          Math.atan2(
+            point.y - transform.center.y,
+            point.x - transform.center.x,
+          ),
+        ),
+        geoRadius: Math.hypot(
+          point.x - transform.center.x,
+          point.y - transform.center.y,
+        ),
+        targetAngle:
+          -Math.PI / 2 +
+          (Math.PI * 2 * index) /
+            transform.definition.nodes.length,
+      };
+    });
 
-      if (!anchors.length) continue;
-
-      const first = anchors[0];
-      for (let index = first.index - 1; index >= 0; index -= 1) {
-        const steps = first.index - index;
-        const weight = Math.exp(-steps / 3.2);
-        if (weight < 0.08) break;
-        addDisplacement(
-          path[index],
-          first.delta.x,
-          first.delta.y,
-          weight,
-        );
-      }
-
-      for (
-        let anchorIndex = 0;
-        anchorIndex < anchors.length - 1;
-        anchorIndex += 1
-      ) {
-        const a = anchors[anchorIndex];
-        const b = anchors[anchorIndex + 1];
-        const span = b.index - a.index;
-        if (span <= 1) continue;
-
-        for (let index = a.index + 1; index < b.index; index += 1) {
-          const t = (index - a.index) / span;
-          addDisplacement(
-            path[index],
-            a.delta.x * (1 - t) + b.delta.x * t,
-            a.delta.y * (1 - t) + b.delta.y * t,
-            1,
-          );
-        }
-      }
-
-      const last = anchors[anchors.length - 1];
-      for (let index = last.index + 1; index < path.length; index += 1) {
-        const steps = index - last.index;
-        const weight = Math.exp(-steps / 3.2);
-        if (weight < 0.08) break;
-        addDisplacement(
-          path[index],
-          last.delta.x,
-          last.delta.y,
-          weight,
-        );
+    // Ring order already follows the geographic loop. Unwrap its polar
+    // angles so interpolation through 0°/360° is continuous.
+    for (let index = 1; index < samples.length; index += 1) {
+      while (samples[index].geoAngle <= samples[index - 1].geoAngle) {
+        samples[index].geoAngle += Math.PI * 2;
       }
     }
-  }
 
-  for (const [nodeId, sum] of displacementSum) {
-    if (sum.weight <= 0) continue;
-    positions[nodeId] = {
-      x: geographic[nodeId].x + sum.x / sum.weight,
-      y: geographic[nodeId].y + sum.y / sum.weight,
+    return {
+      ...transform,
+      samples,
+      firstGeoAngle: samples[0].geoAngle,
+      lastGeoAngle: samples[samples.length - 1].geoAngle,
+    };
+  });
+
+  const mapThroughRing = (
+    transform: (typeof polarTransforms)[number],
+    source: Point,
+  ): {
+    point: Point;
+    normalizedRadius: number;
+  } => {
+    const dx = source.x - transform.center.x;
+    const dy = source.y - transform.center.y;
+    const sourceRadius = Math.hypot(dx, dy);
+    let angle = normalizeAngle(Math.atan2(dy, dx));
+
+    while (angle < transform.firstGeoAngle) {
+      angle += Math.PI * 2;
+    }
+    while (angle > transform.lastGeoAngle + Math.PI * 2) {
+      angle -= Math.PI * 2;
+    }
+
+    const samples = transform.samples;
+    let leftIndex = samples.length - 1;
+    let rightIndex = 0;
+    let leftAngle = samples[leftIndex].geoAngle;
+    let rightAngle = samples[0].geoAngle + Math.PI * 2;
+
+    for (let index = 0; index < samples.length - 1; index += 1) {
+      const a = samples[index].geoAngle;
+      const b = samples[index + 1].geoAngle;
+      if (angle >= a && angle <= b) {
+        leftIndex = index;
+        rightIndex = index + 1;
+        leftAngle = a;
+        rightAngle = b;
+        break;
+      }
+    }
+
+    if (angle < leftAngle) angle += Math.PI * 2;
+    const span = Math.max(1e-6, rightAngle - leftAngle);
+    const t = clamp((angle - leftAngle) / span, 0, 1);
+    const left = samples[leftIndex];
+    const right = samples[rightIndex];
+
+    let targetRightAngle = right.targetAngle;
+    if (rightIndex === 0) targetRightAngle += Math.PI * 2;
+    const targetAngle =
+      left.targetAngle * (1 - t) + targetRightAngle * t;
+    const boundaryRadius =
+      left.geoRadius * (1 - t) + right.geoRadius * t;
+    const normalizedRadius =
+      sourceRadius / Math.max(1, boundaryRadius);
+    const targetRadius = transform.radius * normalizedRadius;
+
+    return {
+      point: {
+        x:
+          transform.center.x +
+          Math.cos(targetAngle) * targetRadius,
+        y:
+          transform.center.y +
+          Math.sin(targetAngle) * targetRadius,
+      },
+      normalizedRadius,
+    };
+  };
+
+  for (const node of graph.nodes) {
+    if (ringNodeSet.has(node.id)) continue;
+
+    let best:
+      | {
+          point: Point;
+          normalizedRadius: number;
+        }
+      | undefined;
+
+    for (const transform of polarTransforms) {
+      const mapped = mapThroughRing(
+        transform,
+        geographic[node.id],
+      );
+      if (
+        !best ||
+        mapped.normalizedRadius < best.normalizedRadius
+      ) {
+        best = mapped;
+      }
+    }
+
+    if (!best || best.normalizedRadius > 1.85) continue;
+
+    const blend =
+      best.normalizedRadius <= 1.15
+        ? 1
+        : clamp(
+            (1.85 - best.normalizedRadius) / 0.7,
+            0,
+            1,
+          );
+
+    positions[node.id] = {
+      x:
+        geographic[node.id].x * (1 - blend) +
+        best.point.x * blend,
+      y:
+        geographic[node.id].y * (1 - blend) +
+        best.point.y * blend,
     };
   }
 
