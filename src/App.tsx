@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { validateMoscowRings } from './core/moscowRings';
 import { importExcelWorkbook } from './io/importData';
-import { downloadExcelTemplate } from './io/templateExcel';
 import { downloadSvg } from './io/exportSvg';
 import { computeLayout } from './layout';
 import { SvgMap } from './renderer/SvgMap';
@@ -237,9 +236,11 @@ export function App() {
             <div className="import-box">
               <strong>Excel 輸入</strong>
               <div className="example-links">
-                <button type="button" onClick={() => void downloadExcelTemplate()}>
-                  下載 XLSM 範本（已內建 VBA）
-                </button>
+                <a
+                  href="https://github.com/k1vink1vin/metro-map-generator/raw/refs/heads/main/TPE_Metro.xlsm"
+                >
+                  下載 TPE_Metro.xlsm 範本
+                </a>
               </div>
               <small>
                 「車站」工作表 A-D 欄是手動輸入：車站編號 / 車站名稱 / 緯度 / 經度。
@@ -420,7 +421,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.12 細節縮放 + XLSM 多環 Moscow</span>
+        <span>V0.13 TPE_Metro.xlsm 正式範本</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>

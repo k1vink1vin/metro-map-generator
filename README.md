@@ -9,7 +9,7 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 - JSON station/route editor
 - Excel (`.xlsx` / `.xlsm`) input with Chinese `車站` / `路線` worksheets
 - backward-compatible import for English `Stations` / `Lines` worksheets
-- downloadable `.xlsm` input template generated in the browser
+- canonical `TPE_Metro.xlsm` workbook template stored at the repository root
 - transfer-coordinate formula validation plus VBA embedded directly in the XLSM
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
@@ -148,9 +148,7 @@ Rules:
 - route definitions continue to reference their original station IDs,
 - changing a station name does not break a transfer relationship once the XFER ID exists.
 
-The downloadable template is directly generated as `metro-map-input-template-zh.xlsm`. `轉乘群組 / Transfer Group` automatically generates stable `XFER_###` IDs from repeated coordinates, while `轉乘驗證 / Transfer Validation` checks same-name coordinate consistency.
-
-The XLSM now contains its VBA project directly. When macros are enabled, `Auto_Open` reruns the transfer grouping and validation automatically; `CompleteTransfersAndValidate` can also be run manually from Excel's macro dialog.
+The official workbook is `TPE_Metro.xlsm` in the repository root. It is the single source of truth for workbook schema, formulas, VBA, transfer logic and Moscow-ring input.
 
 ### 路線 / Lines
 
@@ -190,18 +188,11 @@ The detector ranks all candidate cycles, but it does **not** automatically force
 The UI shows each selected ring's score, route IDs, route-change count, outward connections, area coverage, and station chain.
 
 
-## Downloadable XLSM template
+## Official XLSM template
 
-The deployed app provides a generated `metro-map-input-template-zh.xlsm` containing:
+The website download points directly to the repository-root `TPE_Metro.xlsm`.
 
-- `車站` — 中文車站輸入與自動轉乘欄位,
-- `路線` — 中文路線 / 路徑順序輸入,
-- `說明` — 中文使用說明.
-
-The importer accepts both Chinese and English worksheet/header names, so older workbooks remain usable.
-
-There is no separate VBA download. GitHub Actions compiles the VBA source into `vbaProject.bin` and includes it in the deployed XLSM template.
-
+Do not generate or maintain a second workbook template in browser code. Any workbook-format change must be made in `TPE_Metro.xlsm` first.
 
 ## Route completeness invariant
 
@@ -235,26 +226,6 @@ B03,市政府,24.154,120.663,XFER_001
 ```
 
 If the user later renames both rows to `市府`, `XFER_001` remains the topology key. The website also auto-generates XFER IDs for repeated coordinates when the transfer column is blank. Existing XFER IDs take precedence, and automatically generated IDs avoid collisions with existing groups.
-
-
-## Self-contained XLSM
-
-The download flow is intentionally a single file:
-
-```text
-metro-map-input-template-zh.xlsm
-```
-
-The workbook contains:
-
-- visible Chinese input sheets,
-- legacy-compatible formulas that auto-number repeated-coordinate transfer groups as `XFER_001 / XFER_002 / ...`,
-- hidden helper columns used only for stable formula calculation,
-- an embedded VBA project compiled during CI,
-- `Auto_Open` to refresh transfer groups and validation when macros are enabled,
-- `CompleteTransfersAndValidate` for manual reruns.
-
-CI fails if `vbaProject.bin` cannot be compiled, so Pages will not deploy a macro-less XLSM by accident.
 
 
 ## Detail scale
@@ -291,3 +262,5 @@ Rules:
 - `RING_1 / RING_2 / RING_3` should be listed in inner-to-outer order.
 
 The embedded VBA validates the ring sheet and marks rows OK/ERROR. The web importer validates again before Moscow layout is generated, so invalid ring definitions cannot silently produce a broken map.
+
+
