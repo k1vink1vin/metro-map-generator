@@ -300,7 +300,7 @@ export function App() {
         <section className="map-panel">
           <div className="toolbar">
             <label>
-              <span>STYLE</span>
+              <span>路網風格</span>
               <select
                 value={style}
                 onChange={(event) => {
