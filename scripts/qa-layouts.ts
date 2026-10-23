@@ -113,6 +113,40 @@ function directionalFidelity(
   };
 }
 
+function ringCircularity(
+  positions: Record<string, Point>,
+) {
+  return rings.map((ring) => {
+    const points = ring.nodes.map((id) => positions[id]);
+    const center = {
+      x:
+        points.reduce((sum, point) => sum + point.x, 0) /
+        Math.max(1, points.length),
+      y:
+        points.reduce((sum, point) => sum + point.y, 0) /
+        Math.max(1, points.length),
+    };
+    const radii = points.map((point) =>
+      Math.hypot(point.x - center.x, point.y - center.y),
+    );
+    const mean =
+      radii.reduce((sum, radius) => sum + radius, 0) /
+      Math.max(1, radii.length);
+    const variance =
+      radii.reduce(
+        (sum, radius) => sum + (radius - mean) ** 2,
+        0,
+      ) / Math.max(1, radii.length);
+    const deviation = Math.sqrt(variance);
+    return {
+      id: ring.id,
+      meanRadius: mean,
+      coefficientOfVariation:
+        mean > 1e-9 ? deviation / mean : Number.POSITIVE_INFINITY,
+    };
+  });
+}
+
 function ringSeparation(
   positions: Record<string, Point>,
   geographic: Record<string, Point>,
@@ -451,6 +485,10 @@ function metrics(
     style === 'moscow'
       ? ringSeparation(positions, geographic)
       : { minDistance: Number.POSITIVE_INFINITY, minRatio: Number.POSITIVE_INFINITY };
+  const circularity =
+    style === 'moscow'
+      ? ringCircularity(positions)
+      : [];
 
   return {
     style,
@@ -470,6 +508,7 @@ function metrics(
     eastOrder: direction.eastOrder,
     ringCenterDistance: separation.minDistance,
     ringCenterRatio: separation.minRatio,
+    ringCircularity: circularity,
     score,
     crossingList,
     closePairList: closePairList
@@ -614,6 +653,13 @@ for (const result of results) {
         `moscow: ${result.terminalHooks} terminal hooks exceeds geographic baseline ${baselineTerminalHooks} + 1`,
       );
     }
+    for (const ring of result.ringCircularity) {
+      if (ring.coefficientOfVariation > 0.025) {
+        failures.push(
+          `moscow: ${ring.id} is not circular enough (radius CV ${(ring.coefficientOfVariation * 100).toFixed(2)}%)`,
+        );
+      }
+    }
     if (
       rings.length > 1 &&
       (result.ringCenterDistance < 80 ||
@@ -643,6 +689,16 @@ console.log(
     doglegs: baselineMoscowDoglegs,
     terminalHooks: baselineTerminalHooks,
   },
+);
+
+const finalMoscow = results.find((result) => result.style === 'moscow');
+console.log(
+  'Moscow ring circularity:',
+  finalMoscow?.ringCircularity.map((ring) => ({
+    id: ring.id,
+    radius: ring.meanRadius.toFixed(1),
+    radiusCV: (ring.coefficientOfVariation * 100).toFixed(2) + '%',
+  })),
 );
 
 console.log(
