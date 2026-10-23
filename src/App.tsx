@@ -66,7 +66,7 @@ export function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const changeMapZoom = (nextZoom: number) => {
-    const next = Math.min(4, Math.max(1, nextZoom));
+    const next = Math.min(4, Math.max(0.25, nextZoom));
     if (next === mapZoom) return;
 
     const frame = canvasRef.current;
@@ -355,7 +355,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => changeMapZoom(mapZoom - 0.25)}
-                disabled={mapZoom <= 1}
+                disabled={mapZoom <= 0.25}
                 title="縮小"
               >
                 −
@@ -457,7 +457,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.9 地圖縮放 + 內建 VBA XLSM</span>
+        <span>V0.10 25%-400% 縮放 + 站名避碰</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
