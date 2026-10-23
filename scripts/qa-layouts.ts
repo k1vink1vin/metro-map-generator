@@ -238,3 +238,39 @@ for (const result of results) {
     );
   }
 }
+
+
+const failures: string[] = [];
+for (const result of results) {
+  if (result.score < 90) {
+    failures.push(`${result.style}: score ${result.score.toFixed(1)} < 90`);
+  }
+  if (result.minNode < 38) {
+    failures.push(`${result.style}: minimum station distance ${result.minNode.toFixed(1)} < 38`);
+  }
+  if (result.shortEdges > 6) {
+    failures.push(`${result.style}: ${result.shortEdges} short edges > 6`);
+  }
+  const allowedCrossings = result.style === 'moscow' ? 4 : 0;
+  if (result.crossings > allowedCrossings) {
+    failures.push(
+      `${result.style}: ${result.crossings} crossings > ${allowedCrossings}`,
+    );
+  }
+  if (
+    (result.style === 'taipei' ||
+      result.style === 'london' ||
+      result.style === 'hex') &&
+    result.angleError > 12
+  ) {
+    failures.push(
+      `${result.style}: angular error ${result.angleError.toFixed(1)}° > 12°`,
+    );
+  }
+}
+
+if (failures.length) {
+  throw new Error(
+    'Passenger-map QA regression:\n' + failures.join('\n'),
+  );
+}
