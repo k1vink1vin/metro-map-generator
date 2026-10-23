@@ -353,6 +353,12 @@ for (const result of results) {
   if (result.shortEdges > 6) {
     failures.push(`${result.style}: ${result.shortEdges} short edges > 6`);
   }
+  if (result.style === 'moscow' && result.doglegs > 3) {
+    failures.push(
+      `moscow: ${result.doglegs} alternating doglegs > 3`,
+    );
+  }
+
   const allowedCrossings = result.style === 'moscow' ? 4 : 0;
   if (result.crossings > allowedCrossings) {
     failures.push(
