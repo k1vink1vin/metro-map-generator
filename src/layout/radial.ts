@@ -640,7 +640,7 @@ function moscowSegmentsCross(
   );
 }
 
-function fanOutSelfCrossingMoscowPaths(
+function safelyFanOutSelfCrossingMoscowPaths(
   graph: GraphModel,
   positions: Record<string, Point>,
   fixedNodes: Set<string>,
@@ -652,17 +652,19 @@ function fanOutSelfCrossingMoscowPaths(
     ]),
   );
 
-  const selfCrossingCount = (path: string[]): number => {
+  const pathSelfCrossings = (
+    path: string[],
+    source: Record<string, Point>,
+  ): number => {
     let count = 0;
     for (let i = 0; i < path.length - 1; i += 1) {
       for (let j = i + 2; j < path.length - 1; j += 1) {
-        if (i === 0 && j === path.length - 2) continue;
         if (
           moscowSegmentsCross(
-            result[path[i]],
-            result[path[i + 1]],
-            result[path[j]],
-            result[path[j + 1]],
+            source[path[i]],
+            source[path[i + 1]],
+            source[path[j]],
+            source[path[j + 1]],
           )
         ) {
           count += 1;
@@ -670,6 +672,90 @@ function fanOutSelfCrossingMoscowPaths(
       }
     }
     return count;
+  };
+
+  const pathExternalCrossings = (
+    path: string[],
+    source: Record<string, Point>,
+  ): number => {
+    let count = 0;
+    const pathEdgeKeys = new Set<string>();
+    for (let i = 0; i < path.length - 1; i += 1) {
+      pathEdgeKeys.add(
+        [path[i], path[i + 1]].sort().join('::'),
+      );
+    }
+
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const aId = path[i];
+      const bId = path[i + 1];
+      for (const edge of graph.edges) {
+        const edgeKeyValue = [edge.a, edge.b]
+          .sort()
+          .join('::');
+        if (pathEdgeKeys.has(edgeKeyValue)) continue;
+        if (
+          aId === edge.a ||
+          aId === edge.b ||
+          bId === edge.a ||
+          bId === edge.b
+        ) {
+          continue;
+        }
+        if (
+          moscowSegmentsCross(
+            source[aId],
+            source[bId],
+            source[edge.a],
+            source[edge.b],
+          )
+        ) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  const candidateIsReadable = (
+    path: string[],
+    candidate: Record<string, Point>,
+  ): boolean => {
+    const pathSet = new Set(path);
+
+    for (let i = 1; i < path.length - 1; i += 1) {
+      const id = path[i];
+      const point = candidate[id];
+
+      for (const node of graph.nodes) {
+        if (node.id === id) continue;
+        if (pathSet.has(node.id)) continue;
+        const other = candidate[node.id] ?? result[node.id];
+        if (
+          Math.hypot(
+            point.x - other.x,
+            point.y - other.y,
+          ) < 30
+        ) {
+          return false;
+        }
+      }
+    }
+
+    for (let i = 0; i < path.length - 1; i += 1) {
+      if (
+        Math.hypot(
+          candidate[path[i + 1]].x -
+            candidate[path[i]].x,
+          candidate[path[i + 1]].y -
+            candidate[path[i]].y,
+        ) < 32
+      ) {
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const networkCenter = {
@@ -686,12 +772,15 @@ function fanOutSelfCrossingMoscowPaths(
   };
 
   for (const line of graph.lines) {
-    line.paths.forEach((path) => {
-      if (path.length < 5) return;
-      if (selfCrossingCount(path) < 2) return;
-
-      const inner = path.slice(1, -1);
-      if (inner.some((id) => fixedNodes.has(id))) return;
+    for (const path of line.paths) {
+      if (path.length < 5) continue;
+      const currentSelf = pathSelfCrossings(path, result);
+      if (currentSelf < 2) continue;
+      if (
+        path.slice(1, -1).some((id) => fixedNodes.has(id))
+      ) {
+        continue;
+      }
 
       const start = result[path[0]];
       const end = result[path[path.length - 1]];
@@ -704,41 +793,106 @@ function fanOutSelfCrossingMoscowPaths(
         x: (start.x + end.x) / 2,
         y: (start.y + end.y) / 2,
       };
+      const preferredSide =
+        nx * (networkCenter.x - midpoint.x) +
+          ny * (networkCenter.y - midpoint.y) >
+        0
+          ? -1
+          : 1;
 
-      // Bow away from the network centre, and make the arc large enough for
-      // all intermediate stations to retain passenger-readable spacing.
-      const toCenter = {
-        x: networkCenter.x - midpoint.x,
-        y: networkCenter.y - midpoint.y,
-      };
-      const side =
-        nx * toCenter.x + ny * toCenter.y > 0 ? -1 : 1;
-      const amplitude = Math.max(
-        95,
-        inner.length * 24,
-        chord * 0.38,
+      const currentExternal =
+        pathExternalCrossings(path, result);
+      let best:
+        | {
+            positions: Record<string, Point>;
+            self: number;
+            external: number;
+          }
+        | undefined;
+
+      const baseAmplitude = Math.max(
+        110,
+        (path.length - 2) * 28,
+        chord * 0.42,
       );
 
-      const control = {
-        x: midpoint.x + nx * amplitude * side,
-        y: midpoint.y + ny * amplitude * side,
-      };
+      for (const side of [
+        preferredSide,
+        -preferredSide,
+      ]) {
+        for (const factor of [1, 1.35, 1.7, 2.1, 2.6]) {
+          const amplitude = baseAmplitude * factor;
+          const control = {
+            x: midpoint.x + nx * amplitude * side,
+            y: midpoint.y + ny * amplitude * side,
+          };
+          const candidate: Record<string, Point> =
+            Object.fromEntries(
+              Object.entries(result).map(([id, point]) => [
+                id,
+                { ...point },
+              ]),
+            );
 
-      for (let index = 1; index < path.length - 1; index += 1) {
-        const t = index / (path.length - 1);
-        const oneMinusT = 1 - t;
-        result[path[index]] = {
-          x:
-            oneMinusT * oneMinusT * start.x +
-            2 * oneMinusT * t * control.x +
-            t * t * end.x,
-          y:
-            oneMinusT * oneMinusT * start.y +
-            2 * oneMinusT * t * control.y +
-            t * t * end.y,
-        };
+          for (
+            let index = 1;
+            index < path.length - 1;
+            index += 1
+          ) {
+            const t = index / (path.length - 1);
+            const omt = 1 - t;
+            candidate[path[index]] = {
+              x:
+                omt * omt * start.x +
+                2 * omt * t * control.x +
+                t * t * end.x,
+              y:
+                omt * omt * start.y +
+                2 * omt * t * control.y +
+                t * t * end.y,
+            };
+          }
+
+          if (!candidateIsReadable(path, candidate)) {
+            continue;
+          }
+
+          const self = pathSelfCrossings(
+            path,
+            candidate,
+          );
+          const external = pathExternalCrossings(
+            path,
+            candidate,
+          );
+
+          if (
+            self >= currentSelf ||
+            external > currentExternal
+          ) {
+            continue;
+          }
+
+          if (
+            !best ||
+            self + external <
+              best.self + best.external
+          ) {
+            best = {
+              positions: candidate,
+              self,
+              external,
+            };
+          }
+        }
       }
-    });
+
+      if (best) {
+        for (const id of path.slice(1, -1)) {
+          result[id] = best.positions[id];
+        }
+      }
+    }
   }
 
   return result;
@@ -1100,11 +1254,12 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
-  const fannedOut = fanOutSelfCrossingMoscowPaths(
-    graph,
-    smoothed,
-    ringNodeSet,
-  );
+  const fannedOut =
+    safelyFanOutSelfCrossingMoscowPaths(
+      graph,
+      smoothed,
+      ringNodeSet,
+    );
   const optimized = reduceMoscowCrossings(
     graph,
     fannedOut,
