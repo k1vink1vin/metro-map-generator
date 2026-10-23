@@ -1,3 +1,4 @@
+import React from 'react';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildGraph } from '../src/core/graph.ts';
