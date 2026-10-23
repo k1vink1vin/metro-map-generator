@@ -202,7 +202,7 @@ export function App() {
         {dataOpen ? (
           <aside className="data-panel">
             <div className="import-box">
-              <strong>Excel Input</strong>
+              <strong>Excel 輸入</strong>
               <div className="example-links">
                 <button type="button" onClick={() => void downloadExcelTemplate()}>
                   下載 XLSM 範本
@@ -212,9 +212,9 @@ export function App() {
                 </a>
               </div>
               <small>
-                Stations 的 A-D 欄是手動輸入：Station ID / Station Name / Latitude / Longitude。
-                E 欄 Transfer Group 會依同名站自動完成，F 欄會驗證同名轉乘站的經緯度是否一致。
-                範本直接下載為 .xlsm；另提供 VBA 模組，可一次完成轉乘欄與座標驗證。
+                「車站」工作表 A-D 欄是手動輸入：車站編號 / 車站名稱 / 緯度 / 經度。
+                E 欄「轉乘群組」會依同名站自動完成，F 欄「轉乘驗證」會檢查同名轉乘站的經緯度是否一致。
+                中文範本直接下載為 .xlsm；英文 Stations / Lines 舊格式仍可匯入。
               </small>
             </div>
 
@@ -222,7 +222,7 @@ export function App() {
               <div className="section-heading">
                 <div>
                   <span className="step">01</span>
-                  <h2>Stations</h2>
+                  <h2>車站</h2>
                 </div>
                 <span>{stationCount ?? '—'}</span>
               </div>
@@ -238,7 +238,7 @@ export function App() {
               <div className="section-heading">
                 <div>
                   <span className="step">02</span>
-                  <h2>Lines & Paths</h2>
+                  <h2>路線與路徑</h2>
                 </div>
               </div>
               <textarea
@@ -378,7 +378,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.5 XLSM input + automatic transfer fields</span>
+        <span>V0.6 中文 XLSM + 自動轉乘欄位</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>

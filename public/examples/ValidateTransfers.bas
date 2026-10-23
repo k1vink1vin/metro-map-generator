@@ -7,6 +7,15 @@ Private Function NormalizeStationName(ByVal value As Variant) As String
     NormalizeStationName = LCase$(Trim$(CStr(value)))
 End Function
 
+Private Function GetStationWorksheet() As Worksheet
+    On Error Resume Next
+    Set GetStationWorksheet = ThisWorkbook.Worksheets("車站")
+    If GetStationWorksheet Is Nothing Then
+        Set GetStationWorksheet = ThisWorkbook.Worksheets("Stations")
+    End If
+    On Error GoTo 0
+End Function
+
 Public Sub CompleteTransfersAndValidate()
     Dim ws As Worksheet
     Dim lastRow As Long
@@ -22,7 +31,13 @@ Public Sub CompleteTransfersAndValidate()
     Dim mismatchCount As Long
     Dim transferRowCount As Long
 
-    Set ws = ThisWorkbook.Worksheets("Stations")
+    Set ws = GetStationWorksheet()
+
+    If ws Is Nothing Then
+        MsgBox "找不到「車站」或「Stations」工作表。", vbCritical
+        Exit Sub
+    End If
+
     lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
 
     Set info = CreateObject("Scripting.Dictionary")
@@ -30,16 +45,16 @@ Public Sub CompleteTransfersAndValidate()
     Set mismatches = CreateObject("Scripting.Dictionary")
 
     If lastRow < 2 Then
-        MsgBox "Stations sheet has no data.", vbExclamation
+        MsgBox "車站工作表沒有資料。", vbExclamation
         Exit Sub
     End If
 
-    ws.Cells(1, "E").Value = "Transfer Group"
-    ws.Cells(1, "F").Value = "Transfer Validation"
+    ws.Cells(1, "E").Value = "轉乘群組"
+    ws.Cells(1, "F").Value = "轉乘驗證"
     ws.Range("E2:F" & lastRow).ClearContents
     ws.Range("A2:F" & lastRow).Interior.Pattern = xlNone
 
-    ' First pass: count station names and validate coordinates.
+    ' 第一階段：統計同名站並檢查經緯度。
     For rowIndex = 2 To lastRow
         stationId = Trim$(CStr(ws.Cells(rowIndex, "A").Value))
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
@@ -71,7 +86,7 @@ Public Sub CompleteTransfersAndValidate()
         End If
     Next rowIndex
 
-    ' Second pass: auto-fill transfer group and validation columns.
+    ' 第二階段：自動完成轉乘群組與驗證欄位。
     For rowIndex = 2 To lastRow
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
 
@@ -83,10 +98,10 @@ Public Sub CompleteTransfersAndValidate()
             ws.Cells(rowIndex, "E").Value = Trim$(CStr(ws.Cells(rowIndex, "B").Value))
 
             If mismatches.Exists(stationName) Then
-                ws.Cells(rowIndex, "F").Value = "ERROR - Coordinates Mismatch"
+                ws.Cells(rowIndex, "F").Value = "錯誤 - 座標不一致"
                 ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(254, 202, 202)
             Else
-                ws.Cells(rowIndex, "F").Value = "OK - Coordinates Match"
+                ws.Cells(rowIndex, "F").Value = "正常 - 座標一致"
                 ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(220, 252, 231)
             End If
         Else
@@ -98,12 +113,12 @@ Public Sub CompleteTransfersAndValidate()
     mismatchCount = mismatches.Count
 
     If mismatchCount = 0 Then
-        MsgBox "Transfer fields completed and validation passed." & vbCrLf & _
-               "Transfer-station rows: " & transferRowCount, vbInformation
+        MsgBox "轉乘欄位已完成，經緯度驗證通過。" & vbCrLf & _
+               "轉乘站資料列：" & transferRowCount, vbInformation
     Else
-        MsgBox "Transfer fields completed, but validation failed." & vbCrLf & _
-               mismatchCount & " duplicated station name(s) have inconsistent coordinates." & vbCrLf & _
-               "Rows in red need correction.", vbCritical
+        MsgBox "轉乘欄位已完成，但驗證失敗。" & vbCrLf & _
+               mismatchCount & " 個同名站的經緯度不一致。" & vbCrLf & _
+               "請修正紅色資料列。", vbCritical
     End If
 End Sub
 
