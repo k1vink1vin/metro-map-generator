@@ -232,19 +232,27 @@ export async function downloadExcelTemplate() {
     { header: '環編號', key: 'ringId', width: 14 },
     { header: '順序', key: 'sequence', width: 10 },
     { header: '車站編號', key: 'stationId', width: 14 },
-    { header: '驗證', key: 'validation', width: 28 },
+    { header: '網站驗證', key: 'validation', width: 28 },
   ];
 
   [
-    ['RING_1', 1, 'G03', '正常 - 已閉合'],
-    ['RING_1', 2, 'G04', '正常 - 已閉合'],
-    ['RING_1', 3, 'G05', '正常 - 已閉合'],
-    ['RING_1', 4, 'G06', '正常 - 已閉合'],
-    ['RING_1', 5, 'G07', '正常 - 已閉合'],
-    ['RING_1', 6, 'T04', '正常 - 已閉合'],
-    ['RING_1', 7, 'T03', '正常 - 已閉合'],
-    ['RING_1', 8, 'T02', '正常 - 已閉合'],
+    ['RING_1', 1, 'G03', '匯入網站後檢查'],
+    ['RING_1', 2, 'G04', '匯入網站後檢查'],
+    ['RING_1', 3, 'G05', '匯入網站後檢查'],
+    ['RING_1', 4, 'G06', '匯入網站後檢查'],
+    ['RING_1', 5, 'G07', '匯入網站後檢查'],
+    ['RING_1', 6, 'T04', '匯入網站後檢查'],
+    ['RING_1', 7, 'T03', '匯入網站後檢查'],
+    ['RING_1', 8, 'T02', '匯入網站後檢查'],
   ].forEach((row) => rings.addRow(row));
+
+  for (let row = 2; row <= 100; row += 1) {
+    rings.getCell(row, 1).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['"RING_1,RING_2,RING_3"'],
+    };
+  }
 
   rings.views = [{ state: 'frozen', ySplit: 1 }];
   rings.getRow(1).font = {
@@ -268,7 +276,7 @@ export async function downloadExcelTemplate() {
     '「路線」工作表仍使用各路線自己的車站編號。',
     '網站 topology 優先使用 XFER ID，因此改站名不會破壞已建立的轉乘關係。',
     '莫斯科風格請在「莫斯科環」工作表定義環；最多 3 個環，每個環以 環編號 + 順序 + 車站編號 列出。',
-    '網站匯入後會逐段檢查環是否真的閉合；最後一站必須能直接接回第一站。',
+    '網站匯入後會逐段檢查環是否真的閉合；最後一站必須能直接接回第一站，最多只能使用 RING_1 / RING_2 / RING_3。',
     '網站同時相容英文工作表 Stations / Lines 與英文欄位名稱。',
   ].forEach((text) => notes.addRow([text]));
 
