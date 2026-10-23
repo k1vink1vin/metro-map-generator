@@ -347,6 +347,8 @@ function renderTaipeiStation(
               height={badgeHeight}
               rx={4 * visualScale}
               className="taipei-code-badge"
+              data-station-code={`${code.prefix}${lowerCode}`}
+              data-suffixed={code.suffix ? 'true' : 'false'}
               style={{
                 fill: '#ffffff',
                 stroke: color,
