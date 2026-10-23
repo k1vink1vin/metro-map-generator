@@ -720,6 +720,54 @@ function repairCrossRegionMoscowPaths(
         };
       }
 
+      // Re-space stations uniformly along the repaired polyline. This keeps
+      // both endpoints fixed and preserves the clean geographic corridor,
+      // while preventing uneven real-world station spacing from collapsing
+      // badges in a schematic map.
+      const polyline = path.map((nodeId) => candidate[nodeId]);
+      const cumulative = [0];
+      for (let index = 1; index < polyline.length; index += 1) {
+        cumulative.push(
+          cumulative[index - 1] +
+            Math.hypot(
+              polyline[index].x - polyline[index - 1].x,
+              polyline[index].y - polyline[index - 1].y,
+            ),
+        );
+      }
+      const totalLength = cumulative[cumulative.length - 1];
+
+      if (totalLength > 1) {
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const targetDistance =
+            (totalLength * index) / (path.length - 1);
+
+          let segment = 0;
+          while (
+            segment < cumulative.length - 2 &&
+            cumulative[segment + 1] < targetDistance
+          ) {
+            segment += 1;
+          }
+
+          const segmentStart = cumulative[segment];
+          const segmentEnd = cumulative[segment + 1];
+          const segmentLength = Math.max(
+            1e-6,
+            segmentEnd - segmentStart,
+          );
+          const localT =
+            (targetDistance - segmentStart) / segmentLength;
+          const a = polyline[segment];
+          const b = polyline[segment + 1];
+
+          candidate[path[index]] = {
+            x: a.x + (b.x - a.x) * localT,
+            y: a.y + (b.y - a.y) * localT,
+          };
+        }
+      }
+
       // Never accept a repair that makes the route less orderly.
       if (
         selfCrossings(path, candidate) <
