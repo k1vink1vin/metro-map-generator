@@ -181,3 +181,24 @@ The deployed app exposes these ready-to-import examples:
 - `public/examples/lines.csv`
 
 They demonstrate transfer complexes, a Y-shaped branch using multiple `pathId` values, and a composite ring candidate formed across different services.
+
+
+## Route completeness invariant
+
+Every layout style must preserve the complete transit graph on screen and in SVG export.
+
+The shared post-layout finalizer is applied to Geographic, Taipei 45°, London 45°, Moscow, Concentric and Hex 60°. It:
+
+- repairs any missing/non-finite node position from the geographic reference,
+- separates distinct topology nodes that collapse onto the same visible point,
+- fits all node geometry into the working canvas,
+- validates every route, path and adjacent station segment before rendering.
+
+The SVG renderer then performs a second visibility pass:
+
+- shared topology edges are offset by route,
+- accidentally coincident geometric segments from different routes are also bundled and offset,
+- the SVG viewBox is calculated from the actual offset route geometry rather than a fixed canvas,
+- SVG download is blocked if a route/path is missing, has non-drawable path data, or falls outside the exported viewBox.
+
+This is a hard invariant: a layout that cannot represent every route/path is not considered a valid output.
