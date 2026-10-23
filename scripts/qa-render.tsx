@@ -37,7 +37,7 @@ const css = `
 .station-code-prefix,.station-code-number,.station-code-suffix{fill:#111827;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
 .osaka-code-badge{stroke:#fff}
 .osaka-transfer-shell{fill:#fff;stroke:#4b5563}
-.osaka-code-prefix,.osaka-code-number,.osaka-code-suffix{fill:#fff;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
+.osaka-code-prefix,.osaka-code-number,.osaka-code-suffix,.osaka-code-text{fill:#fff;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
 .moscow-station,.moscow-transfer-ring{fill:#fff}
 .moscow-transfer-base{fill:#fff;stroke:#222}
 .station-label{fill:#111827;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
@@ -45,36 +45,12 @@ const css = `
 
 mkdirSync('qa-artifacts', { recursive: true });
 
-for (const style of styles) {
-  const layout = computeLayout(graph, style, {
-    moscowRings: rings,
-  });
-  const markup = renderToStaticMarkup(
-    <SvgMap graph={graph} layout={layout} zoom={1} />,
-  ).replace(
-    '>',
-    `><style>${css}</style>`,
-  );
-  writeFileSync(
-    `qa-artifacts/${style}.svg`,
-    '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
-  );
-}
-
-console.log(
-  `Rendered ${styles.length} QA SVGs from TPE_Metro.xlsm to qa-artifacts/`,
-);
-
-
 const stationStyles: StationVisualStyle[] = [
   'taipei',
   'tokyo',
   'osaka',
   'moscow',
 ];
-const stationLayout = computeLayout(graph, 'taipei', {
-  moscowRings: rings,
-});
 
 const sameLineBranchJunctions = graph.nodes.filter((node) => {
   if (node.stationIds.length !== 1) return false;
@@ -107,45 +83,76 @@ if (!suffixedStationIds.length) {
   );
 }
 
-for (const stationStyle of stationStyles) {
-  const markup = renderToStaticMarkup(
-    <SvgMap
-      graph={graph}
-      layout={stationLayout}
-      zoom={1}
-      stationStyle={stationStyle}
-    />,
-  ).replace(
-    '>',
-    `><style>${css}</style>`,
-  );
+const normalizedSuffixCodes = suffixedStationIds.map((stationId) =>
+  stationId.trim().toUpperCase(),
+);
 
-  for (const node of sameLineBranchJunctions) {
-    const marker = `data-node-id="${node.id}" data-interchange="false"`;
-    if (!markup.includes(marker)) {
+let renderCount = 0;
+for (const style of styles) {
+  const layout = computeLayout(graph, style, {
+    moscowRings: rings,
+  });
+
+  for (const stationStyle of stationStyles) {
+    const markup = renderToStaticMarkup(
+      <SvgMap
+        graph={graph}
+        layout={layout}
+        zoom={1}
+        stationStyle={stationStyle}
+      />,
+    ).replace(
+      '>',
+      `><style>${css}</style>`,
+    );
+
+    for (const node of sameLineBranchJunctions) {
+      const marker = `data-node-id="${node.id}" data-interchange="false"`;
+      if (!markup.includes(marker)) {
+        throw new Error(
+          `${style}/${stationStyle}: same-line branch junction ${node.id} was rendered as an interchange`,
+        );
+      }
+    }
+
+    if (
+      stationStyle === 'taipei' ||
+      stationStyle === 'tokyo' ||
+      stationStyle === 'osaka'
+    ) {
+      const missing = normalizedSuffixCodes.filter(
+        (code) => !markup.includes(`data-station-code="${code}"`),
+      );
+      if (missing.length) {
+        throw new Error(
+          `${style}/${stationStyle}: suffixed station codes missing from rendered badges: ${missing.slice(0, 5).join(', ')}`,
+        );
+      }
+    }
+
+    if (
+      stationStyle === 'osaka' &&
+      (!markup.includes('osaka-code-text') ||
+        markup.includes('osaka-code-prefix'))
+    ) {
       throw new Error(
-        `${stationStyle}: same-line branch junction ${node.id} was rendered as an interchange`,
+        `${style}/osaka: Osaka badges must use horizontal single-line station codes`,
       );
     }
-  }
 
-  if (
-    (stationStyle === 'taipei' ||
-      stationStyle === 'tokyo' ||
-      stationStyle === 'osaka') &&
-    !markup.includes('suffix')
-  ) {
-    throw new Error(
-      `${stationStyle}: suffixed station-code marker was not rendered`,
+    writeFileSync(
+      `qa-artifacts/${style}--stations-${stationStyle}.svg`,
+      '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
     );
+    renderCount += 1;
   }
-
-  writeFileSync(
-    `qa-artifacts/stations-${stationStyle}.svg`,
-    '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
-  );
 }
 
 console.log(
-  `Rendered ${stationStyles.length} station-style QA SVGs.`,
+  `Rendered ${renderCount} layout/station-style QA SVGs from TPE_Metro.xlsm.`,
 );
+console.log(
+  'Suffixed station codes:',
+  normalizedSuffixCodes,
+);
+
