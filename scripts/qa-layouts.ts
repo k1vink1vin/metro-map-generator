@@ -56,11 +56,11 @@ function properIntersection(
   );
 }
 
-function crossingCount(
+function crossingPairs(
   graph: GraphModel,
   positions: Record<string, Point>,
-): number {
-  let count = 0;
+): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
   for (let i = 0; i < graph.edges.length; i += 1) {
     const first = graph.edges[i];
     for (let j = i + 1; j < graph.edges.length; j += 1) {
@@ -81,11 +81,14 @@ function crossingCount(
           positions[second.b],
         )
       ) {
-        count += 1;
+        pairs.push([
+          `${first.a}--${first.b}`,
+          `${second.a}--${second.b}`,
+        ]);
       }
     }
   }
-  return count;
+  return pairs;
 }
 
 function angularError(
@@ -117,6 +120,7 @@ function metrics(
   );
 
   const nodeDistances: number[] = [];
+  const closePairList: Array<{ a: string; b: string; distance: number }> = [];
   let closePairs = 0;
   let severePairs = 0;
 
@@ -127,14 +131,22 @@ function metrics(
         positions[graph.nodes[j].id],
       );
       nodeDistances.push(value);
-      if (value < 34) closePairs += 1;
+      if (value < 34) {
+        closePairs += 1;
+        closePairList.push({
+          a: graph.nodes[i].id,
+          b: graph.nodes[j].id,
+          distance: value,
+        });
+      }
       if (value < 22) severePairs += 1;
     }
   }
 
   const shortEdges = edgeLengths.filter((value) => value < 42).length;
   const severeShortEdges = edgeLengths.filter((value) => value < 28).length;
-  const crossings = crossingCount(graph, positions);
+  const crossingList = crossingPairs(graph, positions);
+  const crossings = crossingList.length;
   const angleStep =
     style === 'hex'
       ? 60
@@ -170,6 +182,10 @@ function metrics(
     crossings,
     angleError,
     score,
+    crossingList,
+    closePairList: closePairList
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 12),
   };
 }
 
@@ -201,5 +217,24 @@ console.table(
 for (const result of results) {
   if (!Number.isFinite(result.score)) {
     throw new Error(`${result.style}: non-finite QA score`);
+  }
+}
+
+
+for (const result of results) {
+  if (result.score >= 90) continue;
+  console.log(`\n[${result.style}] QA diagnostics`);
+  if (result.crossingList.length) {
+    console.log('crossings:', result.crossingList.slice(0, 12));
+  }
+  if (result.closePairList.length) {
+    console.log(
+      'closest pairs:',
+      result.closePairList.map((pair) => ({
+        a: graph.nodeById.get(pair.a)?.name ?? pair.a,
+        b: graph.nodeById.get(pair.b)?.name ?? pair.b,
+        distance: pair.distance.toFixed(1),
+      })),
+    );
   }
 }
