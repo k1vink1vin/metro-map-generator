@@ -458,18 +458,13 @@ function smoothMoscowCorridors(
       const length = Math.hypot(dx, dy);
       if (length < 1) return;
 
-      const localLength = Math.min(
-        Math.hypot(b.x - a.x, b.y - a.y),
-        Math.hypot(c.x - b.x, c.y - b.y),
-      );
-      const applied = Math.min(
-        length * 0.72,
-        localLength * 0.28,
-      );
-
+      // For the terminal trio, use a strong chord projection instead of
+      // the conservative local smoothing used elsewhere. The two fixed
+      // endpoints define the intended passenger-map corridor.
+      const blend = 0.84;
       next[bId] = {
-        x: b.x + (dx / length) * applied,
-        y: b.y + (dy / length) * applied,
+        x: b.x * (1 - blend) + target.x * blend,
+        y: b.y * (1 - blend) + target.y * blend,
       };
     };
 
