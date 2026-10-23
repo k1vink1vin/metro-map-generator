@@ -428,6 +428,41 @@ select {
   fill: #111827;
 }
 
+.tokyo-badge-shell {
+  fill: #9ca3af;
+  stroke: #30343b;
+}
+
+.tokyo-badge-inner,
+.taipei-code-badge {
+  fill: #ffffff;
+}
+
+.taipei-transfer-shell {
+  fill: #9ca3af;
+  stroke: #30343b;
+}
+
+.station-code-prefix,
+.station-code-number {
+  fill: #111827;
+  stroke: none;
+  font-family: Arial, "Noto Sans TC", sans-serif;
+  font-weight: 900;
+  dominant-baseline: alphabetic;
+  pointer-events: none;
+}
+
+.moscow-station,
+.moscow-transfer-ring {
+  fill: #ffffff;
+}
+
+.moscow-transfer-base {
+  fill: #ffffff;
+  stroke: #222222;
+}
+
 .station-label {
   fill: #111827;
   font-size: 11.5px;
