@@ -232,18 +232,18 @@ export async function downloadExcelTemplate() {
     { header: '環編號', key: 'ringId', width: 14 },
     { header: '順序', key: 'sequence', width: 10 },
     { header: '車站編號', key: 'stationId', width: 14 },
-    { header: '網站驗證', key: 'validation', width: 28 },
+    { header: '環驗證', key: 'validation', width: 32 },
   ];
 
   [
-    ['RING_1', 1, 'G03', '匯入網站後檢查'],
-    ['RING_1', 2, 'G04', '匯入網站後檢查'],
-    ['RING_1', 3, 'G05', '匯入網站後檢查'],
-    ['RING_1', 4, 'G06', '匯入網站後檢查'],
-    ['RING_1', 5, 'G07', '匯入網站後檢查'],
-    ['RING_1', 6, 'T04', '匯入網站後檢查'],
-    ['RING_1', 7, 'T03', '匯入網站後檢查'],
-    ['RING_1', 8, 'T02', '匯入網站後檢查'],
+    ['RING_1', 1, 'G03', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 2, 'G04', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 3, 'G05', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 4, 'G06', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 5, 'G07', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 6, 'T04', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 7, 'T03', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 8, 'T02', '啟用巨集或匯入網站後檢查'],
   ].forEach((row) => rings.addRow(row));
 
   for (let row = 2; row <= 100; row += 1) {
