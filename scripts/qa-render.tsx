@@ -132,6 +132,19 @@ for (const style of styles) {
       }
     }
 
+    if (stationStyle === 'taipei') {
+      for (const code of normalizedSuffixCodes) {
+        const badgePattern = new RegExp(
+          `class="taipei-code-badge" data-station-code="${code}" data-suffixed="true" style="fill:#ffffff;stroke:[^"]+"`,
+        );
+        if (!badgePattern.test(markup)) {
+          throw new Error(
+            `${style}/taipei: suffixed badge ${code} must remain white with route-color outline`,
+          );
+        }
+      }
+    }
+
     if (
       stationStyle === 'osaka' &&
       (!markup.includes('class="osaka-code-text"') ||
