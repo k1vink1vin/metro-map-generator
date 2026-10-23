@@ -134,14 +134,14 @@ function stationMarkerRadius(
 
   if (stationStyle === 'tokyo') {
     const count = Math.max(1, node.stationIds.length);
-    return Math.max(20, (count * 28 + (count - 1) * 3) / 2);
+    return Math.max(16, (count * 22 + (count - 1) * 2) / 2);
   }
 
   if (stationStyle === 'taipei') {
     const count = Math.max(1, node.stationIds.length);
     return isInterchange
-      ? Math.max(16, (count * 19 + (count - 1) * 2) / 2)
-      : 14;
+      ? Math.max(14, (count * 16 + (count - 1) * 2) / 2)
+      : 12;
   }
 
   return isInterchange ? 12 : 7;
@@ -153,9 +153,9 @@ function renderTokyoStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const width = 28 * visualScale;
-  const height = 38 * visualScale;
-  const gap = 3 * visualScale;
+  const width = 22 * visualScale;
+  const height = 31 * visualScale;
+  const gap = 2 * visualScale;
   const totalWidth = ids.length * width + (ids.length - 1) * gap;
   const startX = -totalWidth / 2;
 
@@ -173,37 +173,37 @@ function renderTokyoStation(
               y={-height / 2}
               width={width}
               height={height}
-              rx={7 * visualScale}
+              rx={5.5 * visualScale}
               className="tokyo-badge-shell"
-              style={{ strokeWidth: 2.2 * visualScale }}
+              style={{ strokeWidth: 1.9 * visualScale }}
             />
             <rect
-              x={x + 3 * visualScale}
-              y={-height / 2 + 3 * visualScale}
-              width={width - 6 * visualScale}
-              height={height - 6 * visualScale}
-              rx={4.5 * visualScale}
+              x={x + 2.5 * visualScale}
+              y={-height / 2 + 2.5 * visualScale}
+              width={width - 5 * visualScale}
+              height={height - 5 * visualScale}
+              rx={3.8 * visualScale}
               className="tokyo-badge-inner"
               style={{
                 stroke: color,
-                strokeWidth: 3 * visualScale,
+                strokeWidth: 2.5 * visualScale,
               }}
             />
             <text
               x={x + width / 2}
-              y={-3 * visualScale}
+              y={-2.5 * visualScale}
               textAnchor="middle"
               className="station-code-prefix"
-              style={{ fontSize: 8.5 * visualScale }}
+              style={{ fontSize: 7.2 * visualScale }}
             >
               {code.prefix}
             </text>
             <text
               x={x + width / 2}
-              y={11 * visualScale}
+              y={8.8 * visualScale}
               textAnchor="middle"
               className="station-code-number"
-              style={{ fontSize: 12 * visualScale }}
+              style={{ fontSize: 9.8 * visualScale }}
             >
               {code.number}
             </text>
@@ -220,8 +220,8 @@ function renderTaipeiStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const badgeWidth = 19 * visualScale;
-  const badgeHeight = 27 * visualScale;
+  const badgeWidth = 16 * visualScale;
+  const badgeHeight = 24 * visualScale;
   const gap = 2 * visualScale;
   const totalWidth =
     ids.length * badgeWidth + (ids.length - 1) * gap;
@@ -266,7 +266,7 @@ function renderTaipeiStation(
               y={-2.5 * visualScale}
               textAnchor="middle"
               className="station-code-prefix"
-              style={{ fontSize: 7 * visualScale }}
+              style={{ fontSize: 6.4 * visualScale }}
             >
               {code.prefix}
             </text>
@@ -275,7 +275,7 @@ function renderTaipeiStation(
               y={8.5 * visualScale}
               textAnchor="middle"
               className="station-code-number"
-              style={{ fontSize: 8.5 * visualScale }}
+              style={{ fontSize: 7.8 * visualScale }}
             >
               {code.number}
             </text>
