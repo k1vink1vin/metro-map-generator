@@ -433,8 +433,6 @@ function smoothMoscowCorridors(
       bId: string,
       cId: string,
     ) => {
-      if (ringNodes.has(bId)) return;
-      if ((graph.adjacency.get(bId)?.length ?? 0) !== 2) return;
       if ((graph.adjacency.get(cId)?.length ?? 0) > 1) return;
 
       const a = current[aId];
@@ -450,18 +448,40 @@ function smoothMoscowCorridors(
 
       if (Math.abs(turn) < (20 * Math.PI) / 180) return;
 
+      const bDegree = graph.adjacency.get(bId)?.length ?? 0;
+      const bIsFixedHub =
+        ringNodes.has(bId) ||
+        bDegree > 2;
+
+      if (bIsFixedHub) {
+        // A Moscow ring / transfer node is structural and must stay fixed.
+        // Instead, make the terminal extension leave the hub as a clean
+        // continuation of the incoming corridor.
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const incomingLength = Math.hypot(dx, dy);
+        const terminalLength = Math.hypot(c.x - b.x, c.y - b.y);
+        if (incomingLength < 1 || terminalLength < 1) return;
+
+        const targetC = {
+          x: b.x + (dx / incomingLength) * terminalLength,
+          y: b.y + (dy / incomingLength) * terminalLength,
+        };
+        const blend = 0.88;
+        next[cId] = {
+          x: c.x * (1 - blend) + targetC.x * blend,
+          y: c.y * (1 - blend) + targetC.y * blend,
+        };
+        return;
+      }
+
+      if (bDegree !== 2) return;
+
       const target = {
         x: (a.x + c.x) / 2,
         y: (a.y + c.y) / 2,
       };
-      const dx = target.x - b.x;
-      const dy = target.y - b.y;
-      const length = Math.hypot(dx, dy);
-      if (length < 1) return;
 
-      // For the terminal trio, use a strong chord projection instead of
-      // the conservative local smoothing used elsewhere. The two fixed
-      // endpoints define the intended passenger-map corridor.
       const blend = 0.84;
       next[bId] = {
         x: b.x * (1 - blend) + target.x * blend,
