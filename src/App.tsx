@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { importExcelWorkbook } from './io/importData';
 import { downloadExcelTemplate } from './io/templateExcel';
@@ -62,6 +62,41 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
+  const [mapZoom, setMapZoom] = useState(1);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  const changeMapZoom = (nextZoom: number) => {
+    const next = Math.min(4, Math.max(1, nextZoom));
+    if (next === mapZoom) return;
+
+    const frame = canvasRef.current;
+    const centerX = frame
+      ? (frame.scrollLeft + frame.clientWidth / 2) / Math.max(1, frame.scrollWidth)
+      : 0.5;
+    const centerY = frame
+      ? (frame.scrollTop + frame.clientHeight / 2) / Math.max(1, frame.scrollHeight)
+      : 0.5;
+
+    setMapZoom(next);
+
+    if (frame) {
+      requestAnimationFrame(() => {
+        frame.scrollLeft =
+          centerX * frame.scrollWidth - frame.clientWidth / 2;
+        frame.scrollTop =
+          centerY * frame.scrollHeight - frame.clientHeight / 2;
+      });
+    }
+  };
+
+  const resetMapZoom = () => {
+    setMapZoom(1);
+    requestAnimationFrame(() => {
+      if (!canvasRef.current) return;
+      canvasRef.current.scrollLeft = 0;
+      canvasRef.current.scrollTop = 0;
+    });
+  };
 
   const generateFrom = (
     stations: Station[],
@@ -73,6 +108,7 @@ export function App() {
     setGraph(nextGraph);
     setLayout(nextLayout);
     setSelectedRingCandidateId('');
+    resetMapZoom();
     setError('');
     return nextGraph;
   };
@@ -132,6 +168,7 @@ export function App() {
     const nextGraph = buildGraph(sampleNetwork);
     setGraph(nextGraph);
     setLayout(computeLayout(nextGraph, 'taipei'));
+    resetMapZoom();
     setNotice('');
     setError('');
   };
@@ -303,8 +340,51 @@ export function App() {
           {error ? <div className="error-banner">{error}</div> : null}
           {notice ? <div className="notice-banner">{notice}</div> : null}
 
-          <div className="canvas-frame">
-            <SvgMap graph={graph} layout={layout} />
+          <div
+            ref={canvasRef}
+            className="canvas-frame"
+            onWheel={(event) => {
+              if (!event.ctrlKey) return;
+              event.preventDefault();
+              changeMapZoom(
+                mapZoom + (event.deltaY < 0 ? 0.25 : -0.25),
+              );
+            }}
+          >
+            <div className="zoom-controls" aria-label="地圖縮放">
+              <button
+                type="button"
+                onClick={() => changeMapZoom(mapZoom - 0.25)}
+                disabled={mapZoom <= 1}
+                title="縮小"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="zoom-readout"
+                onClick={resetMapZoom}
+                title="適合畫面 / 回到 100%"
+              >
+                {Math.round(mapZoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => changeMapZoom(mapZoom + 0.25)}
+                disabled={mapZoom >= 4}
+                title="放大"
+              >
+                +
+              </button>
+              <span>Ctrl + 滾輪縮放</span>
+            </div>
+
+            <div
+              className="map-zoom-stage"
+              style={{ width: `${mapZoom * 100}%` }}
+            >
+              <SvgMap graph={graph} layout={layout} />
+            </div>
           </div>
 
           <div className="status-grid">
@@ -377,7 +457,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.8 內建 VBA XLSM + 自動 XFER 編號</span>
+        <span>V0.9 地圖縮放 + 內建 VBA XLSM</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
