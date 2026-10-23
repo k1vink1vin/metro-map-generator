@@ -142,6 +142,16 @@ for (const style of styles) {
       );
     }
 
+    if (style === 'moscow') {
+      const haloCount =
+        (markup.match(/class="moscow-ring-halo"/g) ?? []).length;
+      if (haloCount !== rings.length) {
+        throw new Error(
+          `moscow/${stationStyle}: expected ${rings.length} ring halos, rendered ${haloCount}`,
+        );
+      }
+    }
+
     writeFileSync(
       `qa-artifacts/${style}--stations-${stationStyle}.svg`,
       '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
