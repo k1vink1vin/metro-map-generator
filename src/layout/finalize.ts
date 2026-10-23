@@ -249,8 +249,12 @@ export function finalizeLayoutPositions(
   // Moscow ring stations are deliberately placed on exact circles. The
   // generic pair-separation repair is not topology-aware and can deform
   // those circles, so Moscow relies on its own ring spacing/deformation pass.
+  const topologySensitiveStyle =
+    style === 'moscow' ||
+    style === 'london' ||
+    style === 'hex';
   const separated =
-    style === 'moscow'
+    topologySensitiveStyle
       ? { positions: completed.positions, separatedNodePairs: 0 }
       : separateOverlappingNodes(graph, completed.positions);
   const positions = fitToCanvas(graph, style, separated.positions);
