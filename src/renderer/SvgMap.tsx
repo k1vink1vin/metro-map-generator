@@ -296,7 +296,7 @@ function renderBounds(
 }
 
 export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
-  const visualScale = zoom > 1 ? 1 / zoom : 1;
+  const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
   const definedRings = layout.moscowRings ?? [];
   const ringSet = new Set(
     definedRings.flatMap((ring) => ring.nodes),
@@ -428,11 +428,11 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
               {isInterchange ? (
                 <>
                   <circle
-                    r={11}
+                    r={11 * visualScale}
                     className="station interchange-outer"
                   />
                   <circle
-                    r={5}
+                    r={5 * visualScale}
                     className="station interchange-inner"
                   />
                 </>
