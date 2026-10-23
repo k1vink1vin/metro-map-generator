@@ -984,3 +984,145 @@ export function repairIntroducedPathSelfCrossings(
 
   return positions;
 }
+
+
+function nodePathSelfCrossingCount(
+  graph: GraphModel,
+  nodeIds: Set<string>,
+  positions: Record<string, Point>,
+): number {
+  let total = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (!path.some((id) => nodeIds.has(id))) continue;
+      total += pathSelfCrossings(path, positions);
+    }
+  }
+  return total;
+}
+
+/**
+ * Topology-aware station separation.
+ *
+ * Unlike the generic finalizer repulsion, a proposed move is accepted only
+ * when it does not add an incident edge crossing and does not increase
+ * self-crossings on any route path touching the moved stations.
+ */
+export function separateNodesSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  minimumDistance = 24,
+  iterations = 16,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+
+  const tryMove = (
+    aId: string,
+    bId: string,
+    aCandidate: Point,
+    bCandidate: Point,
+  ): boolean => {
+    const affected = new Set([aId, bId]);
+    const beforeSelf = nodePathSelfCrossingCount(
+      graph,
+      affected,
+      positions,
+    );
+    const beforeCrossing =
+      incidentCrossingCount(graph, aId, positions) +
+      incidentCrossingCount(graph, bId, positions);
+
+    const oldA = positions[aId];
+    const oldB = positions[bId];
+    positions[aId] = aCandidate;
+    positions[bId] = bCandidate;
+
+    const afterSelf = nodePathSelfCrossingCount(
+      graph,
+      affected,
+      positions,
+    );
+    const afterCrossing =
+      incidentCrossingCount(graph, aId, positions) +
+      incidentCrossingCount(graph, bId, positions);
+
+    if (
+      afterSelf <= beforeSelf &&
+      afterCrossing <= beforeCrossing
+    ) {
+      return true;
+    }
+
+    positions[aId] = oldA;
+    positions[bId] = oldB;
+    return false;
+  };
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    let moved = false;
+
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const aId = graph.nodes[i].id;
+        const bId = graph.nodes[j].id;
+        const a = positions[aId];
+        const b = positions[bId];
+
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let currentDistance = Math.hypot(dx, dy);
+        if (currentDistance >= minimumDistance) continue;
+
+        if (currentDistance < 1e-6) {
+          const angle =
+            ((i * 47 + j * 103) % 360) * (Math.PI / 180);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          currentDistance = 1;
+        }
+
+        const nx = dx / currentDistance;
+        const ny = dy / currentDistance;
+        const required = minimumDistance - currentDistance;
+
+        const trials = [
+          [0.5, 0.5],
+          [0.35, 0.35],
+          [0.7, 0],
+          [0, 0.7],
+          [0.45, 0],
+          [0, 0.45],
+        ] as const;
+
+        for (const [aShare, bShare] of trials) {
+          const aCandidate = {
+            x: a.x - nx * required * aShare,
+            y: a.y - ny * required * aShare,
+          };
+          const bCandidate = {
+            x: b.x + nx * required * bShare,
+            y: b.y + ny * required * bShare,
+          };
+
+          if (
+            tryMove(
+              aId,
+              bId,
+              aCandidate,
+              bCandidate,
+            )
+          ) {
+            moved = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!moved) break;
+  }
+
+  return positions;
+}
