@@ -241,6 +241,99 @@ function multiSourceHopDistance(graph: GraphModel, sources: string[]): Map<strin
   return result;
 }
 
+function smoothMoscowCorridors(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  ringNodes: Set<string>,
+): Record<string, Point> {
+  let current = Object.fromEntries(
+    Object.entries(positions).map(([id, point]) => [id, { ...point }]),
+  );
+
+  const protectedNodes = new Set<string>(ringNodes);
+  for (const node of graph.nodes) {
+    const incidentLines = new Set<string>();
+    for (const neighbor of graph.adjacency.get(node.id) ?? []) {
+      const edge = graph.edgeByKey.get(edgeKey(node.id, neighbor));
+      for (const lineId of edge?.lineIds ?? []) {
+        incidentLines.add(lineId);
+      }
+    }
+
+    if (
+      (graph.adjacency.get(node.id)?.length ?? 0) !== 2 ||
+      node.stationIds.length > 1 ||
+      incidentLines.size > 1
+    ) {
+      protectedNodes.add(node.id);
+    }
+  }
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    for (const node of graph.nodes) {
+      if (protectedNodes.has(node.id)) continue;
+
+      const neighbors = graph.adjacency.get(node.id) ?? [];
+      if (neighbors.length !== 2) continue;
+
+      const previous = current[neighbors[0]];
+      const point = current[node.id];
+      const following = current[neighbors[1]];
+      if (!previous || !point || !following) continue;
+
+      const inVector = {
+        x: point.x - previous.x,
+        y: point.y - previous.y,
+      };
+      const outVector = {
+        x: following.x - point.x,
+        y: following.y - point.y,
+      };
+      const inLength = Math.hypot(inVector.x, inVector.y);
+      const outLength = Math.hypot(outVector.x, outVector.y);
+      if (inLength < 1 || outLength < 1) continue;
+
+      const cosine = clamp(
+        (inVector.x * outVector.x + inVector.y * outVector.y) /
+          (inLength * outLength),
+        -1,
+        1,
+      );
+      const turn = Math.acos(cosine);
+
+      // Do not disturb already-straight corridors. Only remove visible
+      // doglegs / alternating bends on ordinary intermediate stations.
+      if (turn < (22 * Math.PI) / 180) continue;
+
+      const midpoint = {
+        x: (previous.x + following.x) / 2,
+        y: (previous.y + following.y) / 2,
+      };
+      const dx = midpoint.x - point.x;
+      const dy = midpoint.y - point.y;
+      const shiftLength = Math.hypot(dx, dy);
+      if (shiftLength < 1) continue;
+
+      const maxShift = Math.min(inLength, outLength) * 0.18;
+      const applied = Math.min(shiftLength * 0.48, maxShift);
+      const scale = applied / shiftLength;
+
+      next[node.id] = {
+        x: point.x + dx * scale,
+        y: point.y + dy * scale,
+      };
+    }
+
+    current = next;
+  }
+
+  return current;
+}
+
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
@@ -379,8 +472,14 @@ export function layoutMoscow(
     };
   }
 
-  return {
+  const smoothedPositions = smoothMoscowCorridors(
+    graph,
     positions,
+    ringNodeSet,
+  );
+
+  return {
+    positions: smoothedPositions,
     moscowRings: ringInfos.map((info) => info.definition),
   };
 }
