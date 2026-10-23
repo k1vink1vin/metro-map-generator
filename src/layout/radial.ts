@@ -1,6 +1,7 @@
 import { edgeKey, findSimpleCycles } from '../core/graph';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, Point, RingCandidateDiagnostic, ValidatedMoscowRing } from '../types';
+import { relaxPathKinksSafely } from './common';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -1444,9 +1445,28 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
-  const optimized = reduceMoscowCrossings(
+  const smoothedForDisplay = relaxPathKinksSafely(
     graph,
     crossRegionRepaired,
+    {
+      passes: 7,
+      thresholdDegrees: 76,
+      minimumNodeDistance: 30,
+      maxShift: 30,
+      structuralMaxShift: 18,
+    },
+  );
+
+  // Restore the protected Moscow backbone exactly after the local smoothing.
+  for (const nodeId of protectedAfterRepair) {
+    smoothedForDisplay[nodeId] = {
+      ...crossRegionRepaired[nodeId],
+    };
+  }
+
+  const optimized = reduceMoscowCrossings(
+    graph,
+    smoothedForDisplay,
     protectedAfterRepair,
   );
 
