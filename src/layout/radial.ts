@@ -675,9 +675,16 @@ export function layoutMoscow(
     // Each validated loop becomes its own true circle. The centre stays at
     // that loop's geographic centroid, so Taipei/New Taipei and Taoyuan are
     // emphasized independently instead of being forced into concentric rings.
-    const radius = Math.max(105, meanRadius * 0.82, bboxRadius * 0.88);
     const ring = orientRing(definition.nodes, geographic, center);
     const slot = (Math.PI * 2) / ring.length;
+    const radiusForStationSpacing =
+      34 / Math.max(0.01, 2 * Math.sin(Math.PI / ring.length));
+    const radius = Math.max(
+      125,
+      meanRadius * 0.82,
+      bboxRadius * 0.88,
+      radiusForStationSpacing,
+    );
     const deltas = new Map<string, Point>();
 
     ring.forEach((id, index) => {
