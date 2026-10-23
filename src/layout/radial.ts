@@ -582,126 +582,76 @@ export function layoutMoscow(
     };
   }
 
-  const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
-  const geoCenter = {
-    x:
-      graph.nodes.reduce((sum, node) => sum + geographic[node.id].x, 0) /
-      graph.nodes.length,
-    y:
-      graph.nodes.reduce((sum, node) => sum + geographic[node.id].y, 0) /
-      graph.nodes.length,
-  };
-
-  const radii =
-    definedRings.length === 1
-      ? [310]
-      : definedRings.length === 2
-        ? [220, 390]
-        : [175, 315, 455];
-
-  const positions: Record<string, Point> = {};
+  // Moscow style should emphasize every validated loop without pretending
+  // that unrelated loops share one city centre. Each ring therefore keeps
+  // its own geographic centroid and is regularized locally. This is
+  // especially important for Taipei/New Taipei vs. Taoyuan ring services:
+  // they remain visibly separate and north-up.
+  const positions: Record<string, Point> = Object.fromEntries(
+    Object.entries(geographic).map(([id, point]) => [id, { ...point }]),
+  );
   const ringNodeSet = new Set<string>();
 
-  const ringInfos = definedRings.map((definition, ringIndex) => {
-    const ring = orientRing(definition.nodes, geographic, geoCenter);
-    const radius = radii[ringIndex];
+  const ringInfos = definedRings.map((definition) => {
+    const rawPoints = definition.nodes.map((id) => geographic[id]);
+    const localCenter = {
+      x:
+        rawPoints.reduce((sum, point) => sum + point.x, 0) /
+        Math.max(1, rawPoints.length),
+      y:
+        rawPoints.reduce((sum, point) => sum + point.y, 0) /
+        Math.max(1, rawPoints.length),
+    };
+    const ring = orientRing(definition.nodes, geographic, localCenter);
+    const points = ring.map((id) => geographic[id]);
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
 
+    // Expand just enough to make the closure readable while preserving the
+    // ring's actual geographic footprint. Very flat geographic loops are
+    // allowed to stay elliptical instead of being forced into a circle.
+    const radiusX = Math.max(88, width * 0.58);
+    const radiusY = Math.max(72, height * 0.58);
     const slot = (Math.PI * 2) / ring.length;
+
     ring.forEach((id, index) => {
       ringNodeSet.add(id);
       const equalAngle = -Math.PI / 2 + slot * index;
       const geoAngle = Math.atan2(
-        geographic[id].y - geoCenter.y,
-        geographic[id].x - geoCenter.x,
+        geographic[id].y - localCenter.y,
+        geographic[id].x - localCenter.x,
       );
       const geoAdjustment = clamp(
         signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.45,
-        slot * 0.45,
+        -slot * 0.38,
+        slot * 0.38,
       );
       const angle = equalAngle + geoAdjustment;
+      const target = {
+        x: localCenter.x + Math.cos(angle) * radiusX,
+        y: localCenter.y + Math.sin(angle) * radiusY,
+      };
 
+      // Keep a little of the original geographic position so the loop stays
+      // recognisable and north-up even when station spacing is uneven.
+      const geoWeight = 0.18;
       positions[id] = {
-        x: center.x + Math.cos(angle) * radius,
-        y: center.y + Math.sin(angle) * radius,
+        x: target.x * (1 - geoWeight) + geographic[id].x * geoWeight,
+        y: target.y * (1 - geoWeight) + geographic[id].y * geoWeight,
       };
     });
 
-    const geoRadius =
-      ring.reduce(
-        (sum, id) =>
-          sum +
-          Math.hypot(
-            geographic[id].x - geoCenter.x,
-            geographic[id].y - geoCenter.y,
-          ),
-        0,
-      ) / ring.length;
-
     return {
       definition: { ...definition, nodes: ring },
-      radius,
-      geoRadius,
+      center: localCenter,
+      radiusX,
+      radiusY,
     };
   });
-
-  const orderedInfos = [...ringInfos].sort(
-    (a, b) => a.geoRadius - b.geoRadius,
-  );
-  const allGeoRadii = graph.nodes.map((node) =>
-    Math.hypot(
-      geographic[node.id].x - geoCenter.x,
-      geographic[node.id].y - geoCenter.y,
-    ),
-  );
-  const maxGeoRadius = Math.max(1, ...allGeoRadii);
-  const outerTargetRadius =
-    orderedInfos[orderedInfos.length - 1].radius + 340;
-
-  const mapRadius = (geoRadius: number): number => {
-    const first = orderedInfos[0];
-    if (geoRadius <= first.geoRadius) {
-      const ratio = geoRadius / Math.max(1, first.geoRadius);
-      return Math.pow(ratio, 0.82) * (first.radius - 54);
-    }
-
-    for (let index = 0; index < orderedInfos.length - 1; index += 1) {
-      const inner = orderedInfos[index];
-      const outer = orderedInfos[index + 1];
-      if (geoRadius <= outer.geoRadius) {
-        const t =
-          (geoRadius - inner.geoRadius) /
-          Math.max(1, outer.geoRadius - inner.geoRadius);
-        return (
-          inner.radius +
-          54 +
-          t * Math.max(1, outer.radius - inner.radius - 108)
-        );
-      }
-    }
-
-    const last = orderedInfos[orderedInfos.length - 1];
-    const t =
-      (geoRadius - last.geoRadius) /
-      Math.max(1, maxGeoRadius - last.geoRadius);
-    return last.radius + 54 + t * (outerTargetRadius - last.radius - 54);
-  };
-
-  for (const node of graph.nodes) {
-    if (ringNodeSet.has(node.id)) continue;
-
-    const geo = geographic[node.id];
-    const dx = geo.x - geoCenter.x;
-    const dy = geo.y - geoCenter.y;
-    const geoRadius = Math.hypot(dx, dy);
-    const angle = Math.atan2(dy, dx);
-    const radius = mapRadius(geoRadius);
-
-    positions[node.id] = {
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius,
-    };
-  }
 
   const smoothedPositions = smoothMoscowCorridors(
     graph,
