@@ -263,17 +263,23 @@ export function layoutMoscow(
 
   const radii =
     definedRings.length === 1
-      ? [285]
+      ? [310]
       : definedRings.length === 2
-        ? [205, 345]
-        : [155, 275, 395];
+        ? [220, 390]
+        : [175, 315, 455];
 
   const positions: Record<string, Point> = {};
+  const ringNodeSet = new Set<string>();
+
   const ringInfos = definedRings.map((definition, ringIndex) => {
     const ring = orientRing(definition.nodes, geographic, geoCenter);
     const radius = radii[ringIndex];
+
     ring.forEach((id, index) => {
-      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / ring.length;
+      ringNodeSet.add(id);
+      const angle =
+        -Math.PI / 2 +
+        (Math.PI * 2 * index) / ring.length;
       positions[id] = {
         x: center.x + Math.cos(angle) * radius,
         y: center.y + Math.sin(angle) * radius,
@@ -295,39 +301,61 @@ export function layoutMoscow(
       definition: { ...definition, nodes: ring },
       radius,
       geoRadius,
-      hops: multiSourceHopDistance(graph, ring),
     };
   });
 
-  for (const node of graph.nodes) {
-    if (positions[node.id]) continue;
-    const geo = geographic[node.id];
-    const angle = Math.atan2(geo.y - geoCenter.y, geo.x - geoCenter.x);
-    const geoRadius = Math.hypot(
-      geo.x - geoCenter.x,
-      geo.y - geoCenter.y,
-    );
+  const orderedInfos = [...ringInfos].sort(
+    (a, b) => a.geoRadius - b.geoRadius,
+  );
+  const allGeoRadii = graph.nodes.map((node) =>
+    Math.hypot(
+      geographic[node.id].x - geoCenter.x,
+      geographic[node.id].y - geoCenter.y,
+    ),
+  );
+  const maxGeoRadius = Math.max(1, ...allGeoRadii);
+  const outerTargetRadius =
+    orderedInfos[orderedInfos.length - 1].radius + 340;
 
-    let best = ringInfos[0];
-    let bestScore = Number.POSITIVE_INFINITY;
-    for (const info of ringInfos) {
-      const hop = info.hops.get(node.id);
-      if (hop == null) continue;
-      const score = hop * 1000 + Math.abs(geoRadius - info.geoRadius);
-      if (score < bestScore) {
-        bestScore = score;
-        best = info;
+  const mapRadius = (geoRadius: number): number => {
+    const first = orderedInfos[0];
+    if (geoRadius <= first.geoRadius) {
+      const ratio = geoRadius / Math.max(1, first.geoRadius);
+      return Math.pow(ratio, 0.82) * (first.radius - 54);
+    }
+
+    for (let index = 0; index < orderedInfos.length - 1; index += 1) {
+      const inner = orderedInfos[index];
+      const outer = orderedInfos[index + 1];
+      if (geoRadius <= outer.geoRadius) {
+        const t =
+          (geoRadius - inner.geoRadius) /
+          Math.max(1, outer.geoRadius - inner.geoRadius);
+        return (
+          inner.radius +
+          54 +
+          t * Math.max(1, outer.radius - inner.radius - 108)
+        );
       }
     }
 
-    const hop = best.hops.get(node.id);
-    if (hop == null) {
-      positions[node.id] = { ...geo };
-      continue;
-    }
+    const last = orderedInfos[orderedInfos.length - 1];
+    const t =
+      (geoRadius - last.geoRadius) /
+      Math.max(1, maxGeoRadius - last.geoRadius);
+    return last.radius + 54 + t * (outerTargetRadius - last.radius - 54);
+  };
 
-    const direction = geoRadius >= best.geoRadius ? 1 : -1;
-    const radius = clamp(best.radius + direction * hop * 62, 48, 485);
+  for (const node of graph.nodes) {
+    if (ringNodeSet.has(node.id)) continue;
+
+    const geo = geographic[node.id];
+    const dx = geo.x - geoCenter.x;
+    const dy = geo.y - geoCenter.y;
+    const geoRadius = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const radius = mapRadius(geoRadius);
+
     positions[node.id] = {
       x: center.x + Math.cos(angle) * radius,
       y: center.y + Math.sin(angle) * radius,
@@ -354,27 +382,44 @@ export function layoutConcentric(
       graph.nodes.length,
   };
 
-  const radii = graph.nodes.map((node) =>
+  const geoRadii = graph.nodes.map((node) =>
     Math.hypot(
       geographic[node.id].x - geoCenter.x,
       geographic[node.id].y - geoCenter.y,
     ),
   );
-  const maxRadius = Math.max(1, ...radii);
-  const ringCount = clamp(Math.round(Math.sqrt(graph.nodes.length)), 3, 6);
-  const maxLayoutRadius = 300;
+  const maxGeoRadius = Math.max(1, ...geoRadii);
+  const ringCount = clamp(
+    Math.round(Math.sqrt(graph.nodes.length / 2)),
+    4,
+    8,
+  );
+  const maxLayoutRadius = 360;
+  const ringSpacing = maxLayoutRadius / ringCount;
+  const snapWeight = 0.34;
 
   return Object.fromEntries(
     graph.nodes.map((node) => {
       const geo = geographic[node.id];
-      const angle = Math.atan2(geo.y - geoCenter.y, geo.x - geoCenter.x);
-      const radius = Math.hypot(geo.x - geoCenter.x, geo.y - geoCenter.y);
-      const ringIndex = clamp(
-        Math.max(1, Math.round((radius / maxRadius) * ringCount)),
-        1,
-        ringCount,
+      const angle = Math.atan2(
+        geo.y - geoCenter.y,
+        geo.x - geoCenter.x,
       );
-      const layoutRadius = (ringIndex / ringCount) * maxLayoutRadius;
+      const geoRadius = Math.hypot(
+        geo.x - geoCenter.x,
+        geo.y - geoCenter.y,
+      );
+      const continuousRadius =
+        (geoRadius / maxGeoRadius) * maxLayoutRadius;
+      const snappedRadius =
+        Math.max(
+          ringSpacing,
+          Math.round(continuousRadius / ringSpacing) * ringSpacing,
+        );
+      const layoutRadius =
+        continuousRadius * (1 - snapWeight) +
+        snappedRadius * snapWeight;
+
       return [
         node.id,
         {
