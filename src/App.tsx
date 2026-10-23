@@ -12,6 +12,7 @@ import { sampleNetwork } from './sample';
 import type {
   GraphModel,
   LayoutResult,
+  RingCandidateDiagnostic,
   Station,
   StyleId,
   TransitLine,
@@ -21,7 +22,7 @@ const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'geographic', label: 'Geographic', note: '真實相對位置基準' },
   { id: 'taipei', label: 'Taipei 45°', note: '地理位置權重較高' },
   { id: 'london', label: 'London 45°', note: '拓撲與等距優先' },
-  { id: 'moscow', label: 'Moscow Ring', note: '從整體路網自動評分候選環' },
+  { id: 'moscow', label: 'Moscow Ring', note: '先偵測候選環，再由使用者指定主環' },
   { id: 'concentric', label: 'Concentric', note: '同心圓量化' },
   { id: 'hex', label: 'Hex 60°', note: '六方向 / triangular grid' },
 ];
@@ -45,6 +46,14 @@ function createInitial() {
   return { graph, layout };
 }
 
+function ringOptionLabel(
+  candidate: RingCandidateDiagnostic,
+  index: number,
+): string {
+  const routes = candidate.routeIds.join('+') || 'mixed';
+  return `環 ${index + 1}｜${routes}｜${candidate.nodes.length}站｜score ${candidate.score.toFixed(1)}`;
+}
+
 export function App() {
   const initial = useMemo(createInitial, []);
   const [stationsText, setStationsText] = useState(pretty(sampleNetwork.stations));
@@ -52,6 +61,7 @@ export function App() {
   const [style, setStyle] = useState<StyleId>('taipei');
   const [graph, setGraph] = useState<GraphModel>(initial.graph);
   const [layout, setLayout] = useState<LayoutResult>(initial.layout);
+  const [selectedRingCandidateId, setSelectedRingCandidateId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
@@ -65,6 +75,7 @@ export function App() {
     const nextLayout = computeLayout(nextGraph, nextStyle);
     setGraph(nextGraph);
     setLayout(nextLayout);
+    setSelectedRingCandidateId('');
     setError('');
     return nextGraph;
   };
@@ -77,7 +88,11 @@ export function App() {
         throw new Error('Stations and lines must both be JSON arrays.');
       }
       generateFrom(stations, lines, nextStyle);
-      setNotice('');
+      setNotice(
+        nextStyle === 'moscow'
+          ? '已偵測路網候選環。請在「主環」下拉選單選擇要正規化成環的候選。'
+          : '',
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -122,10 +137,25 @@ export function App() {
     }
   };
 
+  const selectMoscowRing = (candidateId: string) => {
+    setSelectedRingCandidateId(candidateId);
+    const nextLayout = computeLayout(graph, 'moscow', {
+      moscowRingCandidateId: candidateId || undefined,
+    });
+    setLayout(nextLayout);
+    setNotice(
+      candidateId
+        ? '已套用你選擇的 Moscow 主環。'
+        : '已取消主環選擇；目前只保留候選環偵測結果。',
+    );
+    setError('');
+  };
+
   const resetSample = () => {
     setStationsText(pretty(sampleNetwork.stations));
     setLinesText(pretty(sampleNetwork.lines));
     setStyle('taipei');
+    setSelectedRingCandidateId('');
     const nextGraph = buildGraph(sampleNetwork);
     setGraph(nextGraph);
     setLayout(computeLayout(nextGraph, 'taipei'));
@@ -151,9 +181,13 @@ export function App() {
 
   const selectedStyle = STYLE_OPTIONS.find((option) => option.id === style)!;
   const stationCount = safeArrayLength(stationsText);
+  const ringCandidates = layout.ringCandidates ?? [];
+  const selectedCandidate = ringCandidates.find(
+    (candidate) => candidate.id === layout.primaryRingCandidateId,
+  );
+  const suggestedCandidate = ringCandidates[0];
   const ringNames =
     layout.primaryRing?.map((nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId) ?? [];
-  const primaryCandidate = layout.ringCandidates?.[0];
 
   return (
     <div className="app-shell">
@@ -218,8 +252,17 @@ export function App() {
                   />
                 </label>
               </div>
+              <div className="example-links">
+                <a href="/metro-map-generator/examples/stations.csv" download>
+                  下載範例 Stations.csv
+                </a>
+                <a href="/metro-map-generator/examples/lines.csv" download>
+                  下載範例 Lines.csv
+                </a>
+              </div>
               <small>
                 Excel 需包含 Stations、Lines 兩個工作表；CSV 則分開匯入車站與路線。
+                Lines.csv 使用 pathId + sequence 描述主線與 Y 型支線。
               </small>
             </div>
 
@@ -276,6 +319,26 @@ export function App() {
               </select>
             </label>
 
+            {style === 'moscow' ? (
+              <label className="ring-selector">
+                <span>主環</span>
+                <select
+                  value={selectedRingCandidateId}
+                  onChange={(event) => selectMoscowRing(event.target.value)}
+                >
+                  <option value="">
+                    尚未選擇｜已偵測 {ringCandidates.length} 個候選環
+                  </option>
+                  {ringCandidates.map((candidate, index) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {ringOptionLabel(candidate, index)}
+                      {index === 0 ? '｜推薦' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             <div className="style-description">
               <strong>{selectedStyle.label}</strong>
               <span>{selectedStyle.note}</span>
@@ -307,31 +370,45 @@ export function App() {
               <strong>{graph.lines.length}</strong>
             </div>
             <div className="ring-status">
-              <span>Detected ring</span>
-              <strong>
-                {ringNames.length
-                  ? `${ringNames.length} nodes · score ${primaryCandidate?.score.toFixed(1) ?? '—'}`
-                  : '—'}
-              </strong>
-              {ringNames.length ? <small>{ringNames.join(' → ')}</small> : null}
-              {primaryCandidate ? (
-                <small>
-                  routes {primaryCandidate.routeIds.join(' + ')} · transfers{' '}
-                  {primaryCandidate.transferCount} · spokes{' '}
-                  {primaryCandidate.outwardConnections} · area{' '}
-                  {(primaryCandidate.areaCoverage * 100).toFixed(1)}%
-                </small>
-              ) : null}
-              {layout.ringCandidates?.length ? (
-                <small>{layout.ringCandidates.length} candidate cycle(s) evaluated</small>
-              ) : null}
+              <span>Moscow rings</span>
+              {style !== 'moscow' ? (
+                <strong>切換到 Moscow 查看</strong>
+              ) : selectedCandidate ? (
+                <>
+                  <strong>
+                    已選環 · {selectedCandidate.nodes.length}站 · score{' '}
+                    {selectedCandidate.score.toFixed(1)}
+                  </strong>
+                  <small>{ringNames.join(' → ')}</small>
+                  <small>
+                    routes {selectedCandidate.routeIds.join(' + ')} · transfers{' '}
+                    {selectedCandidate.transferCount} · spokes{' '}
+                    {selectedCandidate.outwardConnections} · area{' '}
+                    {(selectedCandidate.areaCoverage * 100).toFixed(1)}%
+                  </small>
+                  <small>共偵測 {ringCandidates.length} 個候選環，可由上方下拉選單更換。</small>
+                </>
+              ) : (
+                <>
+                  <strong>已偵測 {ringCandidates.length} 個候選環，等待你選擇</strong>
+                  {suggestedCandidate ? (
+                    <small>
+                      推薦：{suggestedCandidate.routeIds.join(' + ')} ·{' '}
+                      {suggestedCandidate.nodes.length}站 · score{' '}
+                      {suggestedCandidate.score.toFixed(1)}
+                    </small>
+                  ) : (
+                    <small>目前路網沒有偵測到閉合 cycle。</small>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </section>
       </main>
 
       <footer>
-        <span>V0.2 input + export validation + ring diagnostics</span>
+        <span>V0.3 selectable Moscow rings + CSV examples</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
