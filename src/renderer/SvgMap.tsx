@@ -823,6 +823,24 @@ export function SvgMap({
 
 
 
+      {layout.style === 'moscow' && layout.moscowRings?.length ? (
+        <g className="moscow-ring-emphasis" aria-hidden="true">
+          {layout.moscowRings.map((ring) => {
+            const points = [...ring.nodes, ring.nodes[0]]
+              .map((nodeId) => layout.positions[nodeId])
+              .filter((point): point is Point => Boolean(point));
+            if (points.length < 4) return null;
+            return (
+              <path
+                key={ring.id}
+                d={roundedPath(points, 24)}
+                className="moscow-ring-halo"
+              />
+            );
+          })}
+        </g>
+      ) : null}
+
       {concentricGuide ? (
         <g className="concentric-guides" aria-hidden="true">
           {[0.2, 0.4, 0.6, 0.8, 1].map((ratio) => (
