@@ -419,6 +419,93 @@ function smoothMoscowCorridors(
     current = next;
   }
 
+  // Terminal A-B-C hooks need a separate rule: they do not form an
+  // alternating four-station dogleg, so the previous pass cannot see them.
+  // Keep the terminal and all protected topology nodes fixed; only pull the
+  // ordinary middle station toward the terminal chord.
+  for (let iteration = 0; iteration < 5; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    const relaxTerminalTriplet = (
+      aId: string,
+      bId: string,
+      cId: string,
+    ) => {
+      if ((graph.adjacency.get(cId)?.length ?? 0) > 1) return;
+
+      const a = current[aId];
+      const b = current[bId];
+      const c = current[cId];
+      if (!a || !b || !c) return;
+
+      const first = Math.atan2(b.y - a.y, b.x - a.x);
+      const second = Math.atan2(c.y - b.y, c.x - b.x);
+      let turn = second - first;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+
+      if (Math.abs(turn) < (20 * Math.PI) / 180) return;
+
+      const bDegree = graph.adjacency.get(bId)?.length ?? 0;
+      const bIsFixedHub =
+        ringNodes.has(bId) ||
+        bDegree > 2;
+
+      if (bIsFixedHub) {
+        // A Moscow ring / transfer node is structural and must stay fixed.
+        // Instead, make the terminal extension leave the hub as a clean
+        // continuation of the incoming corridor.
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const incomingLength = Math.hypot(dx, dy);
+        const terminalLength = Math.hypot(c.x - b.x, c.y - b.y);
+        if (incomingLength < 1 || terminalLength < 1) return;
+
+        const targetC = {
+          x: b.x + (dx / incomingLength) * terminalLength,
+          y: b.y + (dy / incomingLength) * terminalLength,
+        };
+        const blend = 0.88;
+        next[cId] = {
+          x: c.x * (1 - blend) + targetC.x * blend,
+          y: c.y * (1 - blend) + targetC.y * blend,
+        };
+        return;
+      }
+
+      if (bDegree !== 2) return;
+
+      const target = {
+        x: (a.x + c.x) / 2,
+        y: (a.y + c.y) / 2,
+      };
+
+      const blend = 0.84;
+      next[bId] = {
+        x: b.x * (1 - blend) + target.x * blend,
+        y: b.y * (1 - blend) + target.y * blend,
+      };
+    };
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 3) continue;
+
+        relaxTerminalTriplet(path[2], path[1], path[0]);
+        const last = path.length - 1;
+        relaxTerminalTriplet(
+          path[last - 2],
+          path[last - 1],
+          path[last],
+        );
+      }
+    }
+
+    current = next;
+  }
+
   return current;
 }
 

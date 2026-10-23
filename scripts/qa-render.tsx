@@ -6,7 +6,7 @@ import { validateMoscowRings } from '../src/core/moscowRings.ts';
 import { importExcelBuffer } from '../src/io/importData.ts';
 import { computeLayout } from '../src/layout/index.ts';
 import { SvgMap } from '../src/renderer/SvgMap.tsx';
-import type { StyleId } from '../src/types.ts';
+import type { StationVisualStyle, StyleId } from '../src/types.ts';
 
 const data = new Uint8Array(
   readFileSync(new URL('../TPE_Metro.xlsm', import.meta.url)),
@@ -31,6 +31,12 @@ const css = `
 .interchange-outer{fill:#fff;stroke-width:3}
 .interchange-inner{fill:#111827;stroke:none}
 .ring-node-marker{display:none}
+.tokyo-badge-shell{fill:#9ca3af;stroke:#30343b}
+.tokyo-badge-inner,.taipei-code-badge{fill:#fff}
+.taipei-transfer-shell{fill:#9ca3af;stroke:#30343b}
+.station-code-prefix,.station-code-number{fill:#111827;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
+.moscow-station,.moscow-transfer-ring{fill:#fff}
+.moscow-transfer-base{fill:#fff;stroke:#222}
 .station-label{fill:#111827;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
 `;
 
@@ -54,4 +60,37 @@ for (const style of styles) {
 
 console.log(
   `Rendered ${styles.length} QA SVGs from TPE_Metro.xlsm to qa-artifacts/`,
+);
+
+
+const stationStyles: StationVisualStyle[] = [
+  'taipei',
+  'tokyo',
+  'moscow',
+];
+const stationLayout = computeLayout(graph, 'taipei', {
+  moscowRings: rings,
+});
+
+for (const stationStyle of stationStyles) {
+  const markup = renderToStaticMarkup(
+    <SvgMap
+      graph={graph}
+      layout={stationLayout}
+      zoom={1}
+      stationStyle={stationStyle}
+    />,
+  ).replace(
+    '>',
+    `><style>${css}</style>`,
+  );
+
+  writeFileSync(
+    `qa-artifacts/stations-${stationStyle}.svg`,
+    '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
+  );
+}
+
+console.log(
+  `Rendered ${stationStyles.length} station-style QA SVGs.`,
 );

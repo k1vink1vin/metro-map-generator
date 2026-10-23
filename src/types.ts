@@ -1,3 +1,5 @@
+export type StationVisualStyle = 'taipei' | 'tokyo' | 'moscow';
+
 export type StyleId =
   | 'geographic'
   | 'taipei'

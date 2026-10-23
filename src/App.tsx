@@ -12,9 +12,19 @@ import type {
   MoscowRingDefinition,
   ValidatedMoscowRing,
   Station,
+  StationVisualStyle,
   StyleId,
   TransitLine,
 } from './types';
+
+const STATION_STYLE_OPTIONS: Array<{
+  id: StationVisualStyle;
+  label: string;
+}> = [
+  { id: 'taipei', label: '台北捷運風' },
+  { id: 'tokyo', label: '東京地下鐵風' },
+  { id: 'moscow', label: '莫斯科風' },
+];
 
 const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'geographic', label: 'Geographic', note: '真實相對位置基準' },
@@ -49,6 +59,8 @@ export function App() {
   const [stationsText, setStationsText] = useState(pretty(sampleNetwork.stations));
   const [linesText, setLinesText] = useState(pretty(sampleNetwork.lines));
   const [style, setStyle] = useState<StyleId>('taipei');
+  const [stationStyle, setStationStyle] =
+    useState<StationVisualStyle>('taipei');
   const [graph, setGraph] = useState<GraphModel>(initial.graph);
   const [layout, setLayout] = useState<LayoutResult>(initial.layout);
   const [moscowRingDefinitions, setMoscowRingDefinitions] = useState<MoscowRingDefinition[]>(sampleNetwork.moscowRings ?? []);
@@ -288,7 +300,7 @@ export function App() {
         <section className="map-panel">
           <div className="toolbar">
             <label>
-              <span>STYLE</span>
+              <span>路網風格</span>
               <select
                 value={style}
                 onChange={(event) => {
@@ -298,6 +310,24 @@ export function App() {
                 }}
               >
                 {STYLE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>車站風格</span>
+              <select
+                value={stationStyle}
+                onChange={(event) =>
+                  setStationStyle(
+                    event.target.value as StationVisualStyle,
+                  )
+                }
+              >
+                {STATION_STYLE_OPTIONS.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
@@ -368,7 +398,12 @@ export function App() {
               className="map-zoom-stage"
               style={{ width: `${mapZoom * 100}%` }}
             >
-              <SvgMap graph={graph} layout={layout} zoom={mapZoom} />
+              <SvgMap
+                graph={graph}
+                layout={layout}
+                zoom={mapZoom}
+                stationStyle={stationStyle}
+              />
             </div>
           </div>
 
@@ -421,7 +456,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.15 Moscow 線形修正 + 支線獨立配色</span>
+        <span>V0.16 Moscow 終點修正 + 三種車站風格</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
