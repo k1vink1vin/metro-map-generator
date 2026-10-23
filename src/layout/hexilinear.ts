@@ -1,6 +1,7 @@
 import type { GraphModel, Point } from '../types';
 import {
   relaxPathKinksSafely,
+  repairIntroducedPathSelfCrossings,
   schematizeOnAngularGrid,
 } from './common';
 
@@ -23,11 +24,18 @@ export function layoutHexilinear(
     iterations: 115,
   });
 
-  return relaxPathKinksSafely(graph, snapped, {
-    passes: 5,
-    thresholdDegrees: 102,
+  const relaxed = relaxPathKinksSafely(graph, snapped, {
+    passes: 7,
+    thresholdDegrees: 90,
     minimumNodeDistance: 29,
-    maxShift: 26,
-    structuralMaxShift: 14,
+    maxShift: 30,
+    structuralMaxShift: 16,
   });
+
+  return repairIntroducedPathSelfCrossings(
+    graph,
+    relaxed,
+    geographic,
+    29,
+  );
 }
