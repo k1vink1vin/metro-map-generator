@@ -71,7 +71,13 @@ function stationRecordsToStations(records: RecordRow[]): Station[] {
     const name = pick(row, ['name', 'stationName']);
     const latText = pick(row, ['lat', 'latitude']);
     const lonText = pick(row, ['lon', 'lng', 'longitude']);
-    const complexId = pick(row, ['complexId', 'transferId', 'stationComplex']);
+    const complexId = pick(row, [
+      'complexId',
+      'transferId',
+      'stationComplex',
+      'transferGroup',
+      'transfer',
+    ]);
 
     const lat = Number(latText);
     const lon = Number(lonText);
