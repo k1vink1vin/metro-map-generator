@@ -640,6 +640,77 @@ function moscowSegmentsCross(
   );
 }
 
+function untangleMoscowPaths(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  fixedNodes: Set<string>,
+): Record<string, Point> {
+  const result = Object.fromEntries(
+    Object.entries(positions).map(([id, point]) => [
+      id,
+      { ...point },
+    ]),
+  );
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
+
+        let repaired = false;
+        for (let i = 0; i < path.length - 3 && !repaired; i += 1) {
+          for (let j = i + 2; j < path.length - 1; j += 1) {
+            const aId = path[i];
+            const bId = path[i + 1];
+            const cId = path[j];
+            const dId = path[j + 1];
+
+            if (
+              !moscowSegmentsCross(
+                result[aId],
+                result[bId],
+                result[cId],
+                result[dId],
+              )
+            ) {
+              continue;
+            }
+
+            const innerIds = path.slice(i + 1, j + 1);
+            if (innerIds.some((id) => fixedNodes.has(id))) {
+              continue;
+            }
+
+            const start = result[aId];
+            const end = result[dId];
+            const span = j + 1 - i;
+
+            for (let index = i + 1; index <= j; index += 1) {
+              const nodeId = path[index];
+              if (fixedNodes.has(nodeId)) continue;
+              const t = (index - i) / span;
+              result[nodeId] = {
+                x: start.x + (end.x - start.x) * t,
+                y: start.y + (end.y - start.y) * t,
+              };
+            }
+
+            repaired = true;
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return result;
+}
+
 function reduceMoscowCrossings(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -996,9 +1067,14 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
-  const optimized = reduceMoscowCrossings(
+  const untangled = untangleMoscowPaths(
     graph,
     smoothed,
+    ringNodeSet,
+  );
+  const optimized = reduceMoscowCrossings(
+    graph,
+    untangled,
     ringNodeSet,
   );
 
