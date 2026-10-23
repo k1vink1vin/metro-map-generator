@@ -460,12 +460,18 @@ select {
 
 .osaka-code-prefix,
 .osaka-code-number,
-.osaka-code-suffix {
+.osaka-code-suffix,
+.osaka-code-text {
   fill: #ffffff;
   stroke: none;
   font-family: Arial, "Noto Sans TC", sans-serif;
   font-weight: 900;
   pointer-events: none;
+}
+
+.osaka-code-text {
+  dominant-baseline: alphabetic;
+  letter-spacing: 0.01em;
 }
 
 .osaka-transfer-shell {
