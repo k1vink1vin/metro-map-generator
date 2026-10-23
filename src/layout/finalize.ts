@@ -246,7 +246,13 @@ export function finalizeLayoutPositions(
   geographic: Record<string, Point>,
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
-  const separated = separateOverlappingNodes(graph, completed.positions);
+  // Moscow ring stations are deliberately placed on exact circles. The
+  // generic pair-separation repair is not topology-aware and can deform
+  // those circles, so Moscow relies on its own ring spacing/deformation pass.
+  const separated =
+    style === 'moscow'
+      ? { positions: completed.positions, separatedNodePairs: 0 }
+      : separateOverlappingNodes(graph, completed.positions);
   const positions = fitToCanvas(graph, style, separated.positions);
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
