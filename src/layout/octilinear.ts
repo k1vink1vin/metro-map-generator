@@ -37,7 +37,7 @@ export function layoutTaipei(
       runBlend: 0.46,
       geographyTether: 0.22,
       equalSpacingWeight: 0.46,
-      bendAnchorDegrees: 62,
+      bendAnchorDegrees: 38,
     },
   );
 
@@ -91,7 +91,7 @@ export function layoutLondon(
       runBlend: 0.66,
       geographyTether: 0.07,
       equalSpacingWeight: 0.76,
-      bendAnchorDegrees: 72,
+      bendAnchorDegrees: 58,
     },
   );
 
