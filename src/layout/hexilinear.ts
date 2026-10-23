@@ -1,6 +1,7 @@
 import type { GraphModel, Point } from '../types';
 import {
   regularizeRouteCorridors,
+  relaxPathKinks,
   schematizeOnAngularGrid,
 } from './common';
 
@@ -23,7 +24,7 @@ export function layoutHexilinear(
     iterations: 115,
   });
 
-  return regularizeRouteCorridors(
+  const corridors = regularizeRouteCorridors(
     graph,
     snapped,
     geographic,
@@ -35,4 +36,13 @@ export function layoutHexilinear(
       equalSpacingWeight: 0.62,
     },
   );
+
+  return relaxPathKinks(graph, corridors, geographic, {
+    passes: 7,
+    ordinaryBlend: 0.54,
+    structuralBlend: 0.14,
+    geographyTether: 0.1,
+    maxShift: 20,
+    thresholdDegrees: 82,
+  });
 }
