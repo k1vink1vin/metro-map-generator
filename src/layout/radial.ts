@@ -292,8 +292,8 @@ export function layoutMoscow(
       );
       const geoAdjustment = clamp(
         signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.32,
-        slot * 0.32,
+        -slot * 0.45,
+        slot * 0.45,
       );
       const angle = equalAngle + geoAdjustment;
 
