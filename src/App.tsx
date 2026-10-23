@@ -36,6 +36,21 @@ const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'hex', label: 'Hex 60°', note: '60° 三軸網格：路徑整線、抑制 zig-zag' },
 ];
 
+const STYLE_GROUPS: Array<{
+  label: string;
+  ids: StyleId[];
+}> = [
+  { label: '基準', ids: ['geographic'] },
+  {
+    label: '三大城市風格',
+    ids: ['taipei', 'london', 'moscow'],
+  },
+  {
+    label: '兩種構圖網格',
+    ids: ['concentric', 'hex'],
+  },
+];
+
 function pretty(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
@@ -311,10 +326,20 @@ export function App() {
                   generate(next);
                 }}
               >
-                {STYLE_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
+                {STYLE_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.ids.map((styleId) => {
+                      const option = STYLE_OPTIONS.find(
+                        (item) => item.id === styleId,
+                      );
+                      if (!option) return null;
+                      return (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
                 ))}
               </select>
             </label>
