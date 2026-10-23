@@ -1,26 +1,79 @@
 import type { GraphModel, Point } from '../types';
-import { schematizeOnAngularGrid } from './common';
+import {
+  inflateCentralArea,
+  regularizeRouteCorridors,
+  schematizeOnAngularGrid,
+} from './common';
 
+/**
+ * Taipei style: octolinear, but geographically anchored.
+ *
+ * 1. Keep the projected north-up geography as the strong reference.
+ * 2. Snap route directions to the 45° family.
+ * 3. Rebuild ordinary degree-2 station runs as one/two-axis corridors so
+ *    the result does not inherit edge-by-edge saw-tooth kinks.
+ * 4. Keep interchange / branch nodes as structural anchors.
+ */
 export function layoutTaipei(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  return schematizeOnAngularGrid(graph, geographic, {
+  const snapped = schematizeOnAngularGrid(graph, geographic, {
     angleStep: 45,
-    geographyWeight: 0.42,
-    equalSpacingWeight: 0.38,
-    iterations: 95,
+    geographyWeight: 0.52,
+    equalSpacingWeight: 0.34,
+    iterations: 90,
   });
+
+  return regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 45,
+      passes: 6,
+      runBlend: 0.72,
+      geographyTether: 0.18,
+      equalSpacingWeight: 0.48,
+    },
+  );
 }
 
+/**
+ * London style: topology first.
+ *
+ * Beck's diagram deliberately enlarged the dense centre and used only
+ * horizontal, vertical and 45° axes. Here the geographic projection is first
+ * centrally inflated, then only lightly tethered while ordinary route runs
+ * are aggressively regularized into clean octolinear corridors.
+ */
 export function layoutLondon(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  return schematizeOnAngularGrid(graph, geographic, {
-    angleStep: 45,
-    geographyWeight: 0.34,
-    equalSpacingWeight: 0.62,
-    iterations: 120,
-  });
+  const schematicReference = inflateCentralArea(geographic, 0.5);
+
+  const snapped = schematizeOnAngularGrid(
+    graph,
+    schematicReference,
+    {
+      angleStep: 45,
+      geographyWeight: 0.2,
+      equalSpacingWeight: 0.72,
+      iterations: 135,
+    },
+  );
+
+  return regularizeRouteCorridors(
+    graph,
+    snapped,
+    schematicReference,
+    {
+      angleStep: 45,
+      passes: 8,
+      runBlend: 0.9,
+      geographyTether: 0.04,
+      equalSpacingWeight: 0.84,
+    },
+  );
 }
