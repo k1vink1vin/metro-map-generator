@@ -383,7 +383,7 @@ export function App() {
               className="map-zoom-stage"
               style={{ width: `${mapZoom * 100}%` }}
             >
-              <SvgMap graph={graph} layout={layout} />
+              <SvgMap graph={graph} layout={layout} zoom={mapZoom} />
             </div>
           </div>
 
@@ -457,7 +457,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.10 25%-400% 縮放 + 站名避碰</span>
+        <span>V0.11 放大時站名字體反向縮放</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
