@@ -72,6 +72,25 @@ const stationLayout = computeLayout(graph, 'taipei', {
   moscowRings: rings,
 });
 
+const sameLineBranchJunctions = graph.nodes.filter((node) => {
+  if (node.stationIds.length !== 1) return false;
+  if ((graph.adjacency.get(node.id)?.length ?? 0) <= 2) return false;
+
+  const incidentLineIds = new Set<string>();
+  for (const line of graph.lines) {
+    if (line.paths.some((path) => path.includes(node.id))) {
+      incidentLineIds.add(line.id);
+    }
+  }
+  return incidentLineIds.size === 1;
+});
+
+if (!sameLineBranchJunctions.length) {
+  throw new Error(
+    'Expected at least one same-line branch junction in TPE_Metro.xlsm QA fixture.',
+  );
+}
+
 for (const stationStyle of stationStyles) {
   const markup = renderToStaticMarkup(
     <SvgMap
@@ -84,6 +103,15 @@ for (const stationStyle of stationStyles) {
     '>',
     `><style>${css}</style>`,
   );
+
+  for (const node of sameLineBranchJunctions) {
+    const marker = `data-node-id="${node.id}" data-interchange="false"`;
+    if (!markup.includes(marker)) {
+      throw new Error(
+        `${stationStyle}: same-line branch junction ${node.id} was rendered as an interchange`,
+      );
+    }
+  }
 
   writeFileSync(
     `qa-artifacts/stations-${stationStyle}.svg`,
