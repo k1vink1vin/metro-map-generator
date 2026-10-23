@@ -1,6 +1,7 @@
 import type { GraphModel, Point } from '../types';
 import {
   inflateCentralArea,
+  regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
   schematizeOnAngularGrid,
@@ -25,7 +26,21 @@ export function layoutTaipei(
     iterations: 100,
   });
 
-  const relaxed = relaxPathKinksSafely(graph, snapped, {
+  const corridors = regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 45,
+      passes: 4,
+      runBlend: 0.46,
+      geographyTether: 0.22,
+      equalSpacingWeight: 0.46,
+      bendAnchorDegrees: 38,
+    },
+  );
+
+  const relaxed = relaxPathKinksSafely(graph, corridors, {
     passes: 7,
     thresholdDegrees: 84,
     minimumNodeDistance: 29,
@@ -65,7 +80,21 @@ export function layoutLondon(
     },
   );
 
-  const relaxed = relaxPathKinksSafely(graph, snapped, {
+  const corridors = regularizeRouteCorridors(
+    graph,
+    snapped,
+    schematicReference,
+    {
+      angleStep: 45,
+      passes: 5,
+      runBlend: 0.66,
+      geographyTether: 0.07,
+      equalSpacingWeight: 0.76,
+      bendAnchorDegrees: 58,
+    },
+  );
+
+  const relaxed = relaxPathKinksSafely(graph, corridors, {
     passes: 9,
     thresholdDegrees: 78,
     minimumNodeDistance: 29,
