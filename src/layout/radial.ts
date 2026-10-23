@@ -1460,14 +1460,135 @@ export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  // On a regional network, forcing hundreds of stations onto quantized
-  // radii creates artificial crossings. Keep the north-up geographic
-  // topology intact; the renderer supplies concentric guide rings to
-  // communicate this visual style without corrupting passenger wayfinding.
-  return Object.fromEntries(
-    graph.nodes.map((node) => [
-      node.id,
-      { ...geographic[node.id] },
-    ]),
+  const points = graph.nodes.map((node) => geographic[node.id]);
+  const center = {
+    x:
+      points.reduce((sum, point) => sum + point.x, 0) /
+      Math.max(1, points.length),
+    y:
+      points.reduce((sum, point) => sum + point.y, 0) /
+      Math.max(1, points.length),
+  };
+
+  const polar = graph.nodes
+    .map((node) => {
+      const point = geographic[node.id];
+      const dx = point.x - center.x;
+      const dy = point.y - center.y;
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+      return {
+        id: node.id,
+        radius: Math.hypot(dx, dy),
+        angle,
+      };
+    })
+    .sort((a, b) => a.radius - b.radius);
+
+  const maxRadius = Math.max(
+    1,
+    ...polar.map((item) => item.radius),
   );
+  const shellCount = Math.max(
+    5,
+    Math.min(9, Math.round(Math.sqrt(graph.nodes.length) / 2)),
+  );
+  const shells: typeof polar[] = Array.from(
+    { length: shellCount },
+    () => [],
+  );
+
+  for (const item of polar) {
+    const normalized = Math.pow(item.radius / maxRadius, 0.88);
+    const shellIndex = Math.max(
+      0,
+      Math.min(
+        shellCount - 1,
+        Math.round(normalized * (shellCount - 1)),
+      ),
+    );
+    shells[shellIndex].push(item);
+  }
+
+  const target: Record<string, Point> = {};
+  const baseShellSpacing = Math.max(92, maxRadius / shellCount);
+
+  shells.forEach((shell, shellIndex) => {
+    if (!shell.length) return;
+
+    const desiredRadius = Math.max(
+      82 + shellIndex * baseShellSpacing,
+      (shell.length * 38) / (Math.PI * 2),
+    );
+    const minGap = Math.min(
+      (Math.PI * 2) / Math.max(1, shell.length),
+      38 / Math.max(1, desiredRadius),
+    );
+
+    const sorted = [...shell].sort((a, b) => a.angle - b.angle);
+    if (sorted.length === 1) {
+      const item = sorted[0];
+      target[item.id] = {
+        x: center.x + Math.cos(item.angle) * desiredRadius,
+        y: center.y + Math.sin(item.angle) * desiredRadius,
+      };
+      return;
+    }
+
+    // Open the ring at its largest natural angular gap. This keeps station
+    // order stable while giving the constraint solver room to distribute
+    // crowded labels around the shell.
+    let largestGapIndex = 0;
+    let largestGap = -1;
+    for (let index = 0; index < sorted.length; index += 1) {
+      const current = sorted[index].angle;
+      const next =
+        index === sorted.length - 1
+          ? sorted[0].angle + Math.PI * 2
+          : sorted[index + 1].angle;
+      const gap = next - current;
+      if (gap > largestGap) {
+        largestGap = gap;
+        largestGapIndex = index;
+      }
+    }
+
+    const ordered = [
+      ...sorted.slice(largestGapIndex + 1),
+      ...sorted.slice(0, largestGapIndex + 1),
+    ];
+    const unwrapped = ordered.map((item, index) => {
+      let angle = item.angle;
+      if (index > 0) {
+        while (angle <= ordered[0].angle) angle += Math.PI * 2;
+      }
+      return angle;
+    });
+
+    const adjusted = [...unwrapped];
+    for (let index = 1; index < adjusted.length; index += 1) {
+      adjusted[index] = Math.max(
+        adjusted[index],
+        adjusted[index - 1] + minGap,
+      );
+    }
+
+    const originalMean =
+      unwrapped.reduce((sum, value) => sum + value, 0) /
+      unwrapped.length;
+    const adjustedMean =
+      adjusted.reduce((sum, value) => sum + value, 0) /
+      adjusted.length;
+    const meanShift = originalMean - adjustedMean;
+
+    ordered.forEach((item, index) => {
+      const angle = adjusted[index] + meanShift;
+      target[item.id] = {
+        x: center.x + Math.cos(angle) * desiredRadius,
+        y: center.y + Math.sin(angle) * desiredRadius,
+      };
+    });
+  });
+
+  return target;
 }
