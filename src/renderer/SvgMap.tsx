@@ -1,4 +1,10 @@
-import type { GraphModel, LayoutResult, Point } from '../types';
+import type {
+  GraphModel,
+  GraphNode,
+  LayoutResult,
+  Point,
+  StationVisualStyle,
+} from '../types';
 import { nodeDegree } from '../core/graph';
 import {
   buildGeometricBundleMap,
@@ -10,6 +16,7 @@ interface SvgMapProps {
   graph: GraphModel;
   layout: LayoutResult;
   zoom?: number;
+  stationStyle?: StationVisualStyle;
 }
 
 interface RenderedRoutePath {
@@ -65,6 +72,265 @@ function padded(rect: Rect, amount: number): Rect {
   };
 }
 
+function parseStationCode(stationId: string) {
+  const match = stationId.trim().match(/^([A-Za-z]+)[-_ ]?(\d+)$/);
+  if (!match) {
+    return { prefix: stationId.trim().toUpperCase(), number: '' };
+  }
+  return {
+    prefix: match[1].toUpperCase(),
+    number: match[2],
+  };
+}
+
+function nodeLineColors(graph: GraphModel, nodeId: string): string[] {
+  const colors: string[] = [];
+  for (const line of graph.lines) {
+    line.paths.forEach((path, pathIndex) => {
+      if (!path.includes(nodeId)) return;
+      const color = line.pathColors?.[pathIndex] ?? line.color;
+      if (!colors.includes(color)) colors.push(color);
+    });
+  }
+  return colors.length ? colors : ['#111827'];
+}
+
+function stationCodeColor(
+  graph: GraphModel,
+  nodeId: string,
+  stationId: string,
+): string {
+  const { prefix } = parseStationCode(stationId);
+  const candidates: Array<{ score: number; color: string }> = [];
+
+  for (const line of graph.lines) {
+    line.paths.forEach((path, pathIndex) => {
+      if (!path.includes(nodeId)) return;
+      const lineToken = line.id.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const nameToken = line.name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      let score = 0;
+      if (lineToken.endsWith(prefix)) score += 6;
+      if (lineToken.includes(prefix)) score += 3;
+      if (nameToken.includes(prefix)) score += 1;
+
+      candidates.push({
+        score,
+        color: line.pathColors?.[pathIndex] ?? line.color,
+      });
+    });
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0]?.color ?? '#111827';
+}
+
+function stationMarkerRadius(
+  node: GraphNode,
+  graph: GraphModel,
+  stationStyle: StationVisualStyle,
+): number {
+  const isInterchange =
+    node.stationIds.length > 1 || nodeDegree(graph, node.id) > 2;
+
+  if (stationStyle === 'tokyo') {
+    const count = Math.max(1, node.stationIds.length);
+    return Math.max(20, (count * 28 + (count - 1) * 3) / 2);
+  }
+
+  if (stationStyle === 'taipei') {
+    const count = Math.max(1, node.stationIds.length);
+    return isInterchange
+      ? Math.max(16, (count * 19 + (count - 1) * 2) / 2)
+      : 14;
+  }
+
+  return isInterchange ? 12 : 7;
+}
+
+function renderTokyoStation(
+  graph: GraphModel,
+  node: GraphNode,
+  visualScale: number,
+) {
+  const ids = node.stationIds.length ? node.stationIds : [node.id];
+  const width = 28 * visualScale;
+  const height = 38 * visualScale;
+  const gap = 3 * visualScale;
+  const totalWidth = ids.length * width + (ids.length - 1) * gap;
+  const startX = -totalWidth / 2;
+
+  return (
+    <g className="station-style-tokyo">
+      {ids.map((stationId, index) => {
+        const color = stationCodeColor(graph, node.id, stationId);
+        const code = parseStationCode(stationId);
+        const x = startX + index * (width + gap);
+
+        return (
+          <g key={stationId}>
+            <rect
+              x={x}
+              y={-height / 2}
+              width={width}
+              height={height}
+              rx={7 * visualScale}
+              className="tokyo-badge-shell"
+              style={{ strokeWidth: 2.2 * visualScale }}
+            />
+            <rect
+              x={x + 3 * visualScale}
+              y={-height / 2 + 3 * visualScale}
+              width={width - 6 * visualScale}
+              height={height - 6 * visualScale}
+              rx={4.5 * visualScale}
+              className="tokyo-badge-inner"
+              style={{
+                stroke: color,
+                strokeWidth: 3 * visualScale,
+              }}
+            />
+            <text
+              x={x + width / 2}
+              y={-3 * visualScale}
+              textAnchor="middle"
+              className="station-code-prefix"
+              style={{ fontSize: 8.5 * visualScale }}
+            >
+              {code.prefix}
+            </text>
+            <text
+              x={x + width / 2}
+              y={11 * visualScale}
+              textAnchor="middle"
+              className="station-code-number"
+              style={{ fontSize: 12 * visualScale }}
+            >
+              {code.number}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function renderTaipeiStation(
+  graph: GraphModel,
+  node: GraphNode,
+  visualScale: number,
+) {
+  const ids = node.stationIds.length ? node.stationIds : [node.id];
+  const badgeWidth = 19 * visualScale;
+  const badgeHeight = 27 * visualScale;
+  const gap = 2 * visualScale;
+  const totalWidth =
+    ids.length * badgeWidth + (ids.length - 1) * gap;
+  const startX = -totalWidth / 2;
+  const isInterchange =
+    ids.length > 1 || nodeDegree(graph, node.id) > 2;
+
+  return (
+    <g className="station-style-taipei">
+      {isInterchange ? (
+        <rect
+          x={startX - 4 * visualScale}
+          y={-badgeHeight / 2 - 4 * visualScale}
+          width={totalWidth + 8 * visualScale}
+          height={badgeHeight + 8 * visualScale}
+          rx={7 * visualScale}
+          className="taipei-transfer-shell"
+          style={{ strokeWidth: 2.2 * visualScale }}
+        />
+      ) : null}
+      {ids.map((stationId, index) => {
+        const color = stationCodeColor(graph, node.id, stationId);
+        const code = parseStationCode(stationId);
+        const x = startX + index * (badgeWidth + gap);
+
+        return (
+          <g key={stationId}>
+            <rect
+              x={x}
+              y={-badgeHeight / 2}
+              width={badgeWidth}
+              height={badgeHeight}
+              rx={4 * visualScale}
+              className="taipei-code-badge"
+              style={{
+                stroke: color,
+                strokeWidth: 2.2 * visualScale,
+              }}
+            />
+            <text
+              x={x + badgeWidth / 2}
+              y={-2.5 * visualScale}
+              textAnchor="middle"
+              className="station-code-prefix"
+              style={{ fontSize: 7 * visualScale }}
+            >
+              {code.prefix}
+            </text>
+            <text
+              x={x + badgeWidth / 2}
+              y={8.5 * visualScale}
+              textAnchor="middle"
+              className="station-code-number"
+              style={{ fontSize: 8.5 * visualScale }}
+            >
+              {code.number}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function renderMoscowStation(
+  graph: GraphModel,
+  node: GraphNode,
+  visualScale: number,
+) {
+  const colors = nodeLineColors(graph, node.id).slice(0, 3);
+  const isInterchange =
+    node.stationIds.length > 1 || nodeDegree(graph, node.id) > 2;
+
+  if (!isInterchange) {
+    return (
+      <circle
+        r={5.5 * visualScale}
+        className="moscow-station"
+        style={{
+          stroke: colors[0],
+          strokeWidth: 2.6 * visualScale,
+        }}
+      />
+    );
+  }
+
+  const radii = [10.5, 7.4, 4.5];
+  return (
+    <g className="station-style-moscow">
+      <circle
+        r={11.5 * visualScale}
+        className="moscow-transfer-base"
+        style={{ strokeWidth: 1.8 * visualScale }}
+      />
+      {colors.map((color, index) => (
+        <circle
+          key={color}
+          r={radii[index] * visualScale}
+          className="moscow-transfer-ring"
+          style={{
+            stroke: color,
+            strokeWidth: 2.3 * visualScale,
+          }}
+        />
+      ))}
+    </g>
+  );
+}
+
 function estimateTextWidth(text: string): number {
   return Math.max(
     18,
@@ -102,13 +368,13 @@ function labelRect(
 function buildLabelPlacements(
   graph: GraphModel,
   layout: LayoutResult,
+  stationStyle: StationVisualStyle,
   visualScale = 1,
 ): LabelPlacement[] {
   const nodeObstacles = graph.nodes.map((node) => {
     const point = layout.positions[node.id];
-    const degree = nodeDegree(graph, node.id);
     const radius =
-      (node.stationIds.length > 1 || degree > 2 ? 15 : 10) * visualScale;
+      stationMarkerRadius(node, graph, stationStyle) * visualScale;
 
     return {
       nodeId: node.id,
@@ -153,22 +419,26 @@ function buildLabelPlacements(
     const width = estimateTextWidth(text) * visualScale;
 
     const s = visualScale;
+    const markerRadius =
+      stationMarkerRadius(node, graph, stationStyle) * visualScale;
+    const near = markerRadius + 6 * s;
+    const far = markerRadius + 18 * s;
     const candidates: Array<{
       x: number;
       y: number;
       anchor: LabelPlacement['textAnchor'];
       distancePenalty: number;
     }> = [
-      { x: point.x + 14 * s, y: point.y - 10 * s, anchor: 'start', distancePenalty: 0 },
-      { x: point.x + 14 * s, y: point.y + 21 * s, anchor: 'start', distancePenalty: 1 },
-      { x: point.x - 14 * s, y: point.y - 10 * s, anchor: 'end', distancePenalty: 1 },
-      { x: point.x - 14 * s, y: point.y + 21 * s, anchor: 'end', distancePenalty: 2 },
-      { x: point.x, y: point.y - 20 * s, anchor: 'middle', distancePenalty: 2 },
-      { x: point.x, y: point.y + 31 * s, anchor: 'middle', distancePenalty: 3 },
-      { x: point.x + 25 * s, y: point.y - 22 * s, anchor: 'start', distancePenalty: 4 },
-      { x: point.x - 25 * s, y: point.y - 22 * s, anchor: 'end', distancePenalty: 4 },
-      { x: point.x + 25 * s, y: point.y + 31 * s, anchor: 'start', distancePenalty: 5 },
-      { x: point.x - 25 * s, y: point.y + 31 * s, anchor: 'end', distancePenalty: 5 },
+      { x: point.x + near, y: point.y - 8 * s, anchor: 'start', distancePenalty: 0 },
+      { x: point.x + near, y: point.y + 18 * s, anchor: 'start', distancePenalty: 1 },
+      { x: point.x - near, y: point.y - 8 * s, anchor: 'end', distancePenalty: 1 },
+      { x: point.x - near, y: point.y + 18 * s, anchor: 'end', distancePenalty: 2 },
+      { x: point.x, y: point.y - near, anchor: 'middle', distancePenalty: 2 },
+      { x: point.x, y: point.y + near + 11 * s, anchor: 'middle', distancePenalty: 3 },
+      { x: point.x + far, y: point.y - 18 * s, anchor: 'start', distancePenalty: 4 },
+      { x: point.x - far, y: point.y - 18 * s, anchor: 'end', distancePenalty: 4 },
+      { x: point.x + far, y: point.y + 28 * s, anchor: 'start', distancePenalty: 5 },
+      { x: point.x - far, y: point.y + 28 * s, anchor: 'end', distancePenalty: 5 },
     ];
 
     let best:
@@ -295,9 +565,13 @@ function renderBounds(
   };
 }
 
-export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
+export function SvgMap({
+  graph,
+  layout,
+  zoom = 1,
+  stationStyle = 'taipei',
+}: SvgMapProps) {
   const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
-  const definedRings = layout.moscowRings ?? [];
   const geometricBundles = buildGeometricBundleMap(
     graph,
     layout.positions,
@@ -329,6 +603,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
   const labelPlacements = buildLabelPlacements(
     graph,
     layout,
+    stationStyle,
     visualScale,
   );
   const bounds = renderBounds(
@@ -348,6 +623,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
       data-layout-path-count={layout.integrity.pathCount}
       data-layout-segment-count={layout.integrity.segmentCount}
       data-detail-zoom={zoom}
+      data-station-style={stationStyle}
       role="img"
       aria-label="Generated schematic metro map"
     >
@@ -393,32 +669,21 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
         })}
       </g>
 
-      <g id="stations">
+      <g id="stations" data-station-style={stationStyle}>
         {graph.nodes.map((node) => {
           const point = layout.positions[node.id];
-          const isInterchange =
-            node.stationIds.length > 1 ||
-            nodeDegree(graph, node.id) > 2;
 
           return (
             <g
               key={node.id}
               transform={`translate(${point.x} ${point.y})`}
+              data-node-id={node.id}
             >
-              {isInterchange ? (
-                <>
-                  <circle
-                    r={11 * visualScale}
-                    className="station interchange-outer"
-                  />
-                  <circle
-                    r={5 * visualScale}
-                    className="station interchange-inner"
-                  />
-                </>
-              ) : (
-                <circle r={6 * visualScale} className="station station-normal" />
-              )}
+              {stationStyle === 'tokyo'
+                ? renderTokyoStation(graph, node, visualScale)
+                : stationStyle === 'moscow'
+                  ? renderMoscowStation(graph, node, visualScale)
+                  : renderTaipeiStation(graph, node, visualScale)}
             </g>
           );
         })}
@@ -433,8 +698,15 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
             textAnchor={label.textAnchor}
             className="station-label"
             style={{
-              fontSize: `${11.5 * visualScale}px`,
-              strokeWidth: 3.5 * visualScale,
+              fontSize: `${
+                (stationStyle === 'moscow'
+                  ? 12.4
+                  : stationStyle === 'tokyo'
+                    ? 12
+                    : 11.5) * visualScale
+              }px`,
+              strokeWidth:
+                (stationStyle === 'moscow' ? 3 : 3.5) * visualScale,
             }}
           >
             {label.text}
