@@ -180,6 +180,13 @@ function angleDistance(a: number, b: number): number {
   return diff;
 }
 
+function signedAngleDelta(from: number, to: number): number {
+  const tau = Math.PI * 2;
+  let diff = ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
+  if (diff <= -Math.PI) diff += tau;
+  return diff;
+}
+
 function orientRing(
   ring: string[],
   geographic: Record<string, Point>,
@@ -275,11 +282,21 @@ export function layoutMoscow(
     const ring = orientRing(definition.nodes, geographic, geoCenter);
     const radius = radii[ringIndex];
 
+    const slot = (Math.PI * 2) / ring.length;
     ring.forEach((id, index) => {
       ringNodeSet.add(id);
-      const angle =
-        -Math.PI / 2 +
-        (Math.PI * 2 * index) / ring.length;
+      const equalAngle = -Math.PI / 2 + slot * index;
+      const geoAngle = Math.atan2(
+        geographic[id].y - geoCenter.y,
+        geographic[id].x - geoCenter.x,
+      );
+      const geoAdjustment = clamp(
+        signedAngleDelta(equalAngle, geoAngle),
+        -slot * 0.32,
+        slot * 0.32,
+      );
+      const angle = equalAngle + geoAdjustment;
+
       positions[id] = {
         x: center.x + Math.cos(angle) * radius,
         y: center.y + Math.sin(angle) * radius,
