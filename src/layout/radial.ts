@@ -689,17 +689,10 @@ export function layoutMoscow(
 
     ring.forEach((id, index) => {
       ringNodeSet.add(id);
-      const equalAngle = -Math.PI / 2 + slot * index;
-      const geoAngle = Math.atan2(
-        geographic[id].y - center.y,
-        geographic[id].x - center.x,
-      );
-      const adjustment = clamp(
-        signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.42,
-        slot * 0.42,
-      );
-      const angle = equalAngle + adjustment;
+      // Equal angular spacing keeps the loop a passenger-map circle with
+      // consistent station spacing. orientRing() already selects the rotation
+      // and direction that best preserve the geographic compass ordering.
+      const angle = -Math.PI / 2 + slot * index;
       const target = {
         x: center.x + Math.cos(angle) * radius,
         y: center.y + Math.sin(angle) * radius,
@@ -771,6 +764,62 @@ export function layoutMoscow(
       x: geographic[node.id].x + delta.x * decay,
       y: geographic[node.id].y + delta.y * decay,
     };
+  }
+
+  // Moscow-specific collision repair: ring nodes are fixed so true-circle
+  // geometry cannot be deformed. Only nearby non-ring stations are pushed
+  // away when labels/badges would otherwise collapse onto the ring.
+  for (let iteration = 0; iteration < 14; iteration += 1) {
+    let moved = false;
+
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const aId = graph.nodes[i].id;
+        const bId = graph.nodes[j].id;
+        const a = positions[aId];
+        const b = positions[bId];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let currentDistance = Math.hypot(dx, dy);
+        const minimumDistance = 30;
+
+        if (currentDistance >= minimumDistance) continue;
+
+        const aFixed = ringNodeSet.has(aId);
+        const bFixed = ringNodeSet.has(bId);
+        if (aFixed && bFixed) continue;
+
+        if (currentDistance < 1e-6) {
+          const angle =
+            ((i * 41 + j * 97) % 360) * (Math.PI / 180);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          currentDistance = 1;
+        }
+
+        const nx = dx / currentDistance;
+        const ny = dy / currentDistance;
+        const required = minimumDistance - currentDistance;
+
+        if (aFixed) {
+          b.x += nx * required;
+          b.y += ny * required;
+        } else if (bFixed) {
+          a.x -= nx * required;
+          a.y -= ny * required;
+        } else {
+          const half = required / 2;
+          a.x -= nx * half;
+          a.y -= ny * half;
+          b.x += nx * half;
+          b.y += ny * half;
+        }
+
+        moved = true;
+      }
+    }
+
+    if (!moved) break;
   }
 
   return {
