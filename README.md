@@ -7,8 +7,8 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 ## What works in v0.1
 
 - JSON station/route editor
-- Excel (.xlsx) input with `Stations` and `Lines` worksheets
-- downloadable Excel input template generated in the browser
+- Excel (`.xlsx` / `.xlsm`) input with `Stations` and `Lines` worksheets
+- downloadable `.xlsm` input template generated in the browser
 - transfer-coordinate formula validation plus optional VBA validator
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
@@ -125,15 +125,15 @@ The primary input is an Excel workbook with `Stations` and `Lines` worksheets.
 
 ### Stations
 
-`Stations` is intentionally only four columns:
+`Stations` uses four user-input columns plus two automatic system columns:
 
 ```text
-Station ID,Station Name,Latitude,Longitude
-G05,City Hall,24.154,120.663
-B03,City Hall,24.154,120.663
+Station ID,Station Name,Latitude,Longitude,Transfer Group,Transfer Validation
+G05,City Hall,24.154,120.663,City Hall,OK - Coordinates Match
+B03,City Hall,24.154,120.663,City Hall,OK - Coordinates Match
 ```
 
-One physical interchange may appear multiple times with different service-specific station IDs. The station name is the transfer key.
+One physical interchange may appear multiple times with different service-specific station IDs. The station name is the transfer key. Users only edit columns A-D; Transfer Group and Transfer Validation are filled automatically.
 
 Rules:
 
@@ -142,9 +142,9 @@ Rules:
 - inconsistent coordinates cause graph generation/import to fail instead of silently averaging them,
 - route definitions continue to reference their original station IDs.
 
-The downloadable template contains a `TransferCheck` worksheet that checks duplicate station names with formulas.
+The downloadable template is directly generated as `metro-map-input-template.xlsm`. `Transfer Group` automatically fills for duplicate station names, and `Transfer Validation` checks whether all IDs of that transfer station use identical coordinates.
 
-An optional `ValidateTransfers.bas` VBA module is also provided. To use it, save the workbook as an Excel Macro-Enabled Workbook (`.xlsm`) and import the module in the VBA editor.
+An optional `ValidateTransfers.bas` VBA module is also provided. Its `CompleteTransfersAndValidate` macro performs both operations in one step.
 
 ### Lines
 
@@ -182,7 +182,7 @@ The detector ranks all candidate cycles, but it does **not** automatically force
 The UI shows each selected ring's score, route IDs, route-change count, outward connections, area coverage, and station chain.
 
 
-## Downloadable Excel template
+## Downloadable XLSM template
 
 The deployed app provides a generated `metro-map-input-template.xlsx` containing:
 
