@@ -547,6 +547,17 @@ const geographicResult = results.find(
   (result) => result.style === 'geographic',
 );
 const baselineCrossings = geographicResult?.crossings ?? 0;
+const geographicReference = computeLayout(graph, 'geographic', {
+  moscowRings: rings,
+});
+const baselineMoscowDoglegs = moscowDoglegDetails(
+  graph,
+  geographicReference.positions,
+).length;
+const baselineTerminalHooks = moscowTerminalHookDetails(
+  graph,
+  geographicReference.positions,
+).length;
 
 const crossingBudget: Record<StyleId, number> = {
   geographic: baselineCrossings,
@@ -593,14 +604,14 @@ for (const result of results) {
   }
 
   if (result.style === 'moscow') {
-    if (result.doglegs > 14) {
+    if (result.doglegs > baselineMoscowDoglegs + 3) {
       failures.push(
-        `moscow: ${result.doglegs} alternating doglegs > 14`,
+        `moscow: ${result.doglegs} alternating doglegs exceeds geographic baseline ${baselineMoscowDoglegs} + 3`,
       );
     }
-    if (result.terminalHooks > 2) {
+    if (result.terminalHooks > baselineTerminalHooks + 1) {
       failures.push(
-        `moscow: ${result.terminalHooks} terminal hooks > 2`,
+        `moscow: ${result.terminalHooks} terminal hooks exceeds geographic baseline ${baselineTerminalHooks} + 1`,
       );
     }
     if (
@@ -625,6 +636,14 @@ for (const result of results) {
     );
   }
 }
+
+console.log(
+  'Moscow geographic bend baseline:',
+  {
+    doglegs: baselineMoscowDoglegs,
+    terminalHooks: baselineTerminalHooks,
+  },
+);
 
 console.log(
   'Validated Moscow rings:',
