@@ -33,9 +33,21 @@ export interface TransitLine {
   paths: string[][];
 }
 
+export interface MoscowRingDefinition {
+  id: string;
+  stationIds: string[];
+}
+
+export interface ValidatedMoscowRing {
+  id: string;
+  stationIds: string[];
+  nodes: string[];
+}
+
 export interface NetworkInput {
   stations: Station[];
   lines: TransitLine[];
+  moscowRings?: MoscowRingDefinition[];
 }
 
 export interface Point {
@@ -104,5 +116,6 @@ export interface LayoutResult {
   primaryRing?: string[];
   primaryRingCandidateId?: string;
   ringCandidates?: RingCandidateDiagnostic[];
+  moscowRings?: ValidatedMoscowRing[];
   integrity: LayoutIntegrity;
 }

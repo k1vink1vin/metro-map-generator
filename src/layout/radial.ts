@@ -1,6 +1,6 @@
 import { edgeKey, findSimpleCycles } from '../core/graph';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
-import type { GraphModel, Point, RingCandidateDiagnostic } from '../types';
+import type { GraphModel, Point, RingCandidateDiagnostic, ValidatedMoscowRing } from '../types';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -237,108 +237,106 @@ function multiSourceHopDistance(graph: GraphModel, sources: string[]): Map<strin
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
-  selectedCandidateId?: string,
+  definedRings: ValidatedMoscowRing[] = [],
 ): {
   positions: Record<string, Point>;
-  primaryRing?: string[];
-  primaryRingCandidateId?: string;
-  ringCandidates: RingCandidateDiagnostic[];
+  moscowRings: ValidatedMoscowRing[];
 } {
-  const candidates = findRingCandidates(graph, geographic);
-  const detected = selectedCandidateId
-    ? candidates.find((candidate) => candidate.id === selectedCandidateId)
-    : undefined;
-
-  // Moscow mode first detects candidate cycles. The user explicitly chooses
-  // which candidate should become the visual ring. Until then, preserve the
-  // geographic reference positions instead of silently picking one.
-  if (!detected?.nodes.length) {
+  if (!definedRings.length) {
     return {
       positions: Object.fromEntries(
         Object.entries(geographic).map(([id, point]) => [id, { ...point }]),
       ),
-      ringCandidates: candidates,
+      moscowRings: [],
     };
   }
 
   const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
-  const ringGeoCenter = {
+  const geoCenter = {
     x:
-      detected.nodes.reduce((sum, id) => sum + geographic[id].x, 0) /
-      detected.nodes.length,
+      graph.nodes.reduce((sum, node) => sum + geographic[node.id].x, 0) /
+      graph.nodes.length,
     y:
-      detected.nodes.reduce((sum, id) => sum + geographic[id].y, 0) /
-      detected.nodes.length,
+      graph.nodes.reduce((sum, node) => sum + geographic[node.id].y, 0) /
+      graph.nodes.length,
   };
-  const ring = orientRing(detected.nodes, geographic, ringGeoCenter);
-  const ringPoints = ring.map((id) => geographic[id]);
-  const width =
-    Math.max(...ringPoints.map((point) => point.x)) -
-    Math.min(...ringPoints.map((point) => point.x));
-  const height =
-    Math.max(...ringPoints.map((point) => point.y)) -
-    Math.min(...ringPoints.map((point) => point.y));
-  const aspect = clamp(width / Math.max(1, height), 0.72, 1.65);
-  const rx = aspect >= 1 ? 305 : 305 * aspect;
-  const ry = aspect >= 1 ? 305 / aspect : 305;
+
+  const radii =
+    definedRings.length === 1
+      ? [285]
+      : definedRings.length === 2
+        ? [205, 345]
+        : [155, 275, 395];
 
   const positions: Record<string, Point> = {};
-  ring.forEach((id, index) => {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / ring.length;
-    positions[id] = {
-      x: center.x + Math.cos(angle) * rx,
-      y: center.y + Math.sin(angle) * ry,
+  const ringInfos = definedRings.map((definition, ringIndex) => {
+    const ring = orientRing(definition.nodes, geographic, geoCenter);
+    const radius = radii[ringIndex];
+    ring.forEach((id, index) => {
+      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / ring.length;
+      positions[id] = {
+        x: center.x + Math.cos(angle) * radius,
+        y: center.y + Math.sin(angle) * radius,
+      };
+    });
+
+    const geoRadius =
+      ring.reduce(
+        (sum, id) =>
+          sum +
+          Math.hypot(
+            geographic[id].x - geoCenter.x,
+            geographic[id].y - geoCenter.y,
+          ),
+        0,
+      ) / ring.length;
+
+    return {
+      definition: { ...definition, nodes: ring },
+      radius,
+      geoRadius,
+      hops: multiSourceHopDistance(graph, ring),
     };
   });
-
-  const hopDistance = multiSourceHopDistance(graph, ring);
-  const ringGeoRadius =
-    ring.reduce(
-      (sum, id) =>
-        sum +
-        Math.hypot(
-          geographic[id].x - ringGeoCenter.x,
-          geographic[id].y - ringGeoCenter.y,
-        ),
-      0,
-    ) / ring.length;
-  const baseRadius = (rx + ry) / 2;
 
   for (const node of graph.nodes) {
     if (positions[node.id]) continue;
     const geo = geographic[node.id];
-    const angle = Math.atan2(geo.y - ringGeoCenter.y, geo.x - ringGeoCenter.x);
+    const angle = Math.atan2(geo.y - geoCenter.y, geo.x - geoCenter.x);
     const geoRadius = Math.hypot(
-      geo.x - ringGeoCenter.x,
-      geo.y - ringGeoCenter.y,
+      geo.x - geoCenter.x,
+      geo.y - geoCenter.y,
     );
-    const hop = hopDistance.get(node.id);
 
+    let best = ringInfos[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const info of ringInfos) {
+      const hop = info.hops.get(node.id);
+      if (hop == null) continue;
+      const score = hop * 1000 + Math.abs(geoRadius - info.geoRadius);
+      if (score < bestScore) {
+        bestScore = score;
+        best = info;
+      }
+    }
+
+    const hop = best.hops.get(node.id);
     if (hop == null) {
       positions[node.id] = { ...geo };
       continue;
     }
 
-    const outside = geoRadius >= ringGeoRadius * 0.88;
-    const radius = clamp(
-      baseRadius + (outside ? 1 : -1) * hop * 68,
-      58,
-      455,
-    );
-    const ellipseX = rx / baseRadius;
-    const ellipseY = ry / baseRadius;
-
+    const direction = geoRadius >= best.geoRadius ? 1 : -1;
+    const radius = clamp(best.radius + direction * hop * 62, 48, 485);
     positions[node.id] = {
-      x: center.x + Math.cos(angle) * radius * ellipseX,
-      y: center.y + Math.sin(angle) * radius * ellipseY,
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
     };
   }
 
   return {
     positions,
-    primaryRing: ring,
-    primaryRingCandidateId: detected.id,
-    ringCandidates: candidates,
+    moscowRings: ringInfos.map((info) => info.definition),
   };
 }
 

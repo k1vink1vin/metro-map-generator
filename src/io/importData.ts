@@ -1,5 +1,5 @@
 import type { Worksheet } from 'exceljs';
-import type { NetworkInput, Station, TransitLine } from '../types';
+import type { MoscowRingDefinition, NetworkInput, Station, TransitLine } from '../types';
 
 type RecordRow = Record<string, string>;
 
@@ -249,6 +249,40 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
   return [...lineMap.values()];
 }
 
+
+function ringRecordsToDefinitions(records: RecordRow[]): MoscowRingDefinition[] {
+  type RingRow = { sequence: number; stationId: string; rowIndex: number };
+  const rings = new Map<string, RingRow[]>();
+
+  records.forEach((row, index) => {
+    const ringId = pick(row, ['ringId', 'ring', '環編號', '環ID']);
+    const stationId = pick(row, ['stationId', 'station', '車站編號', '站號']);
+    const sequenceText = pick(row, ['sequence', 'seq', 'order', '順序', '站序']);
+
+    if (!ringId && !stationId && !sequenceText) return;
+    if (!ringId) throw new Error(`莫斯科環工作表第 ${index + 2} 列：缺少環編號。`);
+    if (!stationId) throw new Error(`莫斯科環工作表第 ${index + 2} 列：缺少車站編號。`);
+
+    const sequence = Number(sequenceText);
+    if (!Number.isFinite(sequence)) {
+      throw new Error(`莫斯科環工作表第 ${index + 2} 列：順序必須是數字。`);
+    }
+
+    const bucket = rings.get(ringId) ?? [];
+    bucket.push({ sequence, stationId, rowIndex: index + 2 });
+    rings.set(ringId, bucket);
+  });
+
+  if (rings.size > 3) throw new Error('莫斯科環最多只能定義 3 個。');
+
+  return [...rings.entries()].map(([id, rows]) => ({
+    id,
+    stationIds: rows
+      .sort((a, b) => a.sequence - b.sequence || a.rowIndex - b.rowIndex)
+      .map((row) => row.stationId),
+  }));
+}
+
 export function parseStationsCsv(text: string): Station[] {
   return stationRecordsToStations(rowsToRecords(parseCsv(text)));
 }
@@ -286,6 +320,7 @@ export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
 
   const stationsSheet = findSheet(['Stations', '車站']);
   const linesSheet = findSheet(['Lines', '路線']);
+  const ringsSheet = findSheet(['MoscowRings', 'Moscow Rings', '莫斯科環']);
 
   if (!stationsSheet || !linesSheet) {
     throw new Error(
@@ -295,9 +330,12 @@ export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
 
   const stations = stationRecordsToStations(rowsToRecords(worksheetToRows(stationsSheet)));
   const lines = lineRecordsToLines(rowsToRecords(worksheetToRows(linesSheet)));
+  const moscowRings = ringsSheet
+    ? ringRecordsToDefinitions(rowsToRecords(worksheetToRows(ringsSheet)))
+    : [];
 
   if (!stations.length) throw new Error('「車站 / Stations」工作表沒有資料。');
   if (!lines.length) throw new Error('「路線 / Lines」工作表沒有資料。');
 
-  return { stations, lines };
+  return { stations, lines, moscowRings };
 }

@@ -227,6 +227,43 @@ export async function downloadExcelTemplate() {
     fgColor: { argb: 'FF111827' },
   };
 
+  const rings = workbook.addWorksheet('莫斯科環');
+  rings.columns = [
+    { header: '環編號', key: 'ringId', width: 14 },
+    { header: '順序', key: 'sequence', width: 10 },
+    { header: '車站編號', key: 'stationId', width: 14 },
+    { header: '環驗證', key: 'validation', width: 32 },
+  ];
+
+  [
+    ['RING_1', 1, 'G03', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 2, 'G04', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 3, 'G05', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 4, 'G06', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 5, 'G07', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 6, 'T04', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 7, 'T03', '啟用巨集或匯入網站後檢查'],
+    ['RING_1', 8, 'T02', '啟用巨集或匯入網站後檢查'],
+  ].forEach((row) => rings.addRow(row));
+
+  for (let row = 2; row <= 100; row += 1) {
+    rings.getCell(row, 1).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['"RING_1,RING_2,RING_3"'],
+    };
+  }
+
+  rings.views = [{ state: 'frozen', ySplit: 1 }];
+  rings.getRow(1).font = {
+    bold: true,
+    color: { argb: 'FFFFFFFF' },
+  };
+  rings.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF7C3AED' },
+  };
   const notes = workbook.addWorksheet('說明');
   [
     'Metro Map Generator - 中文 XLSM 輸入範本',
@@ -238,6 +275,8 @@ export async function downloadExcelTemplate() {
     '若資料修改後想立即重跑，也可從 Excel 巨集清單執行 CompleteTransfersAndValidate。',
     '「路線」工作表仍使用各路線自己的車站編號。',
     '網站 topology 優先使用 XFER ID，因此改站名不會破壞已建立的轉乘關係。',
+    '莫斯科風格請在「莫斯科環」工作表定義環；最多 3 個環，每個環以 環編號 + 順序 + 車站編號 列出。',
+    '網站匯入後會逐段檢查環是否真的閉合；最後一站必須能直接接回第一站，最多只能使用 RING_1 / RING_2 / RING_3。',
     '網站同時相容英文工作表 Stations / Lines 與英文欄位名稱。',
   ].forEach((text) => notes.addRow([text]));
 
