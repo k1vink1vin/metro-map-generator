@@ -1590,5 +1590,30 @@ export function layoutConcentric(
     });
   });
 
-  return target;
+  // A full projection of every station onto a shell is visually pure but
+  // introduces many artificial crossings on a regional network. Blend the
+  // radial-shell solution with the north-up geography: the centre receives
+  // stronger shell structure, while outer districts retain more of their
+  // natural topology.
+  return Object.fromEntries(
+    graph.nodes.map((node) => {
+      const geo = geographic[node.id];
+      const shell = target[node.id] ?? geo;
+      const radialDistance = Math.hypot(
+        geo.x - center.x,
+        geo.y - center.y,
+      );
+      const normalized = radialDistance / Math.max(1, maxRadius);
+      const shellWeight =
+        0.46 - Math.min(0.16, normalized * 0.16);
+
+      return [
+        node.id,
+        {
+          x: geo.x * (1 - shellWeight) + shell.x * shellWeight,
+          y: geo.y * (1 - shellWeight) + shell.y * shellWeight,
+        },
+      ];
+    }),
+  );
 }
