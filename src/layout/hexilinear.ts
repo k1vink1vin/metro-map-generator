@@ -4,6 +4,7 @@ import {
   regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
+  separateNodesSafely,
   schematizeOnAngularGrid,
 } from './common';
 
@@ -49,10 +50,11 @@ export function layoutHexilinear(
   });
 
   const topologyReference = layoutTaipei(graph, geographic);
-  return repairIntroducedPathSelfCrossings(
+  const untangled = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
     topologyReference,
     24,
   );
+  return separateNodesSafely(graph, untangled, 24, 18);
 }
