@@ -421,7 +421,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.13 TPE_Metro.xlsm 正式範本</span>
+        <span>V0.14 乘客圖 QA + 六風格回歸驗證</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
