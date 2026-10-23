@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { importExcelWorkbook } from './io/importData';
+import { downloadExcelTemplate } from './io/templateExcel';
 import { downloadSvg } from './io/exportSvg';
 import { computeLayout } from './layout';
 import { SvgMap } from './renderer/SvgMap';
@@ -203,9 +204,9 @@ export function App() {
             <div className="import-box">
               <strong>Excel Input</strong>
               <div className="example-links">
-                <a href="/metro-map-generator/examples/metro-map-input-template.xlsx" download>
+                <button type="button" onClick={() => void downloadExcelTemplate()}>
                   下載 Excel 範本
-                </a>
+                </button>
                 <a href="/metro-map-generator/examples/ValidateTransfers.bas" download>
                   下載 VBA 驗證模組
                 </a>
