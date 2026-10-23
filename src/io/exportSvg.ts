@@ -146,13 +146,20 @@ export function downloadSvg(
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
-  // Screen zoom counter-scales labels so route details remain visible.
-  // SVG export must always use the canonical label size.
-  clone
-    .querySelectorAll<SVGTextElement>('#labels .station-label')
-    .forEach((label) => {
-      label.removeAttribute('style');
-    });
+  const detailZoom = Math.max(
+    0.25,
+    Number(svg.dataset.detailZoom || '1'),
+  );
+  const viewBox = svg.viewBox.baseVal;
+  clone.setAttribute(
+    'width',
+    String(Math.round(viewBox.width * detailZoom)),
+  );
+  clone.setAttribute(
+    'height',
+    String(Math.round(viewBox.height * detailZoom)),
+  );
+  clone.setAttribute('data-export-detail-zoom', String(detailZoom));
 
   const metadata = document.createElementNS(
     'http://www.w3.org/2000/svg',
@@ -167,6 +174,7 @@ export function downloadSvg(
       0,
     ),
     routes: expectedRoutes,
+    detailZoom,
   });
   clone.insertBefore(metadata, clone.firstChild);
 
