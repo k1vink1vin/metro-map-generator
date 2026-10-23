@@ -170,6 +170,7 @@ export function App() {
     setStationsText(pretty(sampleNetwork.stations));
     setLinesText(pretty(sampleNetwork.lines));
     setStyle('taipei');
+    setStationStyle('taipei');
     setMoscowRingDefinitions(sampleNetwork.moscowRings ?? []);
     const nextGraph = buildGraph(sampleNetwork);
     setGraph(nextGraph);
