@@ -433,7 +433,8 @@ function smoothMoscowCorridors(
       bId: string,
       cId: string,
     ) => {
-      if (protectedNodes.has(bId)) return;
+      if (ringNodes.has(bId)) return;
+      if ((graph.adjacency.get(bId)?.length ?? 0) !== 2) return;
       if ((graph.adjacency.get(cId)?.length ?? 0) > 1) return;
 
       const a = current[aId];
