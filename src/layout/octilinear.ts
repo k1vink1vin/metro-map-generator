@@ -2,6 +2,7 @@ import type { GraphModel, Point } from '../types';
 import {
   inflateCentralArea,
   relaxPathKinksSafely,
+  repairIntroducedPathSelfCrossings,
   schematizeOnAngularGrid,
 } from './common';
 
@@ -24,13 +25,20 @@ export function layoutTaipei(
     iterations: 100,
   });
 
-  return relaxPathKinksSafely(graph, snapped, {
-    passes: 5,
-    thresholdDegrees: 96,
+  const relaxed = relaxPathKinksSafely(graph, snapped, {
+    passes: 7,
+    thresholdDegrees: 84,
     minimumNodeDistance: 29,
-    maxShift: 28,
-    structuralMaxShift: 15,
+    maxShift: 32,
+    structuralMaxShift: 18,
   });
+
+  return repairIntroducedPathSelfCrossings(
+    graph,
+    relaxed,
+    geographic,
+    29,
+  );
 }
 
 /**
@@ -57,11 +65,18 @@ export function layoutLondon(
     },
   );
 
-  return relaxPathKinksSafely(graph, snapped, {
-    passes: 7,
-    thresholdDegrees: 90,
+  const relaxed = relaxPathKinksSafely(graph, snapped, {
+    passes: 9,
+    thresholdDegrees: 78,
     minimumNodeDistance: 29,
-    maxShift: 34,
-    structuralMaxShift: 20,
+    maxShift: 38,
+    structuralMaxShift: 22,
   });
+
+  return repairIntroducedPathSelfCrossings(
+    graph,
+    relaxed,
+    schematicReference,
+    29,
+  );
 }
