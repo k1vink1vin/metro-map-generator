@@ -506,6 +506,62 @@ function smoothMoscowCorridors(
     current = next;
   }
 
+  // Final corridor pass: Moscow-style maps look cleaner when an ordinary
+  // degree-2 station does not create a one-off kink between two otherwise
+  // coherent segments. This is intentionally stronger than the general
+  // smoother above, but it still leaves rings, transfers and branch hubs
+  // untouched.
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const aId = path[index - 1];
+          const bId = path[index];
+          const cId = path[index + 1];
+          if (protectedNodes.has(bId)) continue;
+
+          const a = current[aId];
+          const b = current[bId];
+          const c = current[cId];
+          if (!a || !b || !c) continue;
+
+          const first = Math.atan2(b.y - a.y, b.x - a.x);
+          const second = Math.atan2(c.y - b.y, c.x - b.x);
+          let turn = second - first;
+          while (turn > Math.PI) turn -= Math.PI * 2;
+          while (turn < -Math.PI) turn += Math.PI * 2;
+
+          if (Math.abs(turn) < (18 * Math.PI) / 180) continue;
+
+          const chord = {
+            x: (a.x + c.x) / 2,
+            y: (a.y + c.y) / 2,
+          };
+          const dx = chord.x - b.x;
+          const dy = chord.y - b.y;
+          const shift = Math.hypot(dx, dy);
+          if (shift < 1) continue;
+
+          const localLength = Math.min(
+            Math.hypot(b.x - a.x, b.y - a.y),
+            Math.hypot(c.x - b.x, c.y - b.y),
+          );
+          const applied = Math.min(shift * 0.86, localLength * 0.44);
+          next[bId] = {
+            x: b.x + (dx / shift) * applied,
+            y: b.y + (dy / shift) * applied,
+          };
+        }
+      }
+    }
+
+    current = next;
+  }
+
   return current;
 }
 
