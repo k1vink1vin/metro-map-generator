@@ -348,7 +348,7 @@ function renderTaipeiStation(
               rx={4 * visualScale}
               className="taipei-code-badge"
               style={{
-                fill: code.suffix ? color : '#ffffff',
+                fill: '#ffffff',
                 stroke: color,
                 strokeWidth: 2.2 * visualScale,
               }}
