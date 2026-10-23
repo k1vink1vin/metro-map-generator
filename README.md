@@ -255,3 +255,39 @@ The workbook contains:
 - `CompleteTransfersAndValidate` for manual reruns.
 
 CI fails if `vbaProject.bin` cannot be compiled, so Pages will not deploy a macro-less XLSM by accident.
+
+
+## Detail scale
+
+The map control is a detail scale rather than a plain bitmap-like zoom.
+
+- Increasing detail scale increases the screen distance between stations and route geometry.
+- Route stroke width, station symbols and labels are counter-scaled so they do not grow at the same rate.
+- Label collision boxes are recomputed at the current detail scale.
+- SVG export preserves the current detail scale by exporting a proportionally larger natural canvas with the same counter-scaled line/station/label sizes.
+
+This is intended to make dense urban cores readable instead of simply magnifying every overlapping element.
+
+## XLSM-defined Moscow rings
+
+Moscow rings are no longer auto-selected from detected cycles. Define them in the `莫斯科環` / `MoscowRings` worksheet:
+
+```text
+環編號,順序,車站編號,網站驗證
+RING_1,1,G03,
+RING_1,2,G04,
+RING_1,3,G05,
+...
+```
+
+Rules:
+
+- maximum 3 rings,
+- each ring needs at least 3 distinct topology nodes,
+- every consecutive pair must be a real graph edge,
+- the last station must connect directly back to the first station,
+- ring sequences must not repeat a topology node,
+- multiple rings currently cannot share a topology node,
+- `RING_1 / RING_2 / RING_3` should be listed in inner-to-outer order.
+
+The embedded VBA validates the ring sheet and marks rows OK/ERROR. The web importer validates again before Moscow layout is generated, so invalid ring definitions cannot silently produce a broken map.
