@@ -23,6 +23,7 @@ const STATION_STYLE_OPTIONS: Array<{
 }> = [
   { id: 'taipei', label: '台北捷運風' },
   { id: 'tokyo', label: '東京地下鐵風' },
+  { id: 'osaka', label: '大阪地鐵風' },
   { id: 'moscow', label: '莫斯科風' },
 ];
 
@@ -457,7 +458,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.16 Moscow 終點修正 + 三種車站風格</span>
+        <span>V0.17 Osaka 車站風格 + station suffix 優化 + Moscow corridor cleanup</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
