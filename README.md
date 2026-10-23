@@ -291,3 +291,30 @@ Current baseline requirements are intentionally strict:
 - 45° / 60° angular error <= 12°
 
 Both CI and GitHub Pages deployment run the workbook QA, so a code change that makes the official Taipei workbook materially less readable will not deploy.
+
+
+## Per-path colors
+
+Each route path can keep its own XLSM color. The renderer uses:
+
+`path color → line color fallback`
+
+This is required for branches such as the Xinbeitou branch and Xiaobitan branch. `TPE_Metro.xlsm` regression QA verifies that at least one multi-color line remains present and that path-color metadata stays aligned with path geometry.
+
+Current canonical workbook examples include:
+
+- `TPE_R main = #E3002C`
+- `TPE_R branch = #FD92A3`
+- `TPE_G main = #008659`
+- `TPE_G branch = #CFDB00`
+
+## Moscow corridor smoothing
+
+Moscow layout now performs passenger-map line-shape cleanup after ring/radial placement:
+
+- ring nodes, transfer nodes and junctions remain fixed,
+- ordinary degree-2 corridor stations are relaxed toward their neighboring corridor,
+- alternating A-B-C-D doglegs receive a second stronger straightening pass,
+- QA tracks alternating doglegs so future changes cannot silently restore the previous zigzag behavior.
+
+The canonical Taipei Moscow QA baseline currently has one geometric crossing, zero short edges, and a passenger-readability score above 98.
