@@ -971,9 +971,14 @@ export function repairIntroducedPathSelfCrossings(
         candidate,
       );
 
+      // A route crossing itself is more harmful to wayfinding than a clean
+      // crossing between two different routes. Accept the repair when the
+      // path's self-crossing count falls and the combined crossing burden
+      // does not increase.
       if (
         candidateSelf < currentSelf &&
-        candidateExternal <= currentExternal
+        candidateSelf + candidateExternal <=
+          currentSelf + currentExternal
       ) {
         for (const nodeId of path.slice(1, -1)) {
           positions[nodeId] = candidate[nodeId];
