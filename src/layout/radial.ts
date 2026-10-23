@@ -1449,11 +1449,11 @@ export function layoutMoscow(
     graph,
     crossRegionRepaired,
     {
-      passes: 7,
-      thresholdDegrees: 76,
+      passes: 10,
+      thresholdDegrees: 66,
       minimumNodeDistance: 30,
-      maxShift: 30,
-      structuralMaxShift: 18,
+      maxShift: 38,
+      structuralMaxShift: 22,
     },
   );
 
