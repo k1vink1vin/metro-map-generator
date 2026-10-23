@@ -5,7 +5,6 @@ import type {
   Point,
   StationVisualStyle,
 } from '../types';
-import { nodeDegree } from '../core/graph';
 import {
   buildGeometricBundleMap,
   offsetPathForLine,
@@ -73,7 +72,7 @@ function padded(rect: Rect, amount: number): Rect {
 }
 
 function parseStationCode(stationId: string) {
-  const match = stationId.trim().match(/^([A-Za-z]+)[-_ ]?(\d+)$/);
+  const match = stationId.trim().match(/^([A-Za-z]+)[-_ ]?(\d+[A-Za-z]?)$/);
   if (!match) {
     return { prefix: stationId.trim().toUpperCase(), number: '' };
   }
@@ -93,6 +92,22 @@ function nodeLineColors(graph: GraphModel, nodeId: string): string[] {
     });
   }
   return colors.length ? colors : ['#111827'];
+}
+
+function isInterchangeNode(
+  graph: GraphModel,
+  node: GraphNode,
+): boolean {
+  if (node.stationIds.length > 1) return true;
+
+  const incidentLineIds = new Set<string>();
+  for (const line of graph.lines) {
+    if (line.paths.some((path) => path.includes(node.id))) {
+      incidentLineIds.add(line.id);
+    }
+  }
+
+  return incidentLineIds.size > 1;
 }
 
 function stationCodeColor(
@@ -129,8 +144,7 @@ function stationMarkerRadius(
   graph: GraphModel,
   stationStyle: StationVisualStyle,
 ): number {
-  const isInterchange =
-    node.stationIds.length > 1 || nodeDegree(graph, node.id) > 2;
+  const isInterchange = isInterchangeNode(graph, node);
 
   if (stationStyle === 'tokyo') {
     const count = Math.max(1, node.stationIds.length);
@@ -226,8 +240,7 @@ function renderTaipeiStation(
   const totalWidth =
     ids.length * badgeWidth + (ids.length - 1) * gap;
   const startX = -totalWidth / 2;
-  const isInterchange =
-    ids.length > 1 || nodeDegree(graph, node.id) > 2;
+  const isInterchange = isInterchangeNode(graph, node);
 
   return (
     <g className="station-style-taipei">
@@ -292,8 +305,7 @@ function renderMoscowStation(
   visualScale: number,
 ) {
   const colors = nodeLineColors(graph, node.id).slice(0, 3);
-  const isInterchange =
-    node.stationIds.length > 1 || nodeDegree(graph, node.id) > 2;
+  const isInterchange = isInterchangeNode(graph, node);
 
   if (!isInterchange) {
     return (
