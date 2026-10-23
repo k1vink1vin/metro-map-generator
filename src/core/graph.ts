@@ -99,12 +99,21 @@ function buildStationGroups(stations: Station[]): Map<string, Station[]> {
     .map(([key]) => key)
     .sort();
 
-  const autoIdByCoordinate = new Map(
-    transferKeys.map((key, index) => [
-      key,
-      `XFER_${String(index + 1).padStart(3, '0')}`,
-    ]),
-  );
+  const usedGroupIds = new Set(groups.keys());
+  const autoIdByCoordinate = new Map<string, string>();
+  let nextTransferNumber = 1;
+
+  for (const key of transferKeys) {
+    let candidate = '';
+
+    do {
+      candidate = `XFER_${String(nextTransferNumber).padStart(3, '0')}`;
+      nextTransferNumber += 1;
+    } while (usedGroupIds.has(candidate));
+
+    usedGroupIds.add(candidate);
+    autoIdByCoordinate.set(key, candidate);
+  }
 
   for (const [key, group] of byCoordinate) {
     if (group.length === 1) {
