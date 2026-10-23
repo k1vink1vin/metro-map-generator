@@ -419,6 +419,77 @@ function smoothMoscowCorridors(
     current = next;
   }
 
+  // Terminal A-B-C hooks need a separate rule: they do not form an
+  // alternating four-station dogleg, so the previous pass cannot see them.
+  // Keep the terminal and all protected topology nodes fixed; only pull the
+  // ordinary middle station toward the terminal chord.
+  for (let iteration = 0; iteration < 5; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    const relaxTerminalTriplet = (
+      aId: string,
+      bId: string,
+      cId: string,
+    ) => {
+      if (protectedNodes.has(bId)) return;
+      if ((graph.adjacency.get(cId)?.length ?? 0) > 1) return;
+
+      const a = current[aId];
+      const b = current[bId];
+      const c = current[cId];
+      if (!a || !b || !c) return;
+
+      const first = Math.atan2(b.y - a.y, b.x - a.x);
+      const second = Math.atan2(c.y - b.y, c.x - b.x);
+      let turn = second - first;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+
+      if (Math.abs(turn) < (20 * Math.PI) / 180) return;
+
+      const target = {
+        x: (a.x + c.x) / 2,
+        y: (a.y + c.y) / 2,
+      };
+      const dx = target.x - b.x;
+      const dy = target.y - b.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1) return;
+
+      const localLength = Math.min(
+        Math.hypot(b.x - a.x, b.y - a.y),
+        Math.hypot(c.x - b.x, c.y - b.y),
+      );
+      const applied = Math.min(
+        length * 0.72,
+        localLength * 0.28,
+      );
+
+      next[bId] = {
+        x: b.x + (dx / length) * applied,
+        y: b.y + (dy / length) * applied,
+      };
+    };
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 3) continue;
+
+        relaxTerminalTriplet(path[2], path[1], path[0]);
+        const last = path.length - 1;
+        relaxTerminalTriplet(
+          path[last - 2],
+          path[last - 1],
+          path[last],
+        );
+      }
+    }
+
+    current = next;
+  }
+
   return current;
 }
 
