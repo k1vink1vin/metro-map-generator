@@ -638,17 +638,12 @@ export function layoutMoscow(
     };
   }
 
-  const positions: Record<string, Point> = Object.fromEntries(
-    graph.nodes.map((node) => [
-      node.id,
-      { ...geographic[node.id] },
-    ]),
-  );
-
+  const positions: Record<string, Point> = {};
   const ringNodeSet = new Set<string>();
-  const ringTransforms = definedRings.map((definition) => {
+
+  const ringInfos = definedRings.map((definition) => {
     const rawPoints = definition.nodes.map((id) => geographic[id]);
-    const center = {
+    const geoCenter = {
       x:
         rawPoints.reduce((sum, point) => sum + point.x, 0) /
         Math.max(1, rawPoints.length),
@@ -657,256 +652,195 @@ export function layoutMoscow(
         Math.max(1, rawPoints.length),
     };
 
-    const radii = rawPoints.map((point) =>
-      Math.hypot(point.x - center.x, point.y - center.y),
+    const ring = orientRing(
+      definition.nodes,
+      geographic,
+      geoCenter,
     );
-    const meanRadius =
-      radii.reduce((sum, radius) => sum + radius, 0) /
-      Math.max(1, radii.length);
-
-    const minX = Math.min(...rawPoints.map((point) => point.x));
-    const maxX = Math.max(...rawPoints.map((point) => point.x));
-    const minY = Math.min(...rawPoints.map((point) => point.y));
-    const maxY = Math.max(...rawPoints.map((point) => point.y));
-    const bboxRadius = Math.sqrt(
-      Math.max(1, (maxX - minX) * (maxY - minY)),
-    ) / 2;
-
-    // Each validated loop becomes its own true circle. The centre stays at
-    // that loop's geographic centroid, so Taipei/New Taipei and Taoyuan are
-    // emphasized independently instead of being forced into concentric rings.
-    const ring = orientRing(definition.nodes, geographic, center);
     const slot = (Math.PI * 2) / ring.length;
-    const radiusForStationSpacing =
-      34 / Math.max(0.01, 2 * Math.sin(Math.PI / ring.length));
-    const radius = Math.max(
-      125,
-      meanRadius * 0.82,
-      bboxRadius * 0.88,
-      radiusForStationSpacing,
+
+    const rawRadii = ring.map((id) =>
+      Math.hypot(
+        geographic[id].x - geoCenter.x,
+        geographic[id].y - geoCenter.y,
+      ),
     );
-    const deltas = new Map<string, Point>();
+    const geoRadius =
+      rawRadii.reduce((sum, value) => sum + value, 0) /
+      Math.max(1, rawRadii.length);
+
+    const radiusForStationSpacing =
+      36 / Math.max(
+        0.01,
+        2 * Math.sin(Math.PI / ring.length),
+      );
+    const targetRadius = Math.max(
+      radiusForStationSpacing,
+      geoRadius * 0.9,
+      150,
+    );
 
     ring.forEach((id, index) => {
       ringNodeSet.add(id);
-      // Equal angular spacing keeps the loop a passenger-map circle with
-      // consistent station spacing. orientRing() already selects the rotation
-      // and direction that best preserve the geographic compass ordering.
-      const angle = -Math.PI / 2 + slot * index;
-      const target = {
-        x: center.x + Math.cos(angle) * radius,
-        y: center.y + Math.sin(angle) * radius,
-      };
+      const equalAngle = -Math.PI / 2 + slot * index;
+      const geoAngle = Math.atan2(
+        geographic[id].y - geoCenter.y,
+        geographic[id].x - geoCenter.x,
+      );
+      const adjustment = clamp(
+        signedAngleDelta(equalAngle, geoAngle),
+        -slot * 0.28,
+        slot * 0.28,
+      );
+      const angle = equalAngle + adjustment;
 
-      positions[id] = target;
-      deltas.set(id, {
-        x: target.x - geographic[id].x,
-        y: target.y - geographic[id].y,
-      });
+      positions[id] = {
+        x: geoCenter.x + Math.cos(angle) * targetRadius,
+        y: geoCenter.y + Math.sin(angle) * targetRadius,
+      };
     });
 
     return {
       definition: { ...definition, nodes: ring },
-      center,
-      radius,
-      deltas,
-      hops: multiSourceHopDistance(graph, ring),
+      geoCenter,
+      geoRadius,
+      targetRadius,
     };
   });
 
-  // Warp the whole local region around each loop, not only the ring or
-  // individual route paths. This preserves topology much better: stations
-  // inside/near the loop move coherently with the circle instead of having
-  // unrelated corridors cut across it.
-  const normalizeAngle = (angle: number) => {
-    const tau = Math.PI * 2;
-    let value = angle % tau;
-    if (value < 0) value += tau;
-    return value;
-  };
-
-  const polarTransforms = ringTransforms.map((transform) => {
-    const samples = transform.definition.nodes.map((nodeId, index) => {
-      const point = geographic[nodeId];
-      return {
-        nodeId,
-        geoAngle: normalizeAngle(
-          Math.atan2(
-            point.y - transform.center.y,
-            point.x - transform.center.x,
-          ),
-        ),
-        geoRadius: Math.hypot(
-          point.x - transform.center.x,
-          point.y - transform.center.y,
-        ),
-        targetAngle:
-          -Math.PI / 2 +
-          (Math.PI * 2 * index) /
-            transform.definition.nodes.length,
-      };
-    });
-
-    // Ring order already follows the geographic loop. Unwrap its polar
-    // angles so interpolation through 0°/360° is continuous.
-    for (let index = 1; index < samples.length; index += 1) {
-      while (samples[index].geoAngle <= samples[index - 1].geoAngle) {
-        samples[index].geoAngle += Math.PI * 2;
-      }
-    }
-
-    return {
-      ...transform,
-      samples,
-      firstGeoAngle: samples[0].geoAngle,
-      lastGeoAngle: samples[samples.length - 1].geoAngle,
-    };
-  });
-
-  const mapThroughRing = (
-    transform: (typeof polarTransforms)[number],
-    source: Point,
-  ): {
-    point: Point;
-    normalizedRadius: number;
-  } => {
-    const dx = source.x - transform.center.x;
-    const dy = source.y - transform.center.y;
-    const sourceRadius = Math.hypot(dx, dy);
-    let angle = normalizeAngle(Math.atan2(dy, dx));
-
-    while (angle < transform.firstGeoAngle) {
-      angle += Math.PI * 2;
-    }
-    while (angle > transform.lastGeoAngle + Math.PI * 2) {
-      angle -= Math.PI * 2;
-    }
-
-    const samples = transform.samples;
-    let leftIndex = samples.length - 1;
-    let rightIndex = 0;
-    let leftAngle = samples[leftIndex].geoAngle;
-    let rightAngle = samples[0].geoAngle + Math.PI * 2;
-
-    for (let index = 0; index < samples.length - 1; index += 1) {
-      const a = samples[index].geoAngle;
-      const b = samples[index + 1].geoAngle;
-      if (angle >= a && angle <= b) {
-        leftIndex = index;
-        rightIndex = index + 1;
-        leftAngle = a;
-        rightAngle = b;
-        break;
-      }
-    }
-
-    if (angle < leftAngle) angle += Math.PI * 2;
-    const span = Math.max(1e-6, rightAngle - leftAngle);
-    const t = clamp((angle - leftAngle) / span, 0, 1);
-    const left = samples[leftIndex];
-    const right = samples[rightIndex];
-
-    let targetRightAngle = right.targetAngle;
-    if (rightIndex === 0) targetRightAngle += Math.PI * 2;
-    const targetAngle =
-      left.targetAngle * (1 - t) + targetRightAngle * t;
-    const boundaryRadius =
-      left.geoRadius * (1 - t) + right.geoRadius * t;
-    const normalizedRadius =
-      sourceRadius / Math.max(1, boundaryRadius);
-    const targetRadius = transform.radius * normalizedRadius;
-
-    return {
-      point: {
-        x:
-          transform.center.x +
-          Math.cos(targetAngle) * targetRadius,
-        y:
-          transform.center.y +
-          Math.sin(targetAngle) * targetRadius,
-      },
-      normalizedRadius,
-    };
-  };
-
+  // Every non-ring station is handled by the nearest logical ring system.
+  // This preserves the clean radial organization of the original Moscow
+  // algorithm without pretending that Taipei/New Taipei and Taoyuan share
+  // one centre.
   for (const node of graph.nodes) {
     if (ringNodeSet.has(node.id)) continue;
 
-    let best:
-      | {
-          point: Point;
-          normalizedRadius: number;
-        }
-      | undefined;
+    const geo = geographic[node.id];
+    let nearest = ringInfos[0];
+    let bestNormalizedDistance = Number.POSITIVE_INFINITY;
 
-    for (const transform of polarTransforms) {
-      const mapped = mapThroughRing(
-        transform,
-        geographic[node.id],
+    for (const ring of ringInfos) {
+      const radialDistance = Math.hypot(
+        geo.x - ring.geoCenter.x,
+        geo.y - ring.geoCenter.y,
       );
-      if (
-        !best ||
-        mapped.normalizedRadius < best.normalizedRadius
-      ) {
-        best = mapped;
+      const normalized =
+        radialDistance / Math.max(1, ring.geoRadius);
+      if (normalized < bestNormalizedDistance) {
+        bestNormalizedDistance = normalized;
+        nearest = ring;
       }
     }
 
-    if (!best || best.normalizedRadius > 1.85) continue;
+    // Very remote stations keep their geographic position; otherwise the
+    // local ring acts as the schematic frame for that regional cluster.
+    if (bestNormalizedDistance > 2.35) {
+      positions[node.id] = { ...geo };
+      continue;
+    }
 
-    const blend =
-      best.normalizedRadius <= 1.15
-        ? 1
-        : clamp(
-            (1.85 - best.normalizedRadius) / 0.7,
-            0,
-            1,
-          );
+    const dx = geo.x - nearest.geoCenter.x;
+    const dy = geo.y - nearest.geoCenter.y;
+    const geoRadius = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    let mappedRadius: number;
+
+    if (geoRadius <= nearest.geoRadius) {
+      const ratio =
+        geoRadius / Math.max(1, nearest.geoRadius);
+      mappedRadius =
+        Math.pow(ratio, 0.84) *
+        Math.max(70, nearest.targetRadius - 62);
+    } else {
+      const outside =
+        geoRadius - nearest.geoRadius;
+      const outsideScale = clamp(
+        nearest.targetRadius /
+          Math.max(1, nearest.geoRadius),
+        0.72,
+        1.28,
+      );
+      mappedRadius =
+        nearest.targetRadius +
+        62 +
+        outside * outsideScale;
+    }
 
     positions[node.id] = {
       x:
-        geographic[node.id].x * (1 - blend) +
-        best.point.x * blend,
+        nearest.geoCenter.x +
+        Math.cos(angle) * mappedRadius,
       y:
-        geographic[node.id].y * (1 - blend) +
-        best.point.y * blend,
+        nearest.geoCenter.y +
+        Math.sin(angle) * mappedRadius,
     };
   }
 
-  // Moscow-specific collision repair: ring nodes are fixed so true-circle
-  // geometry cannot be deformed. Only nearby non-ring stations are pushed
-  // away when labels/badges would otherwise collapse onto the ring.
-  for (let iteration = 0; iteration < 14; iteration += 1) {
-    let moved = false;
+  const smoothed = smoothMoscowCorridors(
+    graph,
+    positions,
+    ringNodeSet,
+  );
 
+  // Preserve exact circle nodes after corridor smoothing.
+  for (const ring of ringInfos) {
+    const slot =
+      (Math.PI * 2) / ring.definition.nodes.length;
+    ring.definition.nodes.forEach((id, index) => {
+      const equalAngle = -Math.PI / 2 + slot * index;
+      const geoAngle = Math.atan2(
+        geographic[id].y - ring.geoCenter.y,
+        geographic[id].x - ring.geoCenter.x,
+      );
+      const adjustment = clamp(
+        signedAngleDelta(equalAngle, geoAngle),
+        -slot * 0.28,
+        slot * 0.28,
+      );
+      const angle = equalAngle + adjustment;
+      smoothed[id] = {
+        x:
+          ring.geoCenter.x +
+          Math.cos(angle) * ring.targetRadius,
+        y:
+          ring.geoCenter.y +
+          Math.sin(angle) * ring.targetRadius,
+      };
+    });
+  }
+
+  // Collision repair for non-ring stations only. Exact circle geometry is
+  // fixed and cannot be pushed out of round.
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    let moved = false;
     for (let i = 0; i < graph.nodes.length; i += 1) {
       for (let j = i + 1; j < graph.nodes.length; j += 1) {
         const aId = graph.nodes[i].id;
         const bId = graph.nodes[j].id;
-        const a = positions[aId];
-        const b = positions[bId];
+        const a = smoothed[aId];
+        const b = smoothed[bId];
         let dx = b.x - a.x;
         let dy = b.y - a.y;
-        let currentDistance = Math.hypot(dx, dy);
-        const minimumDistance = 30;
-
-        if (currentDistance >= minimumDistance) continue;
+        let distance = Math.hypot(dx, dy);
+        const minimumDistance = 29;
+        if (distance >= minimumDistance) continue;
 
         const aFixed = ringNodeSet.has(aId);
         const bFixed = ringNodeSet.has(bId);
         if (aFixed && bFixed) continue;
 
-        if (currentDistance < 1e-6) {
+        if (distance < 1e-6) {
           const angle =
-            ((i * 41 + j * 97) % 360) * (Math.PI / 180);
+            ((i * 43 + j * 101) % 360) *
+            (Math.PI / 180);
           dx = Math.cos(angle);
           dy = Math.sin(angle);
-          currentDistance = 1;
+          distance = 1;
         }
 
-        const nx = dx / currentDistance;
-        const ny = dy / currentDistance;
-        const required = minimumDistance - currentDistance;
+        const nx = dx / distance;
+        const ny = dy / distance;
+        const required = minimumDistance - distance;
 
         if (aFixed) {
           b.x += nx * required;
@@ -921,17 +855,15 @@ export function layoutMoscow(
           b.x += nx * half;
           b.y += ny * half;
         }
-
         moved = true;
       }
     }
-
     if (!moved) break;
   }
 
   return {
-    positions,
-    moscowRings: ringTransforms.map((item) => item.definition),
+    positions: smoothed,
+    moscowRings: ringInfos.map((info) => info.definition),
   };
 }
 
