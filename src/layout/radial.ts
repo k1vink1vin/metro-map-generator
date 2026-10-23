@@ -79,6 +79,16 @@ function radialConsistency(points: Point[]): number {
   return clamp(1 - deviation / mean, 0, 1);
 }
 
+function cycleCandidateId(cycle: string[]): string {
+  const variants: string[] = [];
+  for (const candidate of [cycle, [...cycle].reverse()]) {
+    for (let i = 0; i < candidate.length; i += 1) {
+      variants.push([...candidate.slice(i), ...candidate.slice(0, i)].join('>'));
+    }
+  }
+  return variants.sort()[0];
+}
+
 function scoreCycle(
   graph: GraphModel,
   geographic: Record<string, Point>,
@@ -129,6 +139,7 @@ function scoreCycle(
     tinyLoopPenalty;
 
   return {
+    id: cycleCandidateId(cycle),
     nodes: cycle,
     score,
     routeIds: [...routeIds].sort(),
@@ -226,17 +237,26 @@ function multiSourceHopDistance(graph: GraphModel, sources: string[]): Map<strin
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
+  selectedCandidateId?: string,
 ): {
   positions: Record<string, Point>;
   primaryRing?: string[];
+  primaryRingCandidateId?: string;
   ringCandidates: RingCandidateDiagnostic[];
 } {
   const candidates = findRingCandidates(graph, geographic);
-  const detected = candidates[0];
+  const detected = selectedCandidateId
+    ? candidates.find((candidate) => candidate.id === selectedCandidateId)
+    : undefined;
 
+  // Moscow mode first detects candidate cycles. The user explicitly chooses
+  // which candidate should become the visual ring. Until then, preserve the
+  // geographic reference positions instead of silently picking one.
   if (!detected?.nodes.length) {
     return {
-      positions: layoutConcentric(graph, geographic),
+      positions: Object.fromEntries(
+        Object.entries(geographic).map(([id, point]) => [id, { ...point }]),
+      ),
       ringCandidates: candidates,
     };
   }
@@ -314,7 +334,12 @@ export function layoutMoscow(
     };
   }
 
-  return { positions, primaryRing: ring, ringCandidates: candidates };
+  return {
+    positions,
+    primaryRing: ring,
+    primaryRingCandidateId: detected.id,
+    ringCandidates: candidates,
+  };
 }
 
 export function layoutConcentric(
