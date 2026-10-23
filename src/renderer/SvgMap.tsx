@@ -237,7 +237,10 @@ function renderTokyoStation(
           index * gap;
 
         return (
-          <g key={stationId}>
+          <g
+            key={stationId}
+            data-station-code={stationId.trim().toUpperCase()}
+          >
             <rect
               x={x}
               y={-height / 2}
