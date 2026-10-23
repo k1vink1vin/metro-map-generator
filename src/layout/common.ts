@@ -540,3 +540,256 @@ export function relaxPathKinks(
 
   return positions;
 }
+
+
+export interface SafeKinkRelaxOptions {
+  passes: number;
+  thresholdDegrees: number;
+  minimumNodeDistance: number;
+  maxShift: number;
+  structuralMaxShift: number;
+}
+
+function properSegmentIntersection(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+): boolean {
+  const orient = (p: Point, q: Point, r: Point) =>
+    (q.x - p.x) * (r.y - p.y) -
+    (q.y - p.y) * (r.x - p.x);
+  const o1 = orient(a, b, c);
+  const o2 = orient(a, b, d);
+  const o3 = orient(c, d, a);
+  const o4 = orient(c, d, b);
+  const eps = 1e-6;
+  return (
+    ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
+    ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))
+  );
+}
+
+function localPathOccurrences(
+  graph: GraphModel,
+  nodeId: string,
+): Array<{ previous: string; next: string }> {
+  const result: Array<{ previous: string; next: string }> = [];
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      for (let index = 1; index < path.length - 1; index += 1) {
+        if (path[index] === nodeId) {
+          result.push({
+            previous: path[index - 1],
+            next: path[index + 1],
+          });
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function localBendPenalty(
+  nodeId: string,
+  positions: Record<string, Point>,
+  occurrences: Array<{ previous: string; next: string }>,
+  threshold: number,
+): number {
+  return occurrences.reduce((sum, occurrence) => {
+    const turn = Math.abs(
+      signedHeadingChange(
+        positions[occurrence.previous],
+        positions[nodeId],
+        positions[occurrence.next],
+      ),
+    );
+    const excess = Math.max(0, turn - threshold);
+    return sum + excess * excess;
+  }, 0);
+}
+
+function incidentCrossingCount(
+  graph: GraphModel,
+  nodeId: string,
+  positions: Record<string, Point>,
+): number {
+  const incident = graph.edges.filter(
+    (edge) => edge.a === nodeId || edge.b === nodeId,
+  );
+  let count = 0;
+
+  for (const first of incident) {
+    for (const second of graph.edges) {
+      if (first === second) continue;
+      if (
+        first.a === second.a ||
+        first.a === second.b ||
+        first.b === second.a ||
+        first.b === second.b
+      ) {
+        continue;
+      }
+      if (
+        properSegmentIntersection(
+          positions[first.a],
+          positions[first.b],
+          positions[second.a],
+          positions[second.b],
+        )
+      ) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Conservative kink optimizer.
+ *
+ * A station only moves if a candidate reduces the local route-bend penalty,
+ * keeps passenger spacing, and does not add crossings to any incident edge.
+ * This is slower than the free relaxation above but appropriate for the final
+ * map-quality pass where topology regressions are unacceptable.
+ */
+export function relaxPathKinksSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  options: SafeKinkRelaxOptions,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const threshold = (options.thresholdDegrees * Math.PI) / 180;
+
+  const occurrenceMap = new Map(
+    graph.nodes.map((node) => [
+      node.id,
+      localPathOccurrences(graph, node.id),
+    ]),
+  );
+
+  for (let pass = 0; pass < options.passes; pass += 1) {
+    let changed = false;
+
+    const ranked = graph.nodes
+      .map((node) => {
+        const occurrences = occurrenceMap.get(node.id) ?? [];
+        return {
+          node,
+          occurrences,
+          penalty: localBendPenalty(
+            node.id,
+            positions,
+            occurrences,
+            threshold,
+          ),
+        };
+      })
+      .filter((item) => item.penalty > 1e-6)
+      .sort((a, b) => b.penalty - a.penalty);
+
+    for (const item of ranked) {
+      const nodeId = item.node.id;
+      const occurrences = item.occurrences;
+      if (!occurrences.length) continue;
+
+      const midpoint = occurrences.reduce(
+        (sum, occurrence) => ({
+          x:
+            sum.x +
+            (positions[occurrence.previous].x +
+              positions[occurrence.next].x) /
+              2,
+          y:
+            sum.y +
+            (positions[occurrence.previous].y +
+              positions[occurrence.next].y) /
+              2,
+        }),
+        { x: 0, y: 0 },
+      );
+      midpoint.x /= occurrences.length;
+      midpoint.y /= occurrences.length;
+
+      const original = { ...positions[nodeId] };
+      const originalPenalty = localBendPenalty(
+        nodeId,
+        positions,
+        occurrences,
+        threshold,
+      );
+      const originalCrossings = incidentCrossingCount(
+        graph,
+        nodeId,
+        positions,
+      );
+
+      let best = original;
+      let bestPenalty = originalPenalty;
+      const maximumShift = structuralNode(graph, nodeId)
+        ? options.structuralMaxShift
+        : options.maxShift;
+
+      for (const factor of [0.18, 0.32, 0.5, 0.68, 0.82]) {
+        let dx = (midpoint.x - original.x) * factor;
+        let dy = (midpoint.y - original.y) * factor;
+        const shift = Math.hypot(dx, dy);
+        if (shift > maximumShift) {
+          dx = (dx / shift) * maximumShift;
+          dy = (dy / shift) * maximumShift;
+        }
+
+        const candidate = {
+          x: original.x + dx,
+          y: original.y + dy,
+        };
+
+        let spacingSafe = true;
+        for (const other of graph.nodes) {
+          if (other.id === nodeId) continue;
+          if (
+            distance(candidate, positions[other.id]) <
+            options.minimumNodeDistance
+          ) {
+            spacingSafe = false;
+            break;
+          }
+        }
+        if (!spacingSafe) continue;
+
+        positions[nodeId] = candidate;
+        const penalty = localBendPenalty(
+          nodeId,
+          positions,
+          occurrences,
+          threshold,
+        );
+        const crossings = incidentCrossingCount(
+          graph,
+          nodeId,
+          positions,
+        );
+
+        if (
+          crossings <= originalCrossings &&
+          penalty < bestPenalty * 0.94
+        ) {
+          best = candidate;
+          bestPenalty = penalty;
+        }
+      }
+
+      positions[nodeId] = best;
+      if (best.x !== original.x || best.y !== original.y) {
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
