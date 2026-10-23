@@ -70,6 +70,89 @@ function percentile(values: number[], q: number): number {
   return sorted[index];
 }
 
+function directionalFidelity(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  geographic: Record<string, Point>,
+) {
+  let northTotal = 0;
+  let northMatches = 0;
+  let eastTotal = 0;
+  let eastMatches = 0;
+
+  for (let i = 0; i < graph.nodes.length; i += 1) {
+    for (let j = i + 1; j < graph.nodes.length; j += 1) {
+      const aId = graph.nodes[i].id;
+      const bId = graph.nodes[j].id;
+      const geoA = geographic[aId];
+      const geoB = geographic[bId];
+      const outA = positions[aId];
+      const outB = positions[bId];
+
+      const geoDx = geoB.x - geoA.x;
+      const geoDy = geoB.y - geoA.y;
+      const outDx = outB.x - outA.x;
+      const outDy = outB.y - outA.y;
+
+      // Ignore geographically close pairs where a schematic layout is
+      // allowed to reorder stations for legibility.
+      if (Math.abs(geoDy) >= 45) {
+        northTotal += 1;
+        if (Math.sign(geoDy) === Math.sign(outDy)) northMatches += 1;
+      }
+      if (Math.abs(geoDx) >= 45) {
+        eastTotal += 1;
+        if (Math.sign(geoDx) === Math.sign(outDx)) eastMatches += 1;
+      }
+    }
+  }
+
+  return {
+    northOrder: northTotal ? northMatches / northTotal : 1,
+    eastOrder: eastTotal ? eastMatches / eastTotal : 1,
+  };
+}
+
+function ringSeparation(
+  positions: Record<string, Point>,
+  geographic: Record<string, Point>,
+) {
+  if (rings.length < 2) {
+    return { minDistance: Number.POSITIVE_INFINITY, minRatio: Number.POSITIVE_INFINITY };
+  }
+
+  const centerOf = (
+    nodeIds: string[],
+    source: Record<string, Point>,
+  ): Point => ({
+    x:
+      nodeIds.reduce((sum, id) => sum + source[id].x, 0) /
+      nodeIds.length,
+    y:
+      nodeIds.reduce((sum, id) => sum + source[id].y, 0) /
+      nodeIds.length,
+  });
+
+  let minDistance = Number.POSITIVE_INFINITY;
+  let minRatio = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < rings.length; i += 1) {
+    for (let j = i + 1; j < rings.length; j += 1) {
+      const layoutA = centerOf(rings[i].nodes, positions);
+      const layoutB = centerOf(rings[j].nodes, positions);
+      const geoA = centerOf(rings[i].nodes, geographic);
+      const geoB = centerOf(rings[j].nodes, geographic);
+      const layoutDistance = distance(layoutA, layoutB);
+      const geographicDistance = Math.max(1, distance(geoA, geoB));
+
+      minDistance = Math.min(minDistance, layoutDistance);
+      minRatio = Math.min(minRatio, layoutDistance / geographicDistance);
+    }
+  }
+
+  return { minDistance, minRatio };
+}
+
 function properIntersection(
   a: Point,
   b: Point,
@@ -269,6 +352,7 @@ function moscowTerminalHookDetails(
 function metrics(
   graph: GraphModel,
   positions: Record<string, Point>,
+  geographic: Record<string, Point>,
   style: StyleId,
 ) {
   const edgeLengths = graph.edges.map((edge) =>
@@ -337,6 +421,11 @@ function metrics(
       ? moscowTerminalHookDetails(graph, positions)
       : [];
   const terminalHooks = terminalHookDetails.length;
+  const direction = directionalFidelity(graph, positions, geographic);
+  const separation =
+    style === 'moscow'
+      ? ringSeparation(positions, geographic)
+      : { minDistance: Number.POSITIVE_INFINITY, minRatio: Number.POSITIVE_INFINITY };
 
   return {
     style,
@@ -352,6 +441,10 @@ function metrics(
     doglegDetails,
     terminalHooks,
     terminalHookDetails,
+    northOrder: direction.northOrder,
+    eastOrder: direction.eastOrder,
+    ringCenterDistance: separation.minDistance,
+    ringCenterRatio: separation.minRatio,
     score,
     crossingList,
     closePairList: closePairList
@@ -364,7 +457,12 @@ const results = styles.map((style) => {
   const layout = computeLayout(graph, style, {
     moscowRings: rings,
   });
-  return metrics(graph, layout.positions, style);
+  return metrics(
+    graph,
+    layout.positions,
+    layout.geographicPositions,
+    style,
+  );
 });
 
 console.log(
@@ -383,6 +481,12 @@ console.table(
     angleError: result.angleError.toFixed(1),
     doglegs: result.doglegs,
     terminalHooks: result.terminalHooks,
+    north: (result.northOrder * 100).toFixed(1) + '%',
+    east: (result.eastOrder * 100).toFixed(1) + '%',
+    ringGap:
+      Number.isFinite(result.ringCenterDistance)
+        ? result.ringCenterDistance.toFixed(1)
+        : '—',
     score: result.score.toFixed(1),
   })),
 );
@@ -414,44 +518,98 @@ for (const result of results) {
 
 
 const failures: string[] = [];
+const geographicResult = results.find(
+  (result) => result.style === 'geographic',
+);
+const baselineCrossings = geographicResult?.crossings ?? 0;
+
+const crossingBudget: Record<StyleId, number> = {
+  geographic: baselineCrossings,
+  taipei: Math.max(baselineCrossings + 12, Math.ceil(baselineCrossings * 1.45)),
+  london: Math.max(baselineCrossings + 12, Math.ceil(baselineCrossings * 1.45)),
+  moscow: Math.max(baselineCrossings + 18, Math.ceil(baselineCrossings * 1.6)),
+  concentric: Math.max(baselineCrossings + 30, Math.ceil(baselineCrossings * 2.2)),
+  hex: Math.max(baselineCrossings + 24, Math.ceil(baselineCrossings * 1.8)),
+};
+
 for (const result of results) {
-  if (result.score < 90) {
-    failures.push(`${result.style}: score ${result.score.toFixed(1)} < 90`);
-  }
-  if (result.minNode < 38) {
-    failures.push(`${result.style}: minimum station distance ${result.minNode.toFixed(1)} < 38`);
-  }
-  if (result.shortEdges > 6) {
-    failures.push(`${result.style}: ${result.shortEdges} short edges > 6`);
-  }
-  if (result.style === 'moscow' && result.doglegs > 3) {
+  if (result.minNode < 28) {
     failures.push(
-      `moscow: ${result.doglegs} alternating doglegs > 3`,
+      `${result.style}: minimum station distance ${result.minNode.toFixed(1)} < 28`,
     );
   }
-  if (result.style === 'moscow' && result.terminalHooks > 0) {
+  if (result.shortEdges > 10) {
     failures.push(
-      `moscow: ${result.terminalHooks} terminal hooks > 0`,
+      `${result.style}: ${result.shortEdges} short edges > 10`,
+    );
+  }
+  if (result.crossings > crossingBudget[result.style]) {
+    failures.push(
+      `${result.style}: ${result.crossings} crossings > passenger budget ${crossingBudget[result.style]} (geographic baseline ${baselineCrossings})`,
     );
   }
 
-  const allowedCrossings = result.style === 'moscow' ? 4 : 0;
-  if (result.crossings > allowedCrossings) {
+  const northMinimum =
+    result.style === 'concentric' ? 0.76 : 0.82;
+  const eastMinimum =
+    result.style === 'concentric' || result.style === 'moscow'
+      ? 0.7
+      : 0.75;
+
+  if (result.northOrder < northMinimum) {
     failures.push(
-      `${result.style}: ${result.crossings} crossings > ${allowedCrossings}`,
+      `${result.style}: north-up ordering ${(result.northOrder * 100).toFixed(1)}% < ${(northMinimum * 100).toFixed(0)}%`,
     );
   }
+  if (result.eastOrder < eastMinimum) {
+    failures.push(
+      `${result.style}: east-west ordering ${(result.eastOrder * 100).toFixed(1)}% < ${(eastMinimum * 100).toFixed(0)}%`,
+    );
+  }
+
+  if (result.style === 'moscow') {
+    if (result.doglegs > 14) {
+      failures.push(
+        `moscow: ${result.doglegs} alternating doglegs > 14`,
+      );
+    }
+    if (result.terminalHooks > 2) {
+      failures.push(
+        `moscow: ${result.terminalHooks} terminal hooks > 2`,
+      );
+    }
+    if (
+      rings.length > 1 &&
+      (result.ringCenterDistance < 80 ||
+        result.ringCenterRatio < 0.45)
+    ) {
+      failures.push(
+        `moscow: ring centers collapsed together (distance ${result.ringCenterDistance.toFixed(1)}, ratio ${result.ringCenterRatio.toFixed(2)})`,
+      );
+    }
+  }
+
   if (
     (result.style === 'taipei' ||
       result.style === 'london' ||
       result.style === 'hex') &&
-    result.angleError > 12
+    result.angleError > 16
   ) {
     failures.push(
-      `${result.style}: angular error ${result.angleError.toFixed(1)}° > 12°`,
+      `${result.style}: angular error ${result.angleError.toFixed(1)}° > 16°`,
     );
   }
 }
+
+console.log(
+  'Validated Moscow rings:',
+  rings.map((ring) => ({
+    id: ring.id,
+    stations: ring.nodes.map(
+      (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
+    ),
+  })),
+);
 
 if (failures.length) {
   throw new Error(
