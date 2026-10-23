@@ -19,6 +19,15 @@ function pretty(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function safeArrayLength(text: string): number | null {
+  try {
+    const value = JSON.parse(text);
+    return Array.isArray(value) ? value.length : null;
+  } catch {
+    return null;
+  }
+}
+
 function createInitial() {
   const graph = buildGraph(sampleNetwork);
   const layout = computeLayout(graph, 'taipei');
@@ -64,6 +73,7 @@ export function App() {
   };
 
   const selectedStyle = STYLE_OPTIONS.find((option) => option.id === style)!;
+  const stationCount = safeArrayLength(stationsText);
   const ringNames =
     layout.primaryRing?.map((nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId) ?? [];
 
@@ -99,7 +109,7 @@ export function App() {
                   <span className="step">01</span>
                   <h2>Stations</h2>
                 </div>
-                <span>{JSON.parse(stationsText || '[]').length || 0}</span>
+                <span>{stationCount ?? '—'}</span>
               </div>
               <textarea
                 value={stationsText}
