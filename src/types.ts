@@ -31,6 +31,9 @@ export interface TransitLine {
    * represented without guessing the branch structure.
    */
   paths: string[][];
+  /** Optional metadata aligned by path index. */
+  pathIds?: string[];
+  pathColors?: string[];
 }
 
 export interface MoscowRingDefinition {
@@ -75,6 +78,8 @@ export interface GraphLine {
   name: string;
   color: string;
   paths: string[][];
+  pathIds?: string[];
+  pathColors?: string[];
 }
 
 export interface GraphModel {
