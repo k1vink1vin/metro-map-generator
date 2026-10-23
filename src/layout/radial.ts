@@ -696,7 +696,7 @@ export function layoutConcentric(
   // Keep the concentric character without sacrificing the north-up,
   // geographic ordering of a network that now spans Taipei, New Taipei and
   // Taoyuan. A light radial quantization is enough to show the style.
-  const snapWeight = 0.12;
+  const snapWeight = 0.04;
 
   return Object.fromEntries(
     graph.nodes.map((node) => {
