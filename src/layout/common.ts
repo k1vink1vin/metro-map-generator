@@ -395,3 +395,148 @@ export function inflateCentralArea(
     }),
   );
 }
+
+
+export interface KinkRelaxOptions {
+  passes: number;
+  ordinaryBlend: number;
+  structuralBlend: number;
+  geographyTether: number;
+  maxShift: number;
+  thresholdDegrees?: number;
+  protectedNodes?: Set<string>;
+}
+
+function signedHeadingChange(
+  a: Point,
+  b: Point,
+  c: Point,
+): number {
+  const first = Math.atan2(b.y - a.y, b.x - a.x);
+  const second = Math.atan2(c.y - b.y, c.x - b.x);
+  let turn = second - first;
+  while (turn > Math.PI) turn -= Math.PI * 2;
+  while (turn < -Math.PI) turn += Math.PI * 2;
+  return turn;
+}
+
+/**
+ * Relaxes visually sharp route kinks after the main style solver.
+ *
+ * It does not blindly Laplacian-smooth the graph: only path occurrences whose
+ * heading change exceeds the threshold contribute a midpoint prediction.
+ * Ordinary corridor stations can move strongly; transfers/branches can move
+ * only a little, which prevents all of the remaining bend energy from being
+ * concentrated at structural anchors.
+ */
+export function relaxPathKinks(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  geographicReference: Record<string, Point>,
+  options: KinkRelaxOptions,
+): Record<string, Point> {
+  let positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const threshold =
+    ((options.thresholdDegrees ?? 72) * Math.PI) / 180;
+
+  for (let pass = 0; pass < options.passes; pass += 1) {
+    const predictions = new Map<
+      string,
+      Array<{ point: Point; weight: number }>
+    >();
+    for (const node of graph.nodes) predictions.set(node.id, []);
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const nodeId = path[index];
+          if (options.protectedNodes?.has(nodeId)) continue;
+
+          const previous = positions[path[index - 1]];
+          const current = positions[nodeId];
+          const next = positions[path[index + 1]];
+          const turn = Math.abs(
+            signedHeadingChange(previous, current, next),
+          );
+          if (turn < threshold) continue;
+
+          const severity = Math.min(
+            1,
+            (turn - threshold) /
+              Math.max(1e-6, Math.PI - threshold),
+          );
+          predictions.get(nodeId)?.push({
+            point: {
+              x: (previous.x + next.x) / 2,
+              y: (previous.y + next.y) / 2,
+            },
+            weight: 0.35 + severity * 0.65,
+          });
+        }
+      }
+    }
+
+    const nextPositions = Object.fromEntries(
+      Object.entries(positions).map(([id, point]) => [id, { ...point }]),
+    );
+    let moved = false;
+
+    for (const node of graph.nodes) {
+      const items = predictions.get(node.id) ?? [];
+      if (!items.length) continue;
+
+      const totalWeight = items.reduce(
+        (sum, item) => sum + item.weight,
+        0,
+      );
+      const target = items.reduce(
+        (sum, item) => ({
+          x: sum.x + item.point.x * item.weight,
+          y: sum.y + item.point.y * item.weight,
+        }),
+        { x: 0, y: 0 },
+      );
+      target.x /= Math.max(1e-6, totalWeight);
+      target.y /= Math.max(1e-6, totalWeight);
+
+      const structural = structuralNode(graph, node.id);
+      const blend = structural
+        ? options.structuralBlend
+        : options.ordinaryBlend;
+
+      const tethered = {
+        x:
+          target.x * (1 - options.geographyTether) +
+          geographicReference[node.id].x * options.geographyTether,
+        y:
+          target.y * (1 - options.geographyTether) +
+          geographicReference[node.id].y * options.geographyTether,
+      };
+
+      let dx =
+        (tethered.x - positions[node.id].x) * blend;
+      let dy =
+        (tethered.y - positions[node.id].y) * blend;
+      const shift = Math.hypot(dx, dy);
+      if (shift > options.maxShift) {
+        dx = (dx / shift) * options.maxShift;
+        dy = (dy / shift) * options.maxShift;
+      }
+
+      if (Math.hypot(dx, dy) > 0.05) {
+        nextPositions[node.id] = {
+          x: positions[node.id].x + dx,
+          y: positions[node.id].y + dy,
+        };
+        moved = true;
+      }
+    }
+
+    positions = nextPositions;
+    if (!moved) break;
+  }
+
+  return positions;
+}
