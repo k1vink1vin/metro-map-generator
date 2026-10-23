@@ -640,6 +640,50 @@ function moscowSegmentsCross(
   );
 }
 
+function findCrossRegionMoscowPathNodes(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  geographic: Record<string, Point>,
+): Set<string> {
+  const result = new Set<string>();
+
+  const selfCrossings = (
+    path: string[],
+    source: Record<string, Point>,
+  ): number => {
+    let count = 0;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      for (let j = i + 2; j < path.length - 1; j += 1) {
+        if (
+          moscowSegmentsCross(
+            source[path[i]],
+            source[path[i + 1]],
+            source[path[j]],
+            source[path[j + 1]],
+          )
+        ) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (
+        path.length >= 5 &&
+        selfCrossings(path, positions) >= 2 &&
+        selfCrossings(path, geographic) === 0
+      ) {
+        for (const nodeId of path) result.add(nodeId);
+      }
+    }
+  }
+
+  return result;
+}
+
 function repairCrossRegionMoscowPaths(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -1215,6 +1259,12 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
+  const crossRegionPathNodes =
+    findCrossRegionMoscowPathNodes(
+      graph,
+      smoothed,
+      geographic,
+    );
   const crossRegionRepaired =
     repairCrossRegionMoscowPaths(
       graph,
@@ -1222,10 +1272,68 @@ export function layoutMoscow(
       geographic,
       ringNodeSet,
     );
+
+  // Keep the repaired connector and ring circles fixed. If another ordinary
+  // station crowds this passenger-wayfinding backbone, move only that other
+  // station. This preserves the connector's no-self-crossing geometry.
+  const protectedAfterRepair = new Set([
+    ...ringNodeSet,
+    ...crossRegionPathNodes,
+  ]);
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    let moved = false;
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const aId = graph.nodes[i].id;
+        const bId = graph.nodes[j].id;
+        const a = crossRegionRepaired[aId];
+        const b = crossRegionRepaired[bId];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distance = Math.hypot(dx, dy);
+        const minimumDistance = 30;
+        if (distance >= minimumDistance) continue;
+
+        const aFixed = protectedAfterRepair.has(aId);
+        const bFixed = protectedAfterRepair.has(bId);
+        if (aFixed && bFixed) continue;
+
+        if (distance < 1e-6) {
+          const angle =
+            ((i * 47 + j * 103) % 360) *
+            (Math.PI / 180);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+
+        const nx = dx / distance;
+        const ny = dy / distance;
+        const required = minimumDistance - distance;
+
+        if (aFixed) {
+          b.x += nx * required;
+          b.y += ny * required;
+        } else if (bFixed) {
+          a.x -= nx * required;
+          a.y -= ny * required;
+        } else {
+          const half = required / 2;
+          a.x -= nx * half;
+          a.y -= ny * half;
+          b.x += nx * half;
+          b.y += ny * half;
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
   const optimized = reduceMoscowCrossings(
     graph,
     crossRegionRepaired,
-    ringNodeSet,
+    protectedAfterRepair,
   );
 
   return {
