@@ -99,6 +99,7 @@ export interface RouteAwareOptions {
   runBlend: number;
   geographyTether: number;
   equalSpacingWeight: number;
+  bendAnchorDegrees?: number;
 }
 
 function cross(a: Point, b: Point): number {
@@ -277,8 +278,26 @@ export function regularizeRouteCorridors(
     for (const line of graph.lines) {
       for (const path of line.paths) {
         const anchorIndices = new Set<number>([0, path.length - 1]);
+        const bendThreshold =
+          ((options.bendAnchorDegrees ?? 52) * Math.PI) / 180;
+
         path.forEach((nodeId, index) => {
-          if (structuralNode(graph, nodeId)) anchorIndices.add(index);
+          if (structuralNode(graph, nodeId)) {
+            anchorIndices.add(index);
+            return;
+          }
+          if (index <= 0 || index >= path.length - 1) return;
+
+          const geoTurn = Math.abs(
+            signedHeadingChange(
+              geographicReference[path[index - 1]],
+              geographicReference[nodeId],
+              geographicReference[path[index + 1]],
+            ),
+          );
+          if (geoTurn >= bendThreshold) {
+            anchorIndices.add(index);
+          }
         });
         const anchors = [...anchorIndices].sort((a, b) => a - b);
 
