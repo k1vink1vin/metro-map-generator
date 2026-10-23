@@ -156,14 +156,18 @@ function signedTurn(a: Point, b: Point, c: Point): number {
   return turn;
 }
 
-function moscowDoglegs(
+function moscowDoglegDetails(
   graph: GraphModel,
   positions: Record<string, Point>,
-): number {
-  let count = 0;
+) {
+  const details: Array<{
+    line: string;
+    path: string;
+    stations: string[];
+  }> = [];
 
   for (const line of graph.lines) {
-    for (const path of line.paths) {
+    line.paths.forEach((path, pathIndex) => {
       const turns: number[] = [];
       for (let index = 1; index < path.length - 1; index += 1) {
         turns.push(
@@ -183,12 +187,20 @@ function moscowDoglegs(
           Math.abs(first) > (24 * Math.PI) / 180 &&
           Math.abs(second) > (24 * Math.PI) / 180;
 
-        if (opposite && strong) count += 1;
+        if (opposite && strong) {
+          details.push({
+            line: line.id,
+            path: line.pathIds?.[pathIndex] ?? String(pathIndex),
+            stations: path
+              .slice(index, index + 4)
+              .map((nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId),
+          });
+        }
       }
-    }
+    });
   }
 
-  return count;
+  return details;
 }
 
 function metrics(
@@ -252,10 +264,11 @@ function metrics(
       angleError * (angleStep ? 0.7 : 0),
   );
 
-  const doglegs =
+  const doglegDetails =
     style === 'moscow'
-      ? moscowDoglegs(graph, positions)
-      : 0;
+      ? moscowDoglegDetails(graph, positions)
+      : [];
+  const doglegs = doglegDetails.length;
 
   return {
     style,
@@ -268,6 +281,7 @@ function metrics(
     crossings,
     angleError,
     doglegs,
+    doglegDetails,
     score,
     crossingList,
     closePairList: closePairList
@@ -361,4 +375,10 @@ if (failures.length) {
   throw new Error(
     'Passenger-map QA regression:\n' + failures.join('\n'),
   );
+}
+
+
+const moscowResult = results.find((result) => result.style === 'moscow');
+if (moscowResult?.doglegDetails.length) {
+  console.log('Moscow dogleg details:', moscowResult.doglegDetails);
 }
