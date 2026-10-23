@@ -130,22 +130,25 @@ The primary input is an Excel workbook with Chinese `車站` and `路線` worksh
 
 ```text
 車站編號,車站名稱,緯度,經度,轉乘群組,轉乘驗證
-G05,市政府,24.154,120.663,市政府,正常 - 座標一致
-B03,市政府,24.154,120.663,市政府,正常 - 座標一致
+G05,市政府,24.154,120.663,XFER_001,正常 - XFER_001
+B03,市政府,24.154,120.663,XFER_001,正常 - XFER_001
 ```
 
 英文欄位 `Station ID / Station Name / Latitude / Longitude / Transfer Group / Transfer Validation` 也仍然可以匯入。
 
-One physical interchange may appear multiple times with different service-specific station IDs. The station name is the transfer key. Users only edit columns A-D; Transfer Group and Transfer Validation are filled automatically.
+One physical interchange may appear multiple times with different service-specific station IDs. Users only edit columns A-D; Transfer Group and Transfer Validation are filled automatically. Transfer Group is a stable topology key such as `XFER_001`, not the station name.
 
 Rules:
 
-- duplicate normalized station names are treated as one physical transfer station,
-- every ID belonging to the same transfer station must use the same latitude and longitude,
-- inconsistent coordinates cause graph generation/import to fail instead of silently averaging them,
-- route definitions continue to reference their original station IDs.
+- exact duplicate coordinates across multiple station IDs create a transfer group,
+- transfer groups use stable IDs such as `XFER_001 / XFER_002`,
+- station names are used for validation and display, not as the topology key,
+- every same-name transfer candidate must use the same latitude and longitude,
+- inconsistent same-name coordinates cause graph generation/import to fail instead of silently averaging them,
+- route definitions continue to reference their original station IDs,
+- changing a station name does not break a transfer relationship once the XFER ID exists.
 
-The downloadable template is directly generated as `metro-map-input-template.xlsm`. `Transfer Group` automatically fills for duplicate station names, and `Transfer Validation` checks whether all IDs of that transfer station use identical coordinates.
+The downloadable template is directly generated as `metro-map-input-template-zh.xlsm`. `轉乘群組 / Transfer Group` automatically generates stable `XFER_###` IDs from repeated coordinates, while `轉乘驗證 / Transfer Validation` checks same-name coordinate consistency.
 
 An optional `ValidateTransfers.bas` VBA module is also provided. Its `CompleteTransfersAndValidate` macro performs both operations in one step.
 
@@ -219,3 +222,16 @@ The SVG renderer then performs a second visibility pass:
 - SVG download is blocked if a route/path is missing, has non-drawable path data, or falls outside the exported viewBox.
 
 This is a hard invariant: a layout that cannot represent every route/path is not considered a valid output.
+
+
+## Stable transfer IDs
+
+Transfer topology must not depend on a mutable station name. The preferred model is:
+
+```text
+車站編號,車站名稱,緯度,經度,轉乘群組
+G05,市政府,24.154,120.663,XFER_001
+B03,市政府,24.154,120.663,XFER_001
+```
+
+If the user later renames both rows to `市府`, `XFER_001` remains the topology key. The website also auto-generates XFER IDs for repeated coordinates when the transfer column is blank. Existing XFER IDs take precedence, and automatically generated IDs avoid collisions with existing groups.
