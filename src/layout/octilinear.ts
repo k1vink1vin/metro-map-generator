@@ -19,8 +19,8 @@ export function layoutLondon(
 ): Record<string, Point> {
   return schematizeOnAngularGrid(graph, geographic, {
     angleStep: 45,
-    geographyWeight: 0.09,
-    equalSpacingWeight: 0.78,
+    geographyWeight: 0.26,
+    equalSpacingWeight: 0.7,
     iterations: 120,
   });
 }
