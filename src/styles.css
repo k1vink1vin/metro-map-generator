@@ -126,6 +126,24 @@ button {
   line-height: 1.45;
 }
 
+.example-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.example-links a {
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  border-bottom: 1px solid #93c5fd;
+}
+
+.example-links a:hover {
+  border-bottom-color: #1d4ed8;
+}
+
 .import-actions {
   display: flex;
   gap: 8px;
@@ -246,6 +264,15 @@ textarea:focus {
 .toolbar label {
   display: grid;
   gap: 3px;
+}
+
+.ring-selector {
+  min-width: min(430px, 46vw);
+}
+
+.ring-selector select {
+  width: 100%;
+  max-width: 430px;
 }
 
 .toolbar label > span {

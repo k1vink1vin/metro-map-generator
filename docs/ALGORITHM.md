@@ -45,7 +45,9 @@ Every candidate is scored with inspectable metrics:
 - cycle node coverage,
 - minimum route-switch count around the closed cycle.
 
-Route diversity itself is not a requirement and is not rejected: a two-service ring is valid, but excessive route switching is penalized. The selected cycle is regularized to an ellipse while preserving cycle order. Non-ring nodes are assigned inward or outward radial positions according to geography and graph-hop distance from the ring.
+Route diversity itself is not a requirement and is not rejected: a two-service ring is valid, but excessive route switching is penalized.
+
+The detector returns the ranked candidate list to the UI. **No candidate is automatically applied as the ring.** The user selects a candidate; only then is that chosen cycle regularized to an ellipse while preserving cycle order. Non-ring nodes are assigned inward or outward radial positions according to geography and graph-hop distance from the selected ring. The highest-scoring candidate is only a recommendation.
 
 Cycle enumeration is bounded because enumerating all simple cycles can grow exponentially. A future quality pass should add biconnected-component decomposition, minimum/chordless cycle candidates and disjoint-path ring candidates, plus manual ring override.
 

@@ -1,0 +1,25 @@
+lineId,lineName,color,pathId,sequence,stationId
+GREEN,Metro Green,#16a34a,main,1,G01
+GREEN,Metro Green,#16a34a,main,2,G02
+GREEN,Metro Green,#16a34a,main,3,G03
+GREEN,Metro Green,#16a34a,main,4,G04
+GREEN,Metro Green,#16a34a,main,5,G05
+GREEN,Metro Green,#16a34a,main,6,G06
+GREEN,Metro Green,#16a34a,main,7,G07
+GREEN,Metro Green,#16a34a,main,8,G08
+GREEN,Metro Green,#16a34a,branch-west,1,G03
+GREEN,Metro Green,#16a34a,branch-west,2,G04
+GREEN,Metro Green,#16a34a,branch-west,3,G05
+GREEN,Metro Green,#16a34a,branch-west,4,B02
+GREEN,Metro Green,#16a34a,branch-west,5,B01
+RAIL,Regional Rail,#2563eb,main,1,T01
+RAIL,Regional Rail,#2563eb,main,2,T02
+RAIL,Regional Rail,#2563eb,main,3,T03
+RAIL,Regional Rail,#2563eb,main,4,T04
+RAIL,Regional Rail,#2563eb,main,5,T05
+RAIL,Regional Rail,#2563eb,main,6,T06
+ORANGE,Orange Line,#f97316,main,1,B01
+ORANGE,Orange Line,#f97316,main,2,B02
+ORANGE,Orange Line,#f97316,main,3,G05
+ORANGE,Orange Line,#f97316,main,4,G04
+ORANGE,Orange Line,#f97316,main,5,G03

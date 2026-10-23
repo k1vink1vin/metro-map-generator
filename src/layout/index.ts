@@ -4,7 +4,15 @@ import { layoutHexilinear } from './hexilinear';
 import { layoutLondon, layoutTaipei } from './octilinear';
 import { layoutConcentric, layoutMoscow } from './radial';
 
-export function computeLayout(graph: GraphModel, style: StyleId): LayoutResult {
+export interface LayoutOptions {
+  moscowRingCandidateId?: string;
+}
+
+export function computeLayout(
+  graph: GraphModel,
+  style: StyleId,
+  options: LayoutOptions = {},
+): LayoutResult {
   const geographic = projectGeographic(graph);
 
   if (style === 'geographic') {
@@ -40,12 +48,17 @@ export function computeLayout(graph: GraphModel, style: StyleId): LayoutResult {
   }
 
   if (style === 'moscow') {
-    const result = layoutMoscow(graph, geographic);
+    const result = layoutMoscow(
+      graph,
+      geographic,
+      options.moscowRingCandidateId,
+    );
     return {
       style,
       positions: result.positions,
       geographicPositions: geographic,
       primaryRing: result.primaryRing,
+      primaryRingCandidateId: result.primaryRingCandidateId,
       ringCandidates: result.ringCandidates,
     };
   }
