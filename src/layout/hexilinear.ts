@@ -7,8 +7,8 @@ export function layoutHexilinear(
 ): Record<string, Point> {
   return schematizeOnAngularGrid(graph, geographic, {
     angleStep: 60,
-    geographyWeight: 0.24,
-    equalSpacingWeight: 0.56,
+    geographyWeight: 0.34,
+    equalSpacingWeight: 0.5,
     iterations: 110,
   });
 }
