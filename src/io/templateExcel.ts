@@ -1,3 +1,68 @@
+type StationTemplateRow = [
+  string,
+  string,
+  number,
+  number,
+];
+
+function coordinateKey(lat: number, lon: number): string {
+  return `${lat.toFixed(7)}|${lon.toFixed(7)}`;
+}
+
+function buildSampleTransferCache(rows: StationTemplateRow[]) {
+  const counts = new Map<string, number>();
+  const nameCoordinates = new Map<string, Set<string>>();
+
+  for (const [, name, lat, lon] of rows) {
+    const key = coordinateKey(lat, lon);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+
+    const normalizedName = name.normalize('NFKC').trim().toLocaleLowerCase();
+    const coordinates = nameCoordinates.get(normalizedName) ?? new Set<string>();
+    coordinates.add(key);
+    nameCoordinates.set(normalizedName, coordinates);
+  }
+
+  const groupByCoordinate = new Map<string, string>();
+  let groupNumber = 1;
+
+  for (const [, , lat, lon] of rows) {
+    const key = coordinateKey(lat, lon);
+    if ((counts.get(key) ?? 0) <= 1 || groupByCoordinate.has(key)) continue;
+
+    groupByCoordinate.set(
+      key,
+      `XFER_${String(groupNumber).padStart(3, '0')}`,
+    );
+    groupNumber += 1;
+  }
+
+  return rows.map(([, name, lat, lon]) => {
+    const key = coordinateKey(lat, lon);
+    const group = groupByCoordinate.get(key) ?? '';
+    const normalizedName = name.normalize('NFKC').trim().toLocaleLowerCase();
+    const mismatch = (nameCoordinates.get(normalizedName)?.size ?? 0) > 1;
+
+    return {
+      key,
+      count: counts.get(key) ?? 0,
+      transferGroup: group,
+      validation: mismatch
+        ? '錯誤 - 同名站座標不一致'
+        : group
+          ? `正常 - ${group}`
+          : '',
+    };
+  });
+}
+
+function nextRelationshipId(xml: string): string {
+  const ids = [...xml.matchAll(/Id="rId(\d+)"/g)].map((match) =>
+    Number(match[1]),
+  );
+  return `rId${Math.max(0, ...ids) + 1}`;
+}
+
 export async function downloadExcelTemplate() {
   const [{ default: JSZip }, ExcelJS] = await Promise.all([
     import('jszip'),
@@ -8,6 +73,7 @@ export async function downloadExcelTemplate() {
   workbook.creator = 'Metro Map Generator';
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
+  workbook.calcProperties.forceFullCalc = true;
 
   const stations = workbook.addWorksheet('車站');
   stations.columns = [
@@ -15,11 +81,15 @@ export async function downloadExcelTemplate() {
     { header: '車站名稱', key: 'name', width: 24 },
     { header: '緯度', key: 'lat', width: 14 },
     { header: '經度', key: 'lon', width: 14 },
-    { header: '轉乘群組', key: 'transferGroup', width: 24 },
+    { header: '轉乘群組', key: 'transferGroup', width: 18 },
     { header: '轉乘驗證', key: 'transferValidation', width: 30 },
+    { header: '_CoordinateKey', key: '_coordinateKey', width: 18 },
+    { header: '_CoordinateCount', key: '_coordinateCount', width: 14 },
+    { header: '_GroupStart', key: '_groupStart', width: 12 },
+    { header: '_GroupNumber', key: '_groupNumber', width: 12 },
   ];
 
-  const stationRows = [
+  const stationRows: StationTemplateRow[] = [
     ['G01', '北機廠', 24.205, 120.707],
     ['G02', '北區', 24.19, 120.699],
     ['G03', '松竹', 24.181, 120.698],
@@ -34,25 +104,66 @@ export async function downloadExcelTemplate() {
   ];
 
   stationRows.forEach((row) => stations.addRow(row));
+  const sampleCache = buildSampleTransferCache(stationRows);
 
-  // A-D are user input. E-F are system-generated formula columns.
+  // G:J are hidden helper columns so XFER numbering works in older Excel
+  // versions without LET / FILTER / UNIQUE / XMATCH.
+  stations.getColumn(7).hidden = true;
+  stations.getColumn(8).hidden = true;
+  stations.getColumn(9).hidden = true;
+  stations.getColumn(10).hidden = true;
+
   for (let row = 2; row <= 500; row += 1) {
+    const cache = sampleCache[row - 2];
+
+    stations.getCell(row, 7).value = {
+      formula:
+        `IF(OR(C${row}="",D${row}=""),"",TEXT(C${row},"0.0000000")&"|"&TEXT(D${row},"0.0000000"))`,
+      result: cache?.key ?? '',
+    };
+
+    stations.getCell(row, 8).value = {
+      formula:
+        `IF(G${row}="","",COUNTIF($G$2:$G$500,G${row}))`,
+      result: cache?.count ?? '',
+    };
+
+    stations.getCell(row, 9).value = {
+      formula:
+        `IF(AND(H${row}>1,COUNTIF($G$2:G${row},G${row})=1),1,0)`,
+      result:
+        cache && cache.count > 1
+          ? sampleCache
+              .slice(0, row - 2)
+              .some((entry) => entry.key === cache.key)
+            ? 0
+            : 1
+          : 0,
+    };
+
+    const groupStartsBeforeOrAtRow = sampleCache
+      .slice(0, Math.max(0, row - 1))
+      .filter(
+        (entry, index, all) =>
+          entry.count > 1 &&
+          all.findIndex((candidate) => candidate.key === entry.key) === index,
+      ).length;
+
+    stations.getCell(row, 10).value = {
+      formula: `SUM($I$2:I${row})`,
+      result: cache ? groupStartsBeforeOrAtRow : 0,
+    };
+
     stations.getCell(row, 5).value = {
       formula:
-        `IF(OR(C${row}="",D${row}=""),"",LET(` +
-        `k,TEXT(C${row},"0.0000000")&"|"&TEXT(D${row},"0.0000000"),` +
-        `all,TEXT($C$2:$C$500,"0.0000000")&"|"&TEXT($D$2:$D$500,"0.0000000"),` +
-        `u,IFERROR(SORT(FILTER(UNIQUE(all),(UNIQUE(all)<>"|")*(COUNTIF(all,UNIQUE(all))>1))),""),` +
-        `IF(COUNTIF(all,k)>1,"XFER_"&TEXT(XMATCH(k,u),"000"),"")))`,
+        `IF(H${row}<2,"","XFER_"&TEXT(INDEX($J$2:$J$500,MATCH(G${row},$G$2:$G$500,0)),"000"))`,
+      result: cache?.transferGroup ?? '',
     };
 
     stations.getCell(row, 6).value = {
       formula:
-        `IF(B${row}="","",IF(COUNTIF($B$2:$B$500,B${row})<=1,` +
-        `IF(E${row}="","","正常 - 轉乘群組已建立"),` +
-        `IF(COUNTIFS($B$2:$B$500,B${row},$C$2:$C$500,C${row},` +
-        `$D$2:$D$500,D${row})=COUNTIF($B$2:$B$500,B${row}),` +
-        `"正常 - 座標一致","錯誤 - 同名站座標不一致")))`,
+        `IF(B${row}="","",IF(COUNTIF($B$2:$B$500,B${row})>COUNTIFS($B$2:$B$500,B${row},$C$2:$C$500,C${row},$D$2:$D$500,D${row}),"錯誤 - 同名站座標不一致",IF(E${row}<>"","正常 - "&E${row},"")))`,
+      result: cache?.validation ?? '',
     };
   }
 
@@ -69,7 +180,6 @@ export async function downloadExcelTemplate() {
   stations.getColumn(3).numFmt = '0.000000';
   stations.getColumn(4).numFmt = '0.000000';
 
-  // Distinguish system-generated columns.
   for (let row = 2; row <= 500; row += 1) {
     stations.getCell(row, 5).fill = {
       type: 'pattern',
@@ -121,18 +231,18 @@ export async function downloadExcelTemplate() {
   const notes = workbook.addWorksheet('說明');
   [
     'Metro Map Generator - 中文 XLSM 輸入範本',
-    '「車站」工作表 A-D 欄是使用者輸入欄位；E-F 欄由公式自動完成。',
-    '同一個實體轉乘站請重複列出，每條路線保留自己的車站編號。',
-    '例如 G05 / B03 都叫「市政府」，且經緯度必須完全一致。',
-    '「轉乘群組」：相同經緯度出現 2 個以上 Station ID 時，自動產生 XFER_001 / XFER_002...。',
-    '「轉乘驗證」：同名站若使用不同經緯度會顯示「錯誤」；轉乘 ID 不依賴站名。',
-    '網站 topology 優先使用 XFER ID；改站名不會破壞既有轉乘關係。',
-    '「路線」工作表使用 路線編號 / 路徑編號 / 順序 / 車站編號 描述主線與 Y 型支線。',
+    '「車站」工作表 A-D 欄是使用者輸入欄位；E-F 欄會自動完成。',
+    '相同經緯度出現 2 個以上不同 Station ID 時，E 欄會自動產生 XFER_001 / XFER_002...。',
+    'XFER 編號依轉乘群組第一次出現的順序產生，與站名無關。',
+    '同名站若使用不同經緯度，F 欄會顯示錯誤。',
+    '此 XLSM 已內建 VBA：開啟並允許巨集後會自動重新完成轉乘群組與驗證。',
+    '若資料修改後想立即重跑，也可從 Excel 巨集清單執行 CompleteTransfersAndValidate。',
+    '「路線」工作表仍使用各路線自己的車站編號。',
+    '網站 topology 優先使用 XFER ID，因此改站名不會破壞已建立的轉乘關係。',
     '網站同時相容英文工作表 Stations / Lines 與英文欄位名稱。',
-    '此檔案直接下載為 .xlsm，可繼續加入 VBA；另提供 ValidateTransfers.bas。',
   ].forEach((text) => notes.addRow([text]));
 
-  notes.getColumn(1).width = 100;
+  notes.getColumn(1).width = 105;
   notes.getRow(1).font = {
     bold: true,
     color: { argb: 'FFFFFFFF' },
@@ -144,24 +254,69 @@ export async function downloadExcelTemplate() {
     fgColor: { argb: 'FF111827' },
   };
 
-  // ExcelJS generates an XLSX package. Convert the workbook main content type
-  // to macro-enabled OOXML so the download is a .xlsm container.
   const xlsxBuffer = await workbook.xlsx.writeBuffer();
   const zip = await JSZip.loadAsync(xlsxBuffer);
-  const contentTypesFile = zip.file('[Content_Types].xml');
 
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const vbaResponse = await fetch(
+    `${baseUrl}examples/vbaProject.bin`,
+    { cache: 'no-store' },
+  );
+
+  if (!vbaResponse.ok) {
+    throw new Error(
+      '內建 VBA 專案尚未部署完成，請重新整理頁面後再下載 XLSM 範本。',
+    );
+  }
+
+  const vbaProject = await vbaResponse.arrayBuffer();
+  if (vbaProject.byteLength < 1024) {
+    throw new Error('內建 VBA 專案檔案無效。');
+  }
+
+  zip.file('xl/vbaProject.bin', vbaProject);
+
+  const contentTypesFile = zip.file('[Content_Types].xml');
   if (!contentTypesFile) {
     throw new Error('Excel 範本缺少 [Content_Types].xml。');
   }
 
-  const contentTypes = await contentTypesFile.async('string');
-  zip.file(
-    '[Content_Types].xml',
-    contentTypes.replace(
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml',
-      'application/vnd.ms-excel.sheet.macroEnabled.main+xml',
-    ),
+  let contentTypes = await contentTypesFile.async('string');
+  contentTypes = contentTypes.replace(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml',
+    'application/vnd.ms-excel.sheet.macroEnabled.main+xml',
   );
+
+  if (!contentTypes.includes('/xl/vbaProject.bin')) {
+    contentTypes = contentTypes.replace(
+      '</Types>',
+      '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>',
+    );
+  }
+  zip.file('[Content_Types].xml', contentTypes);
+
+  const workbookRelsFile = zip.file('xl/_rels/workbook.xml.rels');
+  if (!workbookRelsFile) {
+    throw new Error('Excel 範本缺少 workbook relationships。');
+  }
+
+  let workbookRels = await workbookRelsFile.async('string');
+  if (
+    !workbookRels.includes(
+      'http://schemas.microsoft.com/office/2006/relationships/vbaProject',
+    )
+  ) {
+    const relationshipId = nextRelationshipId(workbookRels);
+    workbookRels = workbookRels.replace(
+      '</Relationships>',
+      `<Relationship Id="${relationshipId}" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/></Relationships>`,
+    );
+  }
+  zip.file('xl/_rels/workbook.xml.rels', workbookRels);
+
+  if (!zip.file('xl/vbaProject.bin')) {
+    throw new Error('VBA 專案沒有成功嵌入 XLSM。');
+  }
 
   const xlsmBlob = await zip.generateAsync({
     type: 'blob',
