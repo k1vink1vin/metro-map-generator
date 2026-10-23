@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import type { Worksheet } from 'exceljs';
 import type { NetworkInput, Station, TransitLine } from '../types';
 
 type RecordRow = Record<string, string>;
@@ -164,7 +164,7 @@ export function parseLinesCsv(text: string): TransitLine[] {
   return lineRecordsToLines(rowsToRecords(parseCsv(text)));
 }
 
-function worksheetToRows(worksheet: ExcelJS.Worksheet): string[][] {
+function worksheetToRows(worksheet: Worksheet): string[][] {
   const rows: string[][] = [];
   worksheet.eachRow({ includeEmpty: false }, (row) => {
     const values: string[] = [];
@@ -177,6 +177,7 @@ function worksheetToRows(worksheet: ExcelJS.Worksheet): string[][] {
 }
 
 export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
+  const ExcelJS = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const data = new Uint8Array(await file.arrayBuffer());
   await workbook.xlsx.load(data as never);
