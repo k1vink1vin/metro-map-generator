@@ -256,8 +256,6 @@ export async function downloadExcelTemplate() {
     pattern: 'solid',
     fgColor: { argb: 'FF7C3AED' },
   };
-  rings.getColumn(1).dataValidation = undefined;
-
   const notes = workbook.addWorksheet('說明');
   [
     'Metro Map Generator - 中文 XLSM 輸入範本',
