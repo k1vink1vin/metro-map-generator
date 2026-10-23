@@ -264,6 +264,81 @@ function angularError(
 }
 
 
+function routeBendQuality(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+) {
+  let sharpTurns = 0;
+  let zigzags = 0;
+  let selfCrossings = 0;
+  const sharpDetails: Array<{
+    line: string;
+    path: string;
+    station: string;
+    angle: number;
+  }> = [];
+
+  for (const line of graph.lines) {
+    line.paths.forEach((path, pathIndex) => {
+      const turns: number[] = [];
+      for (let index = 1; index < path.length - 1; index += 1) {
+        const turn = signedTurn(
+          positions[path[index - 1]],
+          positions[path[index]],
+          positions[path[index + 1]],
+        );
+        turns.push(turn);
+        const degrees = Math.abs((turn * 180) / Math.PI);
+        if (degrees > 100) {
+          sharpTurns += 1;
+          sharpDetails.push({
+            line: line.id,
+            path: line.pathIds?.[pathIndex] ?? String(pathIndex),
+            station:
+              graph.nodeById.get(path[index])?.name ?? path[index],
+            angle: degrees,
+          });
+        }
+      }
+
+      for (let index = 0; index < turns.length - 1; index += 1) {
+        const first = turns[index];
+        const second = turns[index + 1];
+        const strong =
+          Math.abs(first) > (24 * Math.PI) / 180 &&
+          Math.abs(second) > (24 * Math.PI) / 180;
+        if (strong && Math.sign(first) !== Math.sign(second)) {
+          zigzags += 1;
+        }
+      }
+
+      for (let first = 0; first < path.length - 1; first += 1) {
+        for (let second = first + 2; second < path.length - 1; second += 1) {
+          if (
+            properIntersection(
+              positions[path[first]],
+              positions[path[first + 1]],
+              positions[path[second]],
+              positions[path[second + 1]],
+            )
+          ) {
+            selfCrossings += 1;
+          }
+        }
+      }
+    });
+  }
+
+  return {
+    sharpTurns,
+    zigzags,
+    selfCrossings,
+    sharpDetails: sharpDetails
+      .sort((a, b) => b.angle - a.angle)
+      .slice(0, 16),
+  };
+}
+
 function signedTurn(a: Point, b: Point, c: Point): number {
   const first = Math.atan2(b.y - a.y, b.x - a.x);
   const second = Math.atan2(c.y - b.y, c.x - b.x);
@@ -453,6 +528,7 @@ function metrics(
         ? 45
         : undefined;
   const angleError = angularError(graph, positions, angleStep);
+  const bendQuality = routeBendQuality(graph, positions);
 
   const xs = Object.values(positions).map((point) => point.x);
   const ys = Object.values(positions).map((point) => point.y);
@@ -500,6 +576,10 @@ function metrics(
     shortEdges,
     crossings,
     angleError,
+    sharpTurns: bendQuality.sharpTurns,
+    zigzags: bendQuality.zigzags,
+    selfCrossings: bendQuality.selfCrossings,
+    sharpDetails: bendQuality.sharpDetails,
     doglegs,
     doglegDetails,
     terminalHooks,
@@ -543,6 +623,9 @@ console.table(
     shortEdges: result.shortEdges,
     crossings: result.crossings,
     angleError: result.angleError.toFixed(1),
+    sharpTurns: result.sharpTurns,
+    zigzags: result.zigzags,
+    selfX: result.selfCrossings,
     doglegs: result.doglegs,
     terminalHooks: result.terminalHooks,
     north: (result.northOrder * 100).toFixed(1) + '%',
@@ -567,6 +650,18 @@ for (const result of results) {
   console.log(`\n[${result.style}] QA diagnostics`);
   if (result.crossingList.length) {
     console.log('crossings:', result.crossingList.slice(0, 12));
+  }
+  if (
+    result.sharpTurns ||
+    result.zigzags ||
+    result.selfCrossings
+  ) {
+    console.log('bend quality:', {
+      sharpTurns: result.sharpTurns,
+      zigzags: result.zigzags,
+      selfCrossings: result.selfCrossings,
+      worst: result.sharpDetails.slice(0, 8),
+    });
   }
   if (result.closePairList.length) {
     console.log(
