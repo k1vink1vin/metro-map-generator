@@ -444,13 +444,33 @@ select {
 }
 
 .station-code-prefix,
-.station-code-number {
+.station-code-number,
+.station-code-suffix {
   fill: #111827;
   stroke: none;
   font-family: Arial, "Noto Sans TC", sans-serif;
   font-weight: 900;
   dominant-baseline: alphabetic;
   pointer-events: none;
+}
+
+.osaka-code-badge {
+  stroke: #ffffff;
+}
+
+.osaka-code-prefix,
+.osaka-code-number,
+.osaka-code-suffix {
+  fill: #ffffff;
+  stroke: none;
+  font-family: Arial, "Noto Sans TC", sans-serif;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.osaka-transfer-shell {
+  fill: #ffffff;
+  stroke: #4b5563;
 }
 
 .moscow-station,
