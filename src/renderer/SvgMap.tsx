@@ -19,10 +19,220 @@ interface RenderedRoutePath {
   d: string;
 }
 
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface LabelPlacement {
+  nodeId: string;
+  text: string;
+  x: number;
+  y: number;
+  textAnchor: 'start' | 'middle' | 'end';
+  rect: Rect;
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return !(
+    a.x + a.width <= b.x ||
+    b.x + b.width <= a.x ||
+    a.y + a.height <= b.y ||
+    b.y + b.height <= a.y
+  );
+}
+
+function overlapArea(a: Rect, b: Rect): number {
+  if (!intersects(a, b)) return 0;
+  const width =
+    Math.min(a.x + a.width, b.x + b.width) -
+    Math.max(a.x, b.x);
+  const height =
+    Math.min(a.y + a.height, b.y + b.height) -
+    Math.max(a.y, b.y);
+  return Math.max(0, width) * Math.max(0, height);
+}
+
+function padded(rect: Rect, amount: number): Rect {
+  return {
+    x: rect.x - amount,
+    y: rect.y - amount,
+    width: rect.width + amount * 2,
+    height: rect.height + amount * 2,
+  };
+}
+
+function estimateTextWidth(text: string): number {
+  return Math.max(
+    18,
+    Array.from(text).reduce((sum, character) => {
+      if (/^[\x00-\x7F]$/.test(character)) {
+        return sum + 7;
+      }
+      return sum + 12.5;
+    }, 0),
+  );
+}
+
+function labelRect(
+  x: number,
+  y: number,
+  width: number,
+  textAnchor: LabelPlacement['textAnchor'],
+): Rect {
+  const left =
+    textAnchor === 'start'
+      ? x
+      : textAnchor === 'end'
+        ? x - width
+        : x - width / 2;
+
+  return {
+    x: left,
+    y: y - 13,
+    width,
+    height: 16,
+  };
+}
+
+function buildLabelPlacements(
+  graph: GraphModel,
+  layout: LayoutResult,
+): LabelPlacement[] {
+  const nodeObstacles = graph.nodes.map((node) => {
+    const point = layout.positions[node.id];
+    const degree = nodeDegree(graph, node.id);
+    const radius =
+      node.stationIds.length > 1 || degree > 2 ? 15 : 10;
+
+    return {
+      nodeId: node.id,
+      rect: {
+        x: point.x - radius,
+        y: point.y - radius,
+        width: radius * 2,
+        height: radius * 2,
+      },
+    };
+  });
+
+  const orderedNodes = [...graph.nodes].sort((a, b) => {
+    const aDegree = nodeDegree(graph, a.id);
+    const bDegree = nodeDegree(graph, b.id);
+    const aPriority =
+      a.stationIds.length > 1 || aDegree > 2
+        ? 3
+        : aDegree <= 1
+          ? 2
+          : 1;
+    const bPriority =
+      b.stationIds.length > 1 || bDegree > 2
+        ? 3
+        : bDegree <= 1
+          ? 2
+          : 1;
+
+    if (aPriority !== bPriority) return bPriority - aPriority;
+
+    const aPoint = layout.positions[a.id];
+    const bPoint = layout.positions[b.id];
+    return aPoint.y - bPoint.y || aPoint.x - bPoint.x;
+  });
+
+  const placements: LabelPlacement[] = [];
+  const occupied: Rect[] = [];
+
+  for (const node of orderedNodes) {
+    const point = layout.positions[node.id];
+    const text = node.name || node.id;
+    const width = estimateTextWidth(text);
+
+    const candidates: Array<{
+      x: number;
+      y: number;
+      anchor: LabelPlacement['textAnchor'];
+      distancePenalty: number;
+    }> = [
+      { x: point.x + 14, y: point.y - 10, anchor: 'start', distancePenalty: 0 },
+      { x: point.x + 14, y: point.y + 21, anchor: 'start', distancePenalty: 1 },
+      { x: point.x - 14, y: point.y - 10, anchor: 'end', distancePenalty: 1 },
+      { x: point.x - 14, y: point.y + 21, anchor: 'end', distancePenalty: 2 },
+      { x: point.x, y: point.y - 20, anchor: 'middle', distancePenalty: 2 },
+      { x: point.x, y: point.y + 31, anchor: 'middle', distancePenalty: 3 },
+      { x: point.x + 25, y: point.y - 22, anchor: 'start', distancePenalty: 4 },
+      { x: point.x - 25, y: point.y - 22, anchor: 'end', distancePenalty: 4 },
+      { x: point.x + 25, y: point.y + 31, anchor: 'start', distancePenalty: 5 },
+      { x: point.x - 25, y: point.y + 31, anchor: 'end', distancePenalty: 5 },
+    ];
+
+    let best:
+      | {
+          placement: LabelPlacement;
+          score: number;
+        }
+      | undefined;
+
+    for (const candidate of candidates) {
+      const rect = labelRect(
+        candidate.x,
+        candidate.y,
+        width,
+        candidate.anchor,
+      );
+      const paddedRect = padded(rect, 3);
+
+      let labelOverlap = 0;
+      for (const used of occupied) {
+        labelOverlap += overlapArea(paddedRect, used);
+      }
+
+      let stationOverlap = 0;
+      for (const obstacle of nodeObstacles) {
+        if (obstacle.nodeId === node.id) continue;
+        stationOverlap += overlapArea(
+          paddedRect,
+          padded(obstacle.rect, 2),
+        );
+      }
+
+      const score =
+        labelOverlap * 20 +
+        stationOverlap * 8 +
+        candidate.distancePenalty * 12;
+
+      const placement: LabelPlacement = {
+        nodeId: node.id,
+        text,
+        x: candidate.x,
+        y: candidate.y,
+        textAnchor: candidate.anchor,
+        rect,
+      };
+
+      if (!best || score < best.score) {
+        best = { placement, score };
+      }
+
+      if (score === candidate.distancePenalty * 12) {
+        break;
+      }
+    }
+
+    if (!best) continue;
+    placements.push(best.placement);
+    occupied.push(padded(best.placement.rect, 3));
+  }
+
+  return placements;
+}
+
 function renderBounds(
   graph: GraphModel,
   layout: LayoutResult,
   routePaths: RenderedRoutePath[],
+  labels: LabelPlacement[],
 ) {
   const points: Point[] = [
     ...graph.nodes.map((node) => layout.positions[node.id]),
@@ -39,10 +249,36 @@ function renderBounds(
   }
 
   const padding = 76;
-  const minX = Math.min(...points.map((point) => point.x)) - padding;
-  const maxX = Math.max(...points.map((point) => point.x)) + padding;
-  const minY = Math.min(...points.map((point) => point.y)) - padding;
-  const maxY = Math.max(...points.map((point) => point.y)) + padding;
+  const minPointX = Math.min(...points.map((point) => point.x));
+  const maxPointX = Math.max(...points.map((point) => point.x));
+  const minPointY = Math.min(...points.map((point) => point.y));
+  const maxPointY = Math.max(...points.map((point) => point.y));
+
+  const minLabelX = labels.length
+    ? Math.min(...labels.map((label) => label.rect.x))
+    : minPointX;
+  const maxLabelX = labels.length
+    ? Math.max(
+        ...labels.map(
+          (label) => label.rect.x + label.rect.width,
+        ),
+      )
+    : maxPointX;
+  const minLabelY = labels.length
+    ? Math.min(...labels.map((label) => label.rect.y))
+    : minPointY;
+  const maxLabelY = labels.length
+    ? Math.max(
+        ...labels.map(
+          (label) => label.rect.y + label.rect.height,
+        ),
+      )
+    : maxPointY;
+
+  const minX = Math.min(minPointX, minLabelX) - padding;
+  const maxX = Math.max(maxPointX, maxLabelX) + padding;
+  const minY = Math.min(minPointY, minLabelY) - padding;
+  const maxY = Math.max(maxPointY, maxLabelY) + padding;
 
   return {
     x: minX,
@@ -80,7 +316,13 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
     }),
   );
 
-  const bounds = renderBounds(graph, layout, routePaths);
+  const labelPlacements = buildLabelPlacements(graph, layout);
+  const bounds = renderBounds(
+    graph,
+    layout,
+    routePaths,
+    labelPlacements,
+  );
 
   return (
     <svg
@@ -143,7 +385,7 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
                   d={routePath.d}
                   fill="none"
                   stroke={routePath.lineColor}
-                  strokeWidth={10}
+                  strokeWidth={8}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -188,19 +430,17 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
       </g>
 
       <g id="labels">
-        {graph.nodes.map((node) => {
-          const point = layout.positions[node.id];
-          return (
-            <text
-              key={node.id}
-              x={point.x + 13}
-              y={point.y - 11}
-              className="station-label"
-            >
-              {node.name}
-            </text>
-          );
-        })}
+        {labelPlacements.map((label) => (
+          <text
+            key={label.nodeId}
+            x={label.x}
+            y={label.y}
+            textAnchor={label.textAnchor}
+            className="station-label"
+          >
+            {label.text}
+          </text>
+        ))}
       </g>
     </svg>
   );
