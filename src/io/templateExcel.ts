@@ -73,7 +73,6 @@ export async function downloadExcelTemplate() {
   workbook.creator = 'Metro Map Generator';
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  workbook.calcProperties.forceFullCalc = true;
 
   const stations = workbook.addWorksheet('車站');
   stations.columns = [
@@ -257,11 +256,13 @@ export async function downloadExcelTemplate() {
   const xlsxBuffer = await workbook.xlsx.writeBuffer();
   const zip = await JSZip.loadAsync(xlsxBuffer);
 
-  const baseUrl = import.meta.env.BASE_URL || '/';
-  const vbaResponse = await fetch(
-    `${baseUrl}examples/vbaProject.bin`,
-    { cache: 'no-store' },
+  const vbaProjectUrl = new URL(
+    'examples/vbaProject.bin',
+    document.baseURI,
   );
+  const vbaResponse = await fetch(vbaProjectUrl, {
+    cache: 'no-store',
+  });
 
   if (!vbaResponse.ok) {
     throw new Error(
