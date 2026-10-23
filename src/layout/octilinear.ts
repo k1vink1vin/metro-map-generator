@@ -2,6 +2,7 @@ import type { GraphModel, Point } from '../types';
 import {
   inflateCentralArea,
   regularizeRouteCorridors,
+  relaxPathKinks,
   schematizeOnAngularGrid,
 } from './common';
 
@@ -25,7 +26,7 @@ export function layoutTaipei(
     iterations: 90,
   });
 
-  return regularizeRouteCorridors(
+  const corridors = regularizeRouteCorridors(
     graph,
     snapped,
     geographic,
@@ -37,6 +38,15 @@ export function layoutTaipei(
       equalSpacingWeight: 0.48,
     },
   );
+
+  return relaxPathKinks(graph, corridors, geographic, {
+    passes: 7,
+    ordinaryBlend: 0.56,
+    structuralBlend: 0.16,
+    geographyTether: 0.12,
+    maxShift: 20,
+    thresholdDegrees: 78,
+  });
 }
 
 /**
@@ -64,7 +74,7 @@ export function layoutLondon(
     },
   );
 
-  return regularizeRouteCorridors(
+  const corridors = regularizeRouteCorridors(
     graph,
     snapped,
     schematicReference,
@@ -74,6 +84,20 @@ export function layoutLondon(
       runBlend: 0.9,
       geographyTether: 0.04,
       equalSpacingWeight: 0.84,
+    },
+  );
+
+  return relaxPathKinks(
+    graph,
+    corridors,
+    schematicReference,
+    {
+      passes: 9,
+      ordinaryBlend: 0.62,
+      structuralBlend: 0.22,
+      geographyTether: 0.025,
+      maxShift: 24,
+      thresholdDegrees: 72,
     },
   );
 }
