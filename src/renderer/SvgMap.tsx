@@ -385,7 +385,7 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
                   d={routePath.d}
                   fill="none"
                   stroke={routePath.lineColor}
-                  strokeWidth={10}
+                  strokeWidth={8}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
