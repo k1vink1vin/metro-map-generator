@@ -1,5 +1,6 @@
 import type { GraphModel, Point } from '../types';
 import {
+  regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
   schematizeOnAngularGrid,
@@ -24,7 +25,21 @@ export function layoutHexilinear(
     iterations: 115,
   });
 
-  const relaxed = relaxPathKinksSafely(graph, snapped, {
+  const corridors = regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 60,
+      passes: 4,
+      runBlend: 0.52,
+      geographyTether: 0.17,
+      equalSpacingWeight: 0.58,
+      bendAnchorDegrees: 44,
+    },
+  );
+
+  const relaxed = relaxPathKinksSafely(graph, corridors, {
     passes: 7,
     thresholdDegrees: 90,
     minimumNodeDistance: 29,
