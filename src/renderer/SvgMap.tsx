@@ -94,6 +94,15 @@ function stationBadgeWidth(
   return (baseWidth + (suffix ? 5 : 0)) * visualScale;
 }
 
+function osakaBadgeWidth(
+  stationId: string,
+  visualScale: number,
+): number {
+  const code = parseStationCode(stationId);
+  const compact = `${code.prefix}${code.number}${code.suffix}`;
+  return Math.max(31, 13 + compact.length * 6.3) * visualScale;
+}
+
 function nodeLineColors(graph: GraphModel, nodeId: string): string[] {
   const colors: string[] = [];
   for (const line of graph.lines) {
@@ -175,7 +184,7 @@ function stationMarkerRadius(
     const totalWidth =
       ids.reduce(
         (sum, stationId) =>
-          sum + stationBadgeWidth(16, stationId, 1),
+          sum + stationBadgeWidth(17, stationId, 1),
         0,
       ) +
       Math.max(0, ids.length - 1) * 2;
@@ -186,14 +195,15 @@ function stationMarkerRadius(
 
   if (stationStyle === 'osaka') {
     const ids = node.stationIds.length ? node.stationIds : [node.id];
-    const totalWidth =
-      ids.reduce(
-        (sum, stationId) =>
-          sum + stationBadgeWidth(24, stationId, 1),
-        0,
-      ) +
-      Math.max(0, ids.length - 1) * 2;
-    return Math.max(15, totalWidth / 2 + (isInterchange ? 3 : 0));
+    const maxWidth = Math.max(
+      ...ids.map((stationId) => osakaBadgeWidth(stationId, 1)),
+    );
+    const totalHeight = ids.length * 18 + Math.max(0, ids.length - 1) * 2;
+    return Math.max(
+      16,
+      maxWidth / 2 + (isInterchange ? 3 : 0),
+      totalHeight / 2 + (isInterchange ? 3 : 0),
+    );
   }
 
   return isInterchange ? 12 : 7;
@@ -291,10 +301,10 @@ function renderTaipeiStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const badgeHeight = 24 * visualScale;
+  const badgeHeight = 25 * visualScale;
   const gap = 2 * visualScale;
   const widths = ids.map((stationId) =>
-    stationBadgeWidth(16, stationId, visualScale),
+    stationBadgeWidth(17, stationId, visualScale),
   );
   const totalWidth =
     widths.reduce((sum, width) => sum + width, 0) +
@@ -323,6 +333,7 @@ function renderTaipeiStation(
           startX +
           widths.slice(0, index).reduce((sum, value) => sum + value, 0) +
           index * gap;
+        const lowerCode = `${code.number}${code.suffix}`;
 
         return (
           <g key={stationId}>
@@ -340,33 +351,27 @@ function renderTaipeiStation(
             />
             <text
               x={x + badgeWidth / 2}
-              y={-2.5 * visualScale}
+              y={-2.7 * visualScale}
               textAnchor="middle"
               className="station-code-prefix"
-              style={{ fontSize: 6.4 * visualScale }}
+              style={{ fontSize: 6.5 * visualScale }}
             >
               {code.prefix}
             </text>
             <text
-              x={x + badgeWidth / 2 - (code.suffix ? 1.2 * visualScale : 0)}
-              y={8.5 * visualScale}
+              x={x + badgeWidth / 2}
+              y={8.2 * visualScale}
               textAnchor="middle"
-              className="station-code-number"
-              style={{ fontSize: 7.8 * visualScale }}
+              className="station-code-number taipei-station-code-number"
+              data-station-code={`${code.prefix}${lowerCode}`}
+              style={{
+                fontSize:
+                  (code.suffix ? 6.9 : 7.9) * visualScale,
+                letterSpacing: code.suffix ? -0.45 * visualScale : 0,
+              }}
             >
-              {code.number}
+              {lowerCode}
             </text>
-            {code.suffix ? (
-              <text
-                x={x + badgeWidth - 3.6 * visualScale}
-                y={7.2 * visualScale}
-                textAnchor="middle"
-                className="station-code-suffix"
-                style={{ fontSize: 5.2 * visualScale, fontWeight: 900 }}
-              >
-                {code.suffix}
-              </text>
-            ) : null}
           </g>
         );
       })}
@@ -380,26 +385,26 @@ function renderOsakaStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const badgeHeight = 29 * visualScale;
+  const badgeHeight = 18 * visualScale;
   const gap = 2 * visualScale;
   const widths = ids.map((stationId) =>
-    stationBadgeWidth(24, stationId, visualScale),
+    osakaBadgeWidth(stationId, visualScale),
   );
-  const totalWidth =
-    widths.reduce((sum, width) => sum + width, 0) +
-    (ids.length - 1) * gap;
-  const startX = -totalWidth / 2;
+  const maxWidth = Math.max(...widths);
+  const totalHeight =
+    ids.length * badgeHeight + Math.max(0, ids.length - 1) * gap;
+  const startY = -totalHeight / 2;
   const isInterchange = isInterchangeNode(graph, node);
 
   return (
     <g className="station-style-osaka">
       {isInterchange ? (
         <rect
-          x={startX - 3 * visualScale}
-          y={-badgeHeight / 2 - 3 * visualScale}
-          width={totalWidth + 6 * visualScale}
-          height={badgeHeight + 6 * visualScale}
-          rx={2.5 * visualScale}
+          x={-maxWidth / 2 - 3 * visualScale}
+          y={startY - 3 * visualScale}
+          width={maxWidth + 6 * visualScale}
+          height={totalHeight + 6 * visualScale}
+          rx={2.2 * visualScale}
           className="osaka-transfer-shell"
           style={{ strokeWidth: 1.6 * visualScale }}
         />
@@ -407,55 +412,38 @@ function renderOsakaStation(
       {ids.map((stationId, index) => {
         const color = stationCodeColor(graph, node.id, stationId);
         const code = parseStationCode(stationId);
+        const compactCode = `${code.prefix}${code.number}${code.suffix}`;
         const width = widths[index];
-        const x =
-          startX +
-          widths.slice(0, index).reduce((sum, value) => sum + value, 0) +
-          index * gap;
+        const x = -width / 2;
+        const y = startY + index * (badgeHeight + gap);
 
         return (
           <g key={stationId}>
             <rect
               x={x}
-              y={-badgeHeight / 2}
+              y={y}
               width={width}
               height={badgeHeight}
-              rx={1.4 * visualScale}
+              rx={1.2 * visualScale}
               className="osaka-code-badge"
               style={{
                 fill: color,
-                strokeWidth: 1.4 * visualScale,
+                strokeWidth: 1.2 * visualScale,
               }}
             />
             <text
-              x={x + width / 2}
-              y={-2.5 * visualScale}
+              x={0}
+              y={y + 12.4 * visualScale}
               textAnchor="middle"
-              className="osaka-code-prefix"
-              style={{ fontSize: 7.5 * visualScale }}
+              className="osaka-code-text"
+              data-station-code={compactCode}
+              style={{
+                fontSize:
+                  (compactCode.length >= 4 ? 9 : 10.2) * visualScale,
+              }}
             >
-              {code.prefix}
+              {compactCode}
             </text>
-            <text
-              x={x + width / 2 - (code.suffix ? 1.5 * visualScale : 0)}
-              y={9 * visualScale}
-              textAnchor="middle"
-              className="osaka-code-number"
-              style={{ fontSize: 10.2 * visualScale }}
-            >
-              {code.number}
-            </text>
-            {code.suffix ? (
-              <text
-                x={x + width - 4.3 * visualScale}
-                y={7.2 * visualScale}
-                textAnchor="middle"
-                className="osaka-code-suffix"
-                style={{ fontSize: 5.8 * visualScale }}
-              >
-                {code.suffix}
-              </text>
-            ) : null}
           </g>
         );
       })}
