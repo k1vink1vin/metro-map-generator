@@ -25,6 +25,7 @@ const styles: StyleId[] = [
 
 const css = `
 .map-background{fill:#fff}
+.concentric-guide{fill:none;stroke:#dbe4ee;stroke-width:1.2;stroke-dasharray:5 9}
 .ring-guide{display:none}
 .station{stroke:#111827}
 .station-normal{fill:#fff;stroke-width:2.5}
