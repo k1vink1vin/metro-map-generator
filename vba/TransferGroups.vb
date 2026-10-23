@@ -299,6 +299,7 @@ Private Sub ValidateMoscowRingsCore(ByVal showMessage As Boolean)
     Dim currentNode As String
     Dim nextNode As String
     Dim ringKey As Variant
+    Dim nodeKey As Variant
     Dim ringData As Object
     Dim maxSeq As Long
     Dim i As Long
@@ -444,18 +445,18 @@ Private Sub ValidateMoscowRingsCore(ByVal showMessage As Boolean)
         End If
 
         If Left$(statusText, 2) = "OK" Then
-            For Each ringKey In localNodes.Keys
-                If usedNodes.Exists(CStr(ringKey)) Then
+            For Each nodeKey In localNodes.Keys
+                If usedNodes.Exists(CStr(nodeKey)) Then
                     statusText = "ERROR - Rings cannot share topology nodes"
                     Exit For
                 End If
-            Next ringKey
+            Next nodeKey
         End If
 
         If Left$(statusText, 2) = "OK" Then
-            For Each ringKey In localNodes.Keys
-                usedNodes(CStr(ringKey)) = ringId
-            Next ringKey
+            For Each nodeKey In localNodes.Keys
+                usedNodes(CStr(nodeKey)) = ringId
+            Next nodeKey
         Else
             errorCount = errorCount + 1
         End If
