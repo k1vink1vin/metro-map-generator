@@ -110,7 +110,7 @@ function passengerCanvasScale(
     geographic: 1,
     taipei: 1,
     london: 1.1,
-    moscow: 1.6,
+    moscow: 1.7,
     concentric: 1,
     hex: 1.08,
   };
