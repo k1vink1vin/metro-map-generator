@@ -1,4 +1,4 @@
-export type StationVisualStyle = 'taipei' | 'tokyo' | 'moscow';
+export type StationVisualStyle = 'taipei' | 'tokyo' | 'osaka' | 'moscow';
 
 export type StyleId =
   | 'geographic'
