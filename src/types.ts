@@ -72,6 +72,7 @@ export interface GraphModel {
 }
 
 export interface RingCandidateDiagnostic {
+  id: string;
   nodes: string[];
   score: number;
   routeIds: string[];
@@ -88,5 +89,6 @@ export interface LayoutResult {
   positions: Record<string, Point>;
   geographicPositions: Record<string, Point>;
   primaryRing?: string[];
+  primaryRingCandidateId?: string;
   ringCandidates?: RingCandidateDiagnostic[];
 }
