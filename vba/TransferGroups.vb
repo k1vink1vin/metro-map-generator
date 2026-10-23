@@ -54,6 +54,7 @@ End Function
 Public Sub Auto_Open()
     On Error Resume Next
     CompleteTransfersAndValidateCore False
+    ValidateMoscowRingsCore False
     On Error GoTo 0
 End Sub
 
@@ -212,6 +213,270 @@ Private Sub CompleteTransfersAndValidateCore(ByVal showMessage As Boolean)
         Else
             MsgBox "Transfer groups updated, but " & CStr(mismatchCount) & _
                    " same-name station group(s) have inconsistent coordinates.", vbCritical
+        End If
+    End If
+End Sub
+
+
+Private Function LineSheetNameZh() As String
+    LineSheetNameZh = ChrW(&H8DEF) & ChrW(&H7DDA)
+End Function
+
+Private Function MoscowRingSheetNameZh() As String
+    MoscowRingSheetNameZh = _
+        ChrW(&H83AB) & ChrW(&H65AF) & ChrW(&H79D1) & ChrW(&H74B0)
+End Function
+
+Private Function GetLineWorksheet() As Worksheet
+    On Error Resume Next
+    Set GetLineWorksheet = ThisWorkbook.Worksheets(LineSheetNameZh())
+    If GetLineWorksheet Is Nothing Then
+        Set GetLineWorksheet = ThisWorkbook.Worksheets("Lines")
+    End If
+    On Error GoTo 0
+End Function
+
+Private Function GetMoscowRingWorksheet() As Worksheet
+    On Error Resume Next
+    Set GetMoscowRingWorksheet = ThisWorkbook.Worksheets(MoscowRingSheetNameZh())
+    If GetMoscowRingWorksheet Is Nothing Then
+        Set GetMoscowRingWorksheet = ThisWorkbook.Worksheets("MoscowRings")
+    End If
+    On Error GoTo 0
+End Function
+
+Private Function CanonicalStationMap(ByVal wsStations As Worksheet) As Object
+    Dim result As Object
+    Dim lastRow As Long
+    Dim rowIndex As Long
+    Dim stationId As String
+    Dim transferId As String
+
+    Set result = CreateObject("Scripting.Dictionary")
+    lastRow = wsStations.Cells(wsStations.Rows.Count, "A").End(xlUp).Row
+
+    For rowIndex = 2 To lastRow
+        stationId = Trim$(CStr(wsStations.Cells(rowIndex, "A").Value))
+        transferId = Trim$(CStr(wsStations.Cells(rowIndex, "E").Value))
+        If stationId <> "" Then
+            If transferId <> "" Then
+                result(stationId) = transferId
+            Else
+                result(stationId) = stationId
+            End If
+        End If
+    Next rowIndex
+
+    Set CanonicalStationMap = result
+End Function
+
+Private Function EdgeToken(ByVal a As String, ByVal b As String) As String
+    EdgeToken = a & ">>" & b
+End Function
+
+Public Sub ValidateMoscowRings()
+    ValidateMoscowRingsCore True
+End Sub
+
+Private Sub ValidateMoscowRingsCore(ByVal showMessage As Boolean)
+    Dim wsStations As Worksheet
+    Dim wsLines As Worksheet
+    Dim wsRings As Worksheet
+    Dim stationMap As Object
+    Dim pathNodes As Object
+    Dim adjacency As Object
+    Dim ringRows As Object
+    Dim ringIds As Object
+    Dim rowIndex As Long
+    Dim lastLineRow As Long
+    Dim lastRingRow As Long
+    Dim lineId As String
+    Dim pathId As String
+    Dim stationId As String
+    Dim ringId As String
+    Dim seq As Long
+    Dim key As String
+    Dim currentNode As String
+    Dim nextNode As String
+    Dim ringKey As Variant
+    Dim ringData As Object
+    Dim maxSeq As Long
+    Dim i As Long
+    Dim a As String
+    Dim b As String
+    Dim usedNodes As Object
+    Dim localNodes As Object
+    Dim statusText As String
+    Dim errorCount As Long
+
+    Set wsStations = GetStationWorksheet()
+    Set wsLines = GetLineWorksheet()
+    Set wsRings = GetMoscowRingWorksheet()
+
+    If wsStations Is Nothing Or wsLines Is Nothing Or wsRings Is Nothing Then
+        If showMessage Then MsgBox "Required worksheet missing.", vbCritical
+        Exit Sub
+    End If
+
+    Set stationMap = CanonicalStationMap(wsStations)
+    Set pathNodes = CreateObject("Scripting.Dictionary")
+    Set adjacency = CreateObject("Scripting.Dictionary")
+    Set ringRows = CreateObject("Scripting.Dictionary")
+    Set ringIds = CreateObject("Scripting.Dictionary")
+    Set usedNodes = CreateObject("Scripting.Dictionary")
+
+    lastLineRow = wsLines.Cells(wsLines.Rows.Count, "A").End(xlUp).Row
+
+    For rowIndex = 2 To lastLineRow
+        lineId = Trim$(CStr(wsLines.Cells(rowIndex, "A").Value))
+        pathId = Trim$(CStr(wsLines.Cells(rowIndex, "D").Value))
+        If pathId = "" Then pathId = "main"
+        stationId = Trim$(CStr(wsLines.Cells(rowIndex, "F").Value))
+
+        If lineId <> "" And stationId <> "" And IsNumeric(wsLines.Cells(rowIndex, "E").Value) Then
+            seq = CLng(wsLines.Cells(rowIndex, "E").Value)
+            If stationMap.Exists(stationId) Then
+                pathNodes(lineId & "|" & pathId & "|" & CStr(seq)) = CStr(stationMap(stationId))
+            End If
+        End If
+    Next rowIndex
+
+    For rowIndex = 2 To lastLineRow
+        lineId = Trim$(CStr(wsLines.Cells(rowIndex, "A").Value))
+        pathId = Trim$(CStr(wsLines.Cells(rowIndex, "D").Value))
+        If pathId = "" Then pathId = "main"
+
+        If lineId <> "" And IsNumeric(wsLines.Cells(rowIndex, "E").Value) Then
+            seq = CLng(wsLines.Cells(rowIndex, "E").Value)
+            key = lineId & "|" & pathId & "|" & CStr(seq)
+            If pathNodes.Exists(key) And pathNodes.Exists(lineId & "|" & pathId & "|" & CStr(seq + 1)) Then
+                currentNode = CStr(pathNodes(key))
+                nextNode = CStr(pathNodes(lineId & "|" & pathId & "|" & CStr(seq + 1)))
+                If currentNode <> nextNode Then
+                    adjacency(EdgeToken(currentNode, nextNode)) = True
+                    adjacency(EdgeToken(nextNode, currentNode)) = True
+                End If
+            End If
+        End If
+    Next rowIndex
+
+    lastRingRow = wsRings.Cells(wsRings.Rows.Count, "A").End(xlUp).Row
+    If lastRingRow >= 2 Then
+        wsRings.Range("D2:D" & lastRingRow).ClearContents
+        wsRings.Range("A2:D" & lastRingRow).Interior.Pattern = xlNone
+    End If
+
+    For rowIndex = 2 To lastRingRow
+        ringId = Trim$(CStr(wsRings.Cells(rowIndex, "A").Value))
+        stationId = Trim$(CStr(wsRings.Cells(rowIndex, "C").Value))
+
+        If ringId <> "" Or stationId <> "" Then
+            If ringId <> "" Then ringIds(ringId) = True
+
+            If ringId = "" Or stationId = "" Or Not IsNumeric(wsRings.Cells(rowIndex, "B").Value) Then
+                wsRings.Cells(rowIndex, "D").Value = "ERROR - Missing ring id / sequence / station id"
+                wsRings.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
+                errorCount = errorCount + 1
+            ElseIf Not stationMap.Exists(stationId) Then
+                wsRings.Cells(rowIndex, "D").Value = "ERROR - Unknown station id"
+                wsRings.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
+                errorCount = errorCount + 1
+            Else
+                seq = CLng(wsRings.Cells(rowIndex, "B").Value)
+                ringRows(ringId & "|" & CStr(seq)) = CStr(stationMap(stationId))
+            End If
+        End If
+    Next rowIndex
+
+    If ringIds.Count > 3 Then
+        For rowIndex = 2 To lastRingRow
+            If Trim$(CStr(wsRings.Cells(rowIndex, "A").Value)) <> "" Then
+                wsRings.Cells(rowIndex, "D").Value = "ERROR - Maximum 3 rings"
+                wsRings.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
+            End If
+        Next rowIndex
+        If showMessage Then MsgBox "Maximum 3 Moscow rings.", vbCritical
+        Exit Sub
+    End If
+
+    For Each ringKey In ringIds.Keys
+        ringId = CStr(ringKey)
+        maxSeq = 0
+
+        For rowIndex = 2 To lastRingRow
+            If Trim$(CStr(wsRings.Cells(rowIndex, "A").Value)) = ringId And _
+               IsNumeric(wsRings.Cells(rowIndex, "B").Value) Then
+                seq = CLng(wsRings.Cells(rowIndex, "B").Value)
+                If seq > maxSeq Then maxSeq = seq
+            End If
+        Next rowIndex
+
+        statusText = "OK - Closed ring"
+        Set localNodes = CreateObject("Scripting.Dictionary")
+
+        If maxSeq < 3 Then
+            statusText = "ERROR - Ring needs at least 3 stations"
+        Else
+            For i = 1 To maxSeq
+                If Not ringRows.Exists(ringId & "|" & CStr(i)) Then
+                    statusText = "ERROR - Sequence must be continuous from 1"
+                    Exit For
+                End If
+
+                a = CStr(ringRows(ringId & "|" & CStr(i)))
+                If localNodes.Exists(a) Then
+                    statusText = "ERROR - Duplicate topology node"
+                    Exit For
+                End If
+                localNodes(a) = True
+
+                If i < maxSeq Then
+                    b = CStr(ringRows(ringId & "|" & CStr(i + 1)))
+                Else
+                    b = CStr(ringRows(ringId & "|1"))
+                End If
+
+                If Not adjacency.Exists(EdgeToken(a, b)) Then
+                    statusText = "ERROR - Ring is not closed"
+                    Exit For
+                End If
+            Next i
+        End If
+
+        If Left$(statusText, 2) = "OK" Then
+            For Each ringKey In localNodes.Keys
+                If usedNodes.Exists(CStr(ringKey)) Then
+                    statusText = "ERROR - Rings cannot share topology nodes"
+                    Exit For
+                End If
+            Next ringKey
+        End If
+
+        If Left$(statusText, 2) = "OK" Then
+            For Each ringKey In localNodes.Keys
+                usedNodes(CStr(ringKey)) = ringId
+            Next ringKey
+        Else
+            errorCount = errorCount + 1
+        End If
+
+        For rowIndex = 2 To lastRingRow
+            If Trim$(CStr(wsRings.Cells(rowIndex, "A").Value)) = ringId Then
+                wsRings.Cells(rowIndex, "D").Value = statusText
+                If Left$(statusText, 2) = "OK" Then
+                    wsRings.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(220, 252, 231)
+                Else
+                    wsRings.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
+                End If
+            End If
+        Next rowIndex
+    Next ringKey
+
+    If showMessage Then
+        If errorCount = 0 Then
+            MsgBox "Moscow ring validation passed.", vbInformation
+        Else
+            MsgBox "Moscow ring validation failed. Please check red rows.", vbCritical
         End If
     End If
 End Sub
