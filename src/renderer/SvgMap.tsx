@@ -101,12 +101,13 @@ function labelRect(
 function buildLabelPlacements(
   graph: GraphModel,
   layout: LayoutResult,
+  visualScale = 1,
 ): LabelPlacement[] {
   const nodeObstacles = graph.nodes.map((node) => {
     const point = layout.positions[node.id];
     const degree = nodeDegree(graph, node.id);
     const radius =
-      node.stationIds.length > 1 || degree > 2 ? 15 : 10;
+      (node.stationIds.length > 1 || degree > 2 ? 15 : 10) * visualScale;
 
     return {
       nodeId: node.id,
@@ -148,24 +149,25 @@ function buildLabelPlacements(
   for (const node of orderedNodes) {
     const point = layout.positions[node.id];
     const text = node.name || node.id;
-    const width = estimateTextWidth(text);
+    const width = estimateTextWidth(text) * visualScale;
 
+    const s = visualScale;
     const candidates: Array<{
       x: number;
       y: number;
       anchor: LabelPlacement['textAnchor'];
       distancePenalty: number;
     }> = [
-      { x: point.x + 14, y: point.y - 10, anchor: 'start', distancePenalty: 0 },
-      { x: point.x + 14, y: point.y + 21, anchor: 'start', distancePenalty: 1 },
-      { x: point.x - 14, y: point.y - 10, anchor: 'end', distancePenalty: 1 },
-      { x: point.x - 14, y: point.y + 21, anchor: 'end', distancePenalty: 2 },
-      { x: point.x, y: point.y - 20, anchor: 'middle', distancePenalty: 2 },
-      { x: point.x, y: point.y + 31, anchor: 'middle', distancePenalty: 3 },
-      { x: point.x + 25, y: point.y - 22, anchor: 'start', distancePenalty: 4 },
-      { x: point.x - 25, y: point.y - 22, anchor: 'end', distancePenalty: 4 },
-      { x: point.x + 25, y: point.y + 31, anchor: 'start', distancePenalty: 5 },
-      { x: point.x - 25, y: point.y + 31, anchor: 'end', distancePenalty: 5 },
+      { x: point.x + 14 * s, y: point.y - 10 * s, anchor: 'start', distancePenalty: 0 },
+      { x: point.x + 14 * s, y: point.y + 21 * s, anchor: 'start', distancePenalty: 1 },
+      { x: point.x - 14 * s, y: point.y - 10 * s, anchor: 'end', distancePenalty: 1 },
+      { x: point.x - 14 * s, y: point.y + 21 * s, anchor: 'end', distancePenalty: 2 },
+      { x: point.x, y: point.y - 20 * s, anchor: 'middle', distancePenalty: 2 },
+      { x: point.x, y: point.y + 31 * s, anchor: 'middle', distancePenalty: 3 },
+      { x: point.x + 25 * s, y: point.y - 22 * s, anchor: 'start', distancePenalty: 4 },
+      { x: point.x - 25 * s, y: point.y - 22 * s, anchor: 'end', distancePenalty: 4 },
+      { x: point.x + 25 * s, y: point.y + 31 * s, anchor: 'start', distancePenalty: 5 },
+      { x: point.x - 25 * s, y: point.y + 31 * s, anchor: 'end', distancePenalty: 5 },
     ];
 
     let best:
@@ -290,8 +292,11 @@ function renderBounds(
 }
 
 export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
-  const labelScale = zoom > 1 ? 1 / zoom : 1;
-  const ringSet = new Set(layout.primaryRing ?? []);
+  const visualScale = zoom > 1 ? 1 / zoom : 1;
+  const definedRings = layout.moscowRings ?? [];
+  const ringSet = new Set(
+    definedRings.flatMap((ring) => ring.nodes),
+  );
   const geometricBundles = buildGeometricBundleMap(
     graph,
     layout.positions,
@@ -318,7 +323,11 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
     }),
   );
 
-  const labelPlacements = buildLabelPlacements(graph, layout);
+  const labelPlacements = buildLabelPlacements(
+    graph,
+    layout,
+    visualScale,
+  );
   const bounds = renderBounds(
     graph,
     layout,
@@ -335,6 +344,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
       data-layout-route-count={layout.integrity.routeCount}
       data-layout-path-count={layout.integrity.pathCount}
       data-layout-segment-count={layout.integrity.segmentCount}
+      data-detail-zoom={zoom}
       role="img"
       aria-label="Generated schematic metro map"
     >
@@ -346,23 +356,25 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
         className="map-background"
       />
 
-      {layout.primaryRing?.length ? (
+      {definedRings.length ? (
         <g className="ring-guide" aria-hidden="true">
-          {layout.primaryRing.map((nodeId, index) => {
-            const nextId =
-              layout.primaryRing![(index + 1) % layout.primaryRing!.length];
-            const a = layout.positions[nodeId];
-            const b = layout.positions[nextId];
-            return (
-              <line
-                key={`${nodeId}-${nextId}`}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-              />
-            );
-          })}
+          {definedRings.flatMap((ring) =>
+            ring.nodes.map((nodeId, index) => {
+              const nextId =
+                ring.nodes[(index + 1) % ring.nodes.length];
+              const a = layout.positions[nodeId];
+              const b = layout.positions[nextId];
+              return (
+                <line
+                  key={`${ring.id}-${nodeId}-${nextId}`}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                />
+              );
+            }),
+          )}
         </g>
       ) : null}
 
@@ -387,7 +399,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
                   d={routePath.d}
                   fill="none"
                   stroke={routePath.lineColor}
-                  strokeWidth={8}
+                  strokeWidth={8 * visualScale}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -421,10 +433,10 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
                   />
                 </>
               ) : (
-                <circle r={6} className="station station-normal" />
+                <circle r={6 * visualScale} className="station station-normal" />
               )}
               {ringSet.has(node.id) ? (
-                <circle r={15} className="ring-node-marker" />
+                <circle r={15 * visualScale} className="ring-node-marker" />
               ) : null}
             </g>
           );
@@ -440,8 +452,8 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
             textAnchor={label.textAnchor}
             className="station-label"
             style={{
-              fontSize: `${11.5 * labelScale}px`,
-              strokeWidth: 3.5 * labelScale,
+              fontSize: `${11.5 * visualScale}px`,
+              strokeWidth: 3.5 * visualScale,
             }}
           >
             {label.text}
