@@ -306,7 +306,11 @@ function worksheetToRows(worksheet: Worksheet): string[][] {
 export async function importExcelBuffer(
   data: Uint8Array,
 ): Promise<NetworkInput> {
-  const ExcelJS = await import('exceljs');
+  const imported = await import('exceljs');
+  const ExcelJS = (
+    (imported as unknown as { default?: typeof import('exceljs') }).default ??
+    imported
+  ) as typeof import('exceljs');
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(data as never);
 
