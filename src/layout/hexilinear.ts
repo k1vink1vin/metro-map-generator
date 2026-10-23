@@ -51,6 +51,6 @@ export function layoutHexilinear(
     graph,
     relaxed,
     geographic,
-    29,
+    24,
   );
 }
