@@ -793,3 +793,175 @@ export function relaxPathKinksSafely(
 
   return positions;
 }
+
+
+function pathSelfCrossings(
+  path: string[],
+  positions: Record<string, Point>,
+): number {
+  let count = 0;
+  for (let first = 0; first < path.length - 1; first += 1) {
+    for (
+      let second = first + 2;
+      second < path.length - 1;
+      second += 1
+    ) {
+      if (
+        properSegmentIntersection(
+          positions[path[first]],
+          positions[path[first + 1]],
+          positions[path[second]],
+          positions[path[second + 1]],
+        )
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function pathExternalCrossings(
+  graph: GraphModel,
+  path: string[],
+  positions: Record<string, Point>,
+): number {
+  const pathEdges = new Set<string>();
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const a = path[index];
+    const b = path[index + 1];
+    pathEdges.add(a < b ? `${a}::${b}` : `${b}::${a}`);
+  }
+
+  let count = 0;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const aId = path[index];
+    const bId = path[index + 1];
+
+    for (const edge of graph.edges) {
+      if (pathEdges.has(edge.key)) continue;
+      if (
+        edge.a === aId ||
+        edge.b === aId ||
+        edge.a === bId ||
+        edge.b === bId
+      ) {
+        continue;
+      }
+      if (
+        properSegmentIntersection(
+          positions[aId],
+          positions[bId],
+          positions[edge.a],
+          positions[edge.b],
+        )
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * Repairs route self-crossings introduced by a schematic transform.
+ *
+ * If the reference path has no self-crossing, interpolate the schematic
+ * endpoint displacements across the clean reference shape. The candidate is
+ * accepted only when it reduces self-crossings, keeps station spacing, and
+ * does not increase crossings against the rest of the network.
+ */
+export function repairIntroducedPathSelfCrossings(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  reference: Record<string, Point>,
+  minimumNodeDistance = 28,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (path.length < 4) continue;
+
+      const currentSelf = pathSelfCrossings(path, positions);
+      if (currentSelf === 0) continue;
+      if (pathSelfCrossings(path, reference) !== 0) continue;
+
+      const currentExternal = pathExternalCrossings(
+        graph,
+        path,
+        positions,
+      );
+      const startId = path[0];
+      const endId = path[path.length - 1];
+      const startDelta = {
+        x: positions[startId].x - reference[startId].x,
+        y: positions[startId].y - reference[startId].y,
+      };
+      const endDelta = {
+        x: positions[endId].x - reference[endId].x,
+        y: positions[endId].y - reference[endId].y,
+      };
+
+      const candidate = Object.fromEntries(
+        Object.entries(positions).map(([id, point]) => [
+          id,
+          { ...point },
+        ]),
+      );
+
+      for (let index = 1; index < path.length - 1; index += 1) {
+        const t = index / (path.length - 1);
+        candidate[path[index]] = {
+          x:
+            reference[path[index]].x +
+            startDelta.x * (1 - t) +
+            endDelta.x * t,
+          y:
+            reference[path[index]].y +
+            startDelta.y * (1 - t) +
+            endDelta.y * t,
+        };
+      }
+
+      let spacingSafe = true;
+      const pathSet = new Set(path);
+      for (const nodeId of path.slice(1, -1)) {
+        for (const node of graph.nodes) {
+          if (node.id === nodeId || pathSet.has(node.id)) continue;
+          if (
+            distance(
+              candidate[nodeId],
+              candidate[node.id],
+            ) < minimumNodeDistance
+          ) {
+            spacingSafe = false;
+            break;
+          }
+        }
+        if (!spacingSafe) break;
+      }
+      if (!spacingSafe) continue;
+
+      const candidateSelf = pathSelfCrossings(path, candidate);
+      const candidateExternal = pathExternalCrossings(
+        graph,
+        path,
+        candidate,
+      );
+
+      if (
+        candidateSelf < currentSelf &&
+        candidateExternal <= currentExternal
+      ) {
+        for (const nodeId of path.slice(1, -1)) {
+          positions[nodeId] = candidate[nodeId];
+        }
+      }
+    }
+  }
+
+  return positions;
+}
