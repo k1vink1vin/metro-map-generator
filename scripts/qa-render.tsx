@@ -132,8 +132,8 @@ for (const style of styles) {
 
     if (
       stationStyle === 'osaka' &&
-      (!markup.includes('osaka-code-text') ||
-        markup.includes('osaka-code-prefix'))
+      (!markup.includes('class="osaka-code-text"') ||
+        markup.includes('class="osaka-code-prefix"'))
     ) {
       throw new Error(
         `${style}/osaka: Osaka badges must use horizontal single-line station codes`,
