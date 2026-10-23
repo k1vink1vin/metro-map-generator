@@ -1,17 +1,16 @@
 import type { GraphModel, Point } from '../types';
 import {
-  regularizeRouteCorridors,
-  relaxPathKinks,
+  relaxPathKinksSafely,
   schematizeOnAngularGrid,
 } from './common';
 
 /**
- * Hex / tri-axial style.
+ * Hex / 60° tri-axial grid.
  *
- * The first phase attracts edges to the 0°/60°/120° axis family. The second
- * phase works on whole station runs between structural nodes, eliminating the
- * short alternating zig-zags that occur when every segment is snapped
- * independently.
+ * Routes are attracted to the three undirected axes 0°/60°/120°. Geography
+ * remains a moderate reference so multiple regional loops keep their relative
+ * placement. A crossing-safe corner pass suppresses acute zig-zags while
+ * preserving the 60° family.
  */
 export function layoutHexilinear(
   graph: GraphModel,
@@ -19,30 +18,16 @@ export function layoutHexilinear(
 ): Record<string, Point> {
   const snapped = schematizeOnAngularGrid(graph, geographic, {
     angleStep: 60,
-    geographyWeight: 0.38,
-    equalSpacingWeight: 0.5,
+    geographyWeight: 0.4,
+    equalSpacingWeight: 0.46,
     iterations: 115,
   });
 
-  const corridors = regularizeRouteCorridors(
-    graph,
-    snapped,
-    geographic,
-    {
-      angleStep: 60,
-      passes: 7,
-      runBlend: 0.82,
-      geographyTether: 0.12,
-      equalSpacingWeight: 0.62,
-    },
-  );
-
-  return relaxPathKinks(graph, corridors, geographic, {
-    passes: 7,
-    ordinaryBlend: 0.54,
-    structuralBlend: 0.14,
-    geographyTether: 0.1,
-    maxShift: 20,
-    thresholdDegrees: 82,
+  return relaxPathKinksSafely(graph, snapped, {
+    passes: 5,
+    thresholdDegrees: 102,
+    minimumNodeDistance: 29,
+    maxShift: 26,
+    structuralMaxShift: 14,
   });
 }
