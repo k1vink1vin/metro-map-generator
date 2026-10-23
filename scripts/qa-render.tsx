@@ -34,7 +34,10 @@ const css = `
 .tokyo-badge-shell{fill:#9ca3af;stroke:#30343b}
 .tokyo-badge-inner,.taipei-code-badge{fill:#fff}
 .taipei-transfer-shell{fill:#9ca3af;stroke:#30343b}
-.station-code-prefix,.station-code-number{fill:#111827;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
+.station-code-prefix,.station-code-number,.station-code-suffix{fill:#111827;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
+.osaka-code-badge{stroke:#fff}
+.osaka-transfer-shell{fill:#fff;stroke:#4b5563}
+.osaka-code-prefix,.osaka-code-number,.osaka-code-suffix{fill:#fff;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
 .moscow-station,.moscow-transfer-ring{fill:#fff}
 .moscow-transfer-base{fill:#fff;stroke:#222}
 .station-label{fill:#111827;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
@@ -66,6 +69,7 @@ console.log(
 const stationStyles: StationVisualStyle[] = [
   'taipei',
   'tokyo',
+  'osaka',
   'moscow',
 ];
 const stationLayout = computeLayout(graph, 'taipei', {
@@ -91,6 +95,18 @@ if (!sameLineBranchJunctions.length) {
   );
 }
 
+const suffixedStationIds = graph.nodes.flatMap((node) =>
+  node.stationIds.filter((stationId) =>
+    /^[A-Za-z]+[-_ ]?\d+[A-Za-z]$/.test(stationId.trim()),
+  ),
+);
+
+if (!suffixedStationIds.length) {
+  throw new Error(
+    'Expected at least one suffixed station code such as G03A/R22A in TPE_Metro.xlsm QA fixture.',
+  );
+}
+
 for (const stationStyle of stationStyles) {
   const markup = renderToStaticMarkup(
     <SvgMap
@@ -111,6 +127,17 @@ for (const stationStyle of stationStyles) {
         `${stationStyle}: same-line branch junction ${node.id} was rendered as an interchange`,
       );
     }
+  }
+
+  if (
+    (stationStyle === 'taipei' ||
+      stationStyle === 'tokyo' ||
+      stationStyle === 'osaka') &&
+    !markup.includes('suffix')
+  ) {
+    throw new Error(
+      `${stationStyle}: suffixed station-code marker was not rendered`,
+    );
   }
 
   writeFileSync(
