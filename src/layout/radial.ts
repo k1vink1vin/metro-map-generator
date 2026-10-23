@@ -820,7 +820,17 @@ function safelyFanOutSelfCrossingMoscowPaths(
         preferredSide,
         -preferredSide,
       ]) {
-        for (const factor of [1, 1.35, 1.7, 2.1, 2.6]) {
+        for (const factor of [
+          1,
+          1.35,
+          1.7,
+          2.1,
+          2.6,
+          3.3,
+          4.2,
+          5.2,
+          6.5,
+        ]) {
           const amplitude = baseAmplitude * factor;
           const control = {
             x: midpoint.x + nx * amplitude * side,
