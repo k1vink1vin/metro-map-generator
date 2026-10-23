@@ -16,15 +16,16 @@ export const sampleNetwork: NetworkInput = {
     { id: 'G07', name: 'Daqing', lat: 24.119, lon: 120.648 },
     { id: 'G08', name: 'HSR Taichung', lat: 24.112, lon: 120.616, complexId: 'X_HSR' },
 
-    { id: 'T01', name: 'Songzhu', lat: 24.1815, lon: 120.699 },
+    { id: 'T01', name: 'Songzhu', lat: 24.181, lon: 120.698 },
     { id: 'T02', name: 'Taiyuan', lat: 24.167, lon: 120.699 },
     { id: 'T03', name: 'Taichung', lat: 24.137, lon: 120.686 },
     { id: 'T04', name: 'Wuquan', lat: 24.129, lon: 120.671 },
-    { id: 'T05', name: 'Daqing', lat: 24.1195, lon: 120.649 },
-    { id: 'T06', name: 'Xinwuri', lat: 24.111, lon: 120.615, complexId: 'X_HSR' },
+    { id: 'T05', name: 'Daqing', lat: 24.119, lon: 120.648 },
+    { id: 'T06', name: 'Xinwuri', lat: 24.112, lon: 120.616, complexId: 'X_HSR' },
 
     { id: 'B01', name: 'Harbor Branch', lat: 24.17, lon: 120.626 },
     { id: 'B02', name: 'University', lat: 24.183, lon: 120.641 },
+    { id: 'B03', name: 'City Hall', lat: 24.154, lon: 120.663 },
   ],
   lines: [
     {
@@ -46,7 +47,7 @@ export const sampleNetwork: NetworkInput = {
       id: 'ORANGE',
       name: 'Orange Line',
       color: '#f97316',
-      paths: [['B01', 'B02', 'G05', 'G04', 'G03']],
+      paths: [['B01', 'B02', 'B03', 'G04', 'G03']],
     },
   ],
 };

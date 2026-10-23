@@ -11,159 +11,82 @@ export function edgeKey(a: string, b: string): string {
   return a < b ? `${a}::${b}` : `${b}::${a}`;
 }
 
-const AUTO_SAME_POINT_METERS = 25;
-const AUTO_SAME_NAME_METERS = 450;
+const COORD_TOLERANCE = 0.0000001;
 
 function normalizeStationName(name?: string): string {
   return (name ?? '')
     .normalize('NFKC')
     .toLocaleLowerCase()
-    .replace(/[\s\-_—–·・.,，。()（）\[\]【】]/g, '');
+    .replace(/[\\s\\-_—–·・.,，。()（）\\[\\]【】]/g, '');
 }
 
-function distanceMeters(a: Station, b: Station): number {
-  const earthRadius = 6_371_000;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const deltaLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const deltaLon = ((b.lon - a.lon) * Math.PI) / 180;
-
-  const sinLat = Math.sin(deltaLat / 2);
-  const sinLon = Math.sin(deltaLon / 2);
-  const haversine =
-    sinLat * sinLat +
-    Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
-
+function sameCoordinates(a: Station, b: Station): boolean {
   return (
-    earthRadius *
-    2 *
-    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+    Math.abs(a.lat - b.lat) <= COORD_TOLERANCE &&
+    Math.abs(a.lon - b.lon) <= COORD_TOLERANCE
   );
 }
 
-class StationUnionFind {
-  private readonly parent: number[];
-  private readonly rank: number[];
-  private readonly explicitComplex: Array<string | undefined>;
+function assertCoordinatesMatch(
+  stations: Station[],
+  label: string,
+): void {
+  if (stations.length <= 1) return;
 
-  constructor(stations: Station[]) {
-    this.parent = stations.map((_, index) => index);
-    this.rank = stations.map(() => 0);
-    this.explicitComplex = stations.map(
-      (station) => station.complexId?.trim() || undefined,
-    );
-  }
-
-  find(index: number): number {
-    if (this.parent[index] !== index) {
-      this.parent[index] = this.find(this.parent[index]);
+  const reference = stations[0];
+  for (const station of stations.slice(1)) {
+    if (!sameCoordinates(reference, station)) {
+      throw new Error(
+        `Transfer station "${label}" has inconsistent coordinates: ` +
+          `${reference.id} (${reference.lat}, ${reference.lon}) vs ` +
+          `${station.id} (${station.lat}, ${station.lon}). ` +
+          'Use one shared latitude/longitude for every ID of the same physical transfer station.',
+      );
     }
-    return this.parent[index];
-  }
-
-  union(a: number, b: number): boolean {
-    let rootA = this.find(a);
-    let rootB = this.find(b);
-    if (rootA === rootB) return true;
-
-    const explicitA = this.explicitComplex[rootA];
-    const explicitB = this.explicitComplex[rootB];
-
-    // Two different explicit complex IDs are a hard user override and must
-    // never be auto-merged through a chain of inferred matches.
-    if (explicitA && explicitB && explicitA !== explicitB) {
-      return false;
-    }
-
-    if (this.rank[rootA] < this.rank[rootB]) {
-      [rootA, rootB] = [rootB, rootA];
-    }
-
-    this.parent[rootB] = rootA;
-    if (this.rank[rootA] === this.rank[rootB]) {
-      this.rank[rootA] += 1;
-    }
-
-    this.explicitComplex[rootA] = explicitA ?? explicitB;
-    return true;
-  }
-
-  explicitId(index: number): string | undefined {
-    return this.explicitComplex[this.find(index)];
   }
 }
 
 function buildStationGroups(stations: Station[]): Map<string, Station[]> {
-  const unionFind = new StationUnionFind(stations);
+  const groups = new Map<string, Station[]>();
+  const explicitComplexes = new Map<string, Station[]>();
+  const byName = new Map<string, Station[]>();
 
-  // Explicit complexId remains the strongest/manual grouping mechanism.
-  const explicitRoots = new Map<string, number>();
-  stations.forEach((station, index) => {
+  for (const station of stations) {
     const complexId = station.complexId?.trim();
-    if (!complexId) return;
-
-    const first = explicitRoots.get(complexId);
-    if (first == null) {
-      explicitRoots.set(complexId, index);
-    } else {
-      unionFind.union(first, index);
+    if (complexId) {
+      const group = explicitComplexes.get(complexId) ?? [];
+      group.push(station);
+      explicitComplexes.set(complexId, group);
+      continue;
     }
-  });
 
-  // Automatic grouping lets users simply repeat one physical interchange with
-  // different station IDs. We use conservative rules:
-  // 1) practically the same coordinate, or
-  // 2) the same normalized name and geographically close.
-  for (let aIndex = 0; aIndex < stations.length; aIndex += 1) {
-    const a = stations[aIndex];
-    const aName = normalizeStationName(a.name);
-
-    for (let bIndex = aIndex + 1; bIndex < stations.length; bIndex += 1) {
-      const b = stations[bIndex];
-
-      const rootA = unionFind.find(aIndex);
-      const rootB = unionFind.find(bIndex);
-      if (rootA === rootB) continue;
-
-      const explicitA = unionFind.explicitId(rootA);
-      const explicitB = unionFind.explicitId(rootB);
-      if (explicitA && explicitB && explicitA !== explicitB) {
-        continue;
-      }
-
-      const meters = distanceMeters(a, b);
-      const samePoint = meters <= AUTO_SAME_POINT_METERS;
-      const bName = normalizeStationName(b.name);
-      const sameNameNearby =
-        Boolean(aName) &&
-        aName === bName &&
-        meters <= AUTO_SAME_NAME_METERS;
-
-      if (samePoint || sameNameNearby) {
-        unionFind.union(aIndex, bIndex);
-      }
+    const normalizedName = normalizeStationName(station.name);
+    if (normalizedName) {
+      const group = byName.get(normalizedName) ?? [];
+      group.push(station);
+      byName.set(normalizedName, group);
+    } else {
+      groups.set(station.id, [station]);
     }
   }
 
-  const byRoot = new Map<number, Station[]>();
-  stations.forEach((station, index) => {
-    const root = unionFind.find(index);
-    const group = byRoot.get(root) ?? [];
-    group.push(station);
-    byRoot.set(root, group);
-  });
+  for (const [complexId, group] of explicitComplexes) {
+    assertCoordinatesMatch(group, complexId);
+    groups.set(complexId, group);
+  }
 
-  const groups = new Map<string, Station[]>();
+  for (const [normalizedName, group] of byName) {
+    if (group.length === 1) {
+      const station = group[0];
+      groups.set(station.id, group);
+      continue;
+    }
 
-  for (const [root, group] of byRoot) {
-    const explicitId = unionFind.explicitId(root);
-    const groupId =
-      explicitId ??
-      (group.length > 1
-        ? `__AUTO_TRANSFER__${group[0].id}`
-        : group[0].id);
-
-    groups.set(groupId, group);
+    const displayName =
+      group.find((station) => station.name?.trim())?.name?.trim() ??
+      normalizedName;
+    assertCoordinatesMatch(group, displayName);
+    groups.set(`__AUTO_TRANSFER__${group[0].id}`, group);
   }
 
   return groups;
