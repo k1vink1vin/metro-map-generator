@@ -1,5 +1,5 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
-import type { GraphModel, LayoutIntegrity, Point } from '../types';
+import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -99,14 +99,27 @@ function separateOverlappingNodes(
   return { positions, separatedNodePairs };
 }
 
-function passengerCanvasScale(graph: GraphModel): number {
+function passengerCanvasScale(
+  graph: GraphModel,
+  style: StyleId,
+): number {
   const nodeFactor = Math.sqrt(graph.nodes.length / 45);
   const edgeFactor = Math.sqrt(graph.edges.length / 55);
-  return Math.max(1, Math.min(2.6, Math.max(nodeFactor, edgeFactor)));
+  const base = Math.max(1, Math.max(nodeFactor, edgeFactor));
+  const styleMultiplier: Record<StyleId, number> = {
+    geographic: 1,
+    taipei: 1,
+    london: 1.1,
+    moscow: 1.45,
+    concentric: 1,
+    hex: 1.08,
+  };
+  return Math.min(3.2, base * styleMultiplier[style]);
 }
 
 function fitToCanvas(
   graph: GraphModel,
+  style: StyleId,
   positions: Record<string, Point>,
   padding = 86,
 ): Record<string, Point> {
@@ -131,7 +144,7 @@ function fitToCanvas(
 
   const sourceWidth = maxX - minX;
   const sourceHeight = maxY - minY;
-  const passengerScale = passengerCanvasScale(graph);
+  const passengerScale = passengerCanvasScale(graph, style);
   const targetWidth = CANVAS_WIDTH * passengerScale;
   const targetHeight = CANVAS_HEIGHT * passengerScale;
   const scaledPadding = padding * Math.max(1, Math.sqrt(passengerScale));
@@ -225,12 +238,13 @@ function validateEveryRouteIsDrawable(
 
 export function finalizeLayoutPositions(
   graph: GraphModel,
+  style: StyleId,
   proposed: Record<string, Point>,
   geographic: Record<string, Point>,
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
   const separated = separateOverlappingNodes(graph, completed.positions);
-  const positions = fitToCanvas(graph, separated.positions);
+  const positions = fitToCanvas(graph, style, separated.positions);
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {
