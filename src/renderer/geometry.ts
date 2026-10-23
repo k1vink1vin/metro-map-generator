@@ -1,22 +1,83 @@
 import { edgeKey } from '../core/graph';
 import type { GraphModel, Point } from '../types';
 
+export type GeometricBundleMap = Map<string, string[]>;
+
+function pointToken(point: Point, tolerance = 1): string {
+  return `${Math.round(point.x / tolerance)},${Math.round(point.y / tolerance)}`;
+}
+
+function geometricSegmentKey(a: Point, b: Point): string {
+  const aToken = pointToken(a);
+  const bToken = pointToken(b);
+  return aToken < bToken ? `${aToken}::${bToken}` : `${bToken}::${aToken}`;
+}
+
+/**
+ * Finds segments that land on the same geometry even when they are not the
+ * same topology edge. This prevents unrelated routes from visually erasing
+ * each other after a schematic layout happens to align them.
+ */
+export function buildGeometricBundleMap(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+): GeometricBundleMap {
+  const buckets = new Map<string, Set<string>>();
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      for (let index = 0; index < path.length - 1; index += 1) {
+        const a = positions[path[index]];
+        const b = positions[path[index + 1]];
+        if (!a || !b) continue;
+
+        const key = geometricSegmentKey(a, b);
+        const bucket = buckets.get(key) ?? new Set<string>();
+        bucket.add(line.id);
+        buckets.set(key, bucket);
+      }
+    }
+  }
+
+  return new Map(
+    [...buckets.entries()].map(([key, lineIds]) => [
+      key,
+      [...lineIds].sort(),
+    ]),
+  );
+}
+
 function segmentOffset(
   graph: GraphModel,
-  a: string,
-  b: string,
+  aId: string,
+  bId: string,
+  a: Point,
+  b: Point,
   lineId: string,
   gap: number,
+  geometricBundles?: GeometricBundleMap,
 ): number {
-  const edge = graph.edgeByKey.get(edgeKey(a, b));
-  if (!edge || edge.lineIds.length <= 1) return 0;
+  const edge = graph.edgeByKey.get(edgeKey(aId, bId));
+  const topologyOrder = edge?.lineIds ?? [];
+  const geometricOrder =
+    geometricBundles?.get(geometricSegmentKey(a, b)) ?? [];
 
-  const order = [...edge.lineIds].sort();
+  const order =
+    geometricOrder.length > topologyOrder.length
+      ? geometricOrder
+      : [...topologyOrder].sort();
+
+  if (order.length <= 1) return 0;
+
   const index = Math.max(0, order.indexOf(lineId));
   const centered = index - (order.length - 1) / 2;
-  // The sign is tied to canonical node ordering so the physical side remains
-  // stable even when a route traverses the same edge in reverse.
-  const directionSign = a < b ? 1 : -1;
+
+  // Tie the side to a stable geometric direction so a segment keeps the same
+  // lane ordering even when one route traverses it in reverse.
+  const aToken = pointToken(a);
+  const bToken = pointToken(b);
+  const directionSign = aToken < bToken ? 1 : -1;
+
   return centered * gap * directionSign;
 }
 
@@ -25,7 +86,8 @@ export function offsetPathForLine(
   path: string[],
   positions: Record<string, Point>,
   lineId: string,
-  gap = 8,
+  gap = 12,
+  geometricBundles?: GeometricBundleMap,
 ): Point[] {
   if (path.length <= 1) {
     return path.map((id) => ({ ...positions[id] }));
@@ -43,7 +105,16 @@ export function offsetPathForLine(
     const dy = b.y - a.y;
     const length = Math.max(1, Math.hypot(dx, dy));
     const normal = { x: -dy / length, y: dx / length };
-    const offset = segmentOffset(graph, aId, bId, lineId, gap);
+    const offset = segmentOffset(
+      graph,
+      aId,
+      bId,
+      a,
+      b,
+      lineId,
+      gap,
+      geometricBundles,
+    );
     const shift = { x: normal.x * offset, y: normal.y * offset };
 
     contributions.get(aId)?.push({ x: a.x + shift.x, y: a.y + shift.y });
