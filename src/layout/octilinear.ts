@@ -52,7 +52,7 @@ export function layoutTaipei(
     graph,
     relaxed,
     geographic,
-    29,
+    24,
   );
 }
 
@@ -106,6 +106,6 @@ export function layoutLondon(
     graph,
     relaxed,
     schematicReference,
-    29,
+    24,
   );
 }
