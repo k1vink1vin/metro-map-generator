@@ -51,6 +51,21 @@ function coordinateKey(station: Station): string {
 }
 
 function buildStationGroups(stations: Station[]): Map<string, Station[]> {
+  const byName = new Map<string, Station[]>();
+  for (const station of stations) {
+    const normalizedName = normalizeStationName(station.name);
+    if (!normalizedName) continue;
+    const sameName = byName.get(normalizedName) ?? [];
+    sameName.push(station);
+    byName.set(normalizedName, sameName);
+  }
+
+  for (const group of byName.values()) {
+    if (group.length <= 1) continue;
+    const label = group[0].name?.trim() || group[0].id;
+    assertCoordinatesMatch(group, label);
+  }
+
   const groups = new Map<string, Station[]>();
   const explicitComplexes = new Map<string, Station[]>();
   const unassigned: Station[] = [];
