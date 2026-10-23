@@ -1,11 +1,35 @@
 import { projectGeographic } from '../core/projection';
 import type { GraphModel, LayoutResult, StyleId } from '../types';
+import { finalizeLayoutPositions } from './finalize';
 import { layoutHexilinear } from './hexilinear';
 import { layoutLondon, layoutTaipei } from './octilinear';
 import { layoutConcentric, layoutMoscow } from './radial';
 
 export interface LayoutOptions {
   moscowRingCandidateId?: string;
+}
+
+function finish(
+  graph: GraphModel,
+  style: StyleId,
+  geographic: LayoutResult['geographicPositions'],
+  proposed: LayoutResult['positions'],
+  extra: Partial<
+    Pick<
+      LayoutResult,
+      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates'
+    >
+  > = {},
+): LayoutResult {
+  const finalized = finalizeLayoutPositions(graph, proposed, geographic);
+
+  return {
+    style,
+    positions: finalized.positions,
+    geographicPositions: geographic,
+    integrity: finalized.integrity,
+    ...extra,
+  };
 }
 
 export function computeLayout(
@@ -16,35 +40,34 @@ export function computeLayout(
   const geographic = projectGeographic(graph);
 
   if (style === 'geographic') {
-    return {
-      style,
-      positions: geographic,
-      geographicPositions: geographic,
-    };
+    return finish(graph, style, geographic, geographic);
   }
 
   if (style === 'taipei') {
-    return {
+    return finish(
+      graph,
       style,
-      positions: layoutTaipei(graph, geographic),
-      geographicPositions: geographic,
-    };
+      geographic,
+      layoutTaipei(graph, geographic),
+    );
   }
 
   if (style === 'london') {
-    return {
+    return finish(
+      graph,
       style,
-      positions: layoutLondon(graph, geographic),
-      geographicPositions: geographic,
-    };
+      geographic,
+      layoutLondon(graph, geographic),
+    );
   }
 
   if (style === 'hex') {
-    return {
+    return finish(
+      graph,
       style,
-      positions: layoutHexilinear(graph, geographic),
-      geographicPositions: geographic,
-    };
+      geographic,
+      layoutHexilinear(graph, geographic),
+    );
   }
 
   if (style === 'moscow') {
@@ -53,19 +76,18 @@ export function computeLayout(
       geographic,
       options.moscowRingCandidateId,
     );
-    return {
-      style,
-      positions: result.positions,
-      geographicPositions: geographic,
+
+    return finish(graph, style, geographic, result.positions, {
       primaryRing: result.primaryRing,
       primaryRingCandidateId: result.primaryRingCandidateId,
       ringCandidates: result.ringCandidates,
-    };
+    });
   }
 
-  return {
+  return finish(
+    graph,
     style,
-    positions: layoutConcentric(graph, geographic),
-    geographicPositions: geographic,
-  };
+    geographic,
+    layoutConcentric(graph, geographic),
+  );
 }
