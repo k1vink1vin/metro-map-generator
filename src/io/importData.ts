@@ -4,7 +4,11 @@ import type { NetworkInput, Station, TransitLine } from '../types';
 type RecordRow = Record<string, string>;
 
 function normalizeHeader(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  return value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 function pick(row: RecordRow, aliases: string[]): string {
@@ -67,24 +71,52 @@ function rowsToRecords(rows: string[][]): RecordRow[] {
 
 function stationRecordsToStations(records: RecordRow[]): Station[] {
   return records.map((row, index) => {
-    const id = pick(row, ['id', 'stationId', 'station']);
-    const name = pick(row, ['name', 'stationName']);
-    const latText = pick(row, ['lat', 'latitude']);
-    const lonText = pick(row, ['lon', 'lng', 'longitude']);
+    const id = pick(row, [
+      'id',
+      'stationId',
+      'station',
+      '車站編號',
+      '站號',
+      '車站ID',
+    ]);
+    const name = pick(row, [
+      'name',
+      'stationName',
+      '車站名稱',
+      '站名',
+    ]);
+    const latText = pick(row, [
+      'lat',
+      'latitude',
+      '緯度',
+    ]);
+    const lonText = pick(row, [
+      'lon',
+      'lng',
+      'longitude',
+      '經度',
+    ]);
     const complexId = pick(row, [
       'complexId',
       'transferId',
       'stationComplex',
       'transferGroup',
       'transfer',
+      '轉乘群組',
+      '轉乘欄位',
+      '轉乘',
     ]);
 
     const lat = Number(latText);
     const lon = Number(lonText);
 
-    if (!id) throw new Error(`Stations row ${index + 2}: id is required.`);
+    if (!id) {
+      throw new Error(`車站工作表第 ${index + 2} 列：缺少車站編號。`);
+    }
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      throw new Error(`Stations row ${index + 2}: lat/lon must be numbers.`);
+      throw new Error(
+        `車站工作表第 ${index + 2} 列：緯度 / 經度必須是數字。`,
+      );
     }
 
     return {
@@ -109,18 +141,62 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
   const buckets = new Map<string, PathBucket>();
 
   records.forEach((row, index) => {
-    const lineId = pick(row, ['lineId', 'routeId', 'line', 'route']);
-    const lineName = pick(row, ['lineName', 'routeName', 'name']);
-    const color = pick(row, ['color', 'lineColor', 'routeColor']) || '#64748b';
-    const pathId = pick(row, ['pathId', 'branchId', 'path', 'branch']) || 'main';
-    const stationId = pick(row, ['stationId', 'station']);
-    const sequenceText = pick(row, ['sequence', 'seq', 'order', 'stationOrder']);
+    const lineId = pick(row, [
+      'lineId',
+      'routeId',
+      'line',
+      'route',
+      '路線編號',
+      '路線ID',
+    ]);
+    const lineName = pick(row, [
+      'lineName',
+      'routeName',
+      'name',
+      '路線名稱',
+      '路線名',
+    ]);
+    const color =
+      pick(row, [
+        'color',
+        'lineColor',
+        'routeColor',
+        '顏色',
+        '路線顏色',
+      ]) || '#64748b';
+    const pathId =
+      pick(row, [
+        'pathId',
+        'branchId',
+        'path',
+        'branch',
+        '路徑編號',
+        '分支編號',
+      ]) || 'main';
+    const stationId = pick(row, [
+      'stationId',
+      'station',
+      '車站編號',
+      '站號',
+    ]);
+    const sequenceText = pick(row, [
+      'sequence',
+      'seq',
+      'order',
+      'stationOrder',
+      '順序',
+      '站序',
+    ]);
     const sequence = Number(sequenceText);
 
-    if (!lineId) throw new Error(`Lines row ${index + 2}: lineId is required.`);
-    if (!stationId) throw new Error(`Lines row ${index + 2}: stationId is required.`);
+    if (!lineId) {
+      throw new Error(`路線工作表第 ${index + 2} 列：缺少路線編號。`);
+    }
+    if (!stationId) {
+      throw new Error(`路線工作表第 ${index + 2} 列：缺少車站編號。`);
+    }
     if (!Number.isFinite(sequence)) {
-      throw new Error(`Lines row ${index + 2}: sequence/order must be a number.`);
+      throw new Error(`路線工作表第 ${index + 2} 列：順序必須是數字。`);
     }
 
     const key = `${lineId}::${pathId}`;
@@ -188,21 +264,29 @@ export async function importExcelWorkbook(file: File): Promise<NetworkInput> {
   const data = new Uint8Array(await file.arrayBuffer());
   await workbook.xlsx.load(data as never);
 
-  const findSheet = (name: string) =>
-    workbook.worksheets.find((sheet) => sheet.name.trim().toLowerCase() === name);
+  const findSheet = (aliases: string[]) => {
+    const normalizedAliases = new Set(
+      aliases.map((name) => normalizeHeader(name)),
+    );
+    return workbook.worksheets.find((sheet) =>
+      normalizedAliases.has(normalizeHeader(sheet.name)),
+    );
+  };
 
-  const stationsSheet = findSheet('stations');
-  const linesSheet = findSheet('lines');
+  const stationsSheet = findSheet(['Stations', '車站']);
+  const linesSheet = findSheet(['Lines', '路線']);
 
   if (!stationsSheet || !linesSheet) {
-    throw new Error('Excel must contain worksheets named "Stations" and "Lines".');
+    throw new Error(
+      'Excel 必須包含「車站 / Stations」與「路線 / Lines」工作表。',
+    );
   }
 
   const stations = stationRecordsToStations(rowsToRecords(worksheetToRows(stationsSheet)));
   const lines = lineRecordsToLines(rowsToRecords(worksheetToRows(linesSheet)));
 
-  if (!stations.length) throw new Error('Stations worksheet is empty.');
-  if (!lines.length) throw new Error('Lines worksheet is empty.');
+  if (!stations.length) throw new Error('「車站 / Stations」工作表沒有資料。');
+  if (!lines.length) throw new Error('「路線 / Lines」工作表沒有資料。');
 
   return { stations, lines };
 }
