@@ -774,6 +774,24 @@ export function SvgMap({
     stationStyle,
     visualScale,
   );
+
+  const concentricGuide =
+    layout.style === 'concentric'
+      ? (() => {
+          const points = graph.nodes.map((node) => layout.positions[node.id]);
+          const center = {
+            x: points.reduce((sum, point) => sum + point.x, 0) / Math.max(1, points.length),
+            y: points.reduce((sum, point) => sum + point.y, 0) / Math.max(1, points.length),
+          };
+          const maxRadius = Math.max(
+            1,
+            ...points.map((point) =>
+              Math.hypot(point.x - center.x, point.y - center.y),
+            ),
+          );
+          return { center, maxRadius };
+        })()
+      : undefined;
   const bounds = renderBounds(
     graph,
     layout,
@@ -804,6 +822,20 @@ export function SvgMap({
       />
 
 
+
+      {concentricGuide ? (
+        <g className="concentric-guides" aria-hidden="true">
+          {[0.2, 0.4, 0.6, 0.8, 1].map((ratio) => (
+            <circle
+              key={ratio}
+              cx={concentricGuide.center.x}
+              cy={concentricGuide.center.y}
+              r={concentricGuide.maxRadius * ratio}
+              className="concentric-guide"
+            />
+          ))}
+        </g>
+      ) : null}
 
       <g id="lines" data-route-count={graph.lines.length}>
         {graph.lines.map((line) => {
