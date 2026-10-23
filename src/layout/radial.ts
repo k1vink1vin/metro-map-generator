@@ -1273,6 +1273,71 @@ export function layoutMoscow(
       ringNodeSet,
     );
 
+  // Cross-region connectors should approach a ring from the outside and
+  // touch it only at their interchange endpoint. This prevents a connector
+  // from grazing other stations on the ring before reaching its actual
+  // transfer station.
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (
+        !path.some((nodeId) =>
+          crossRegionPathNodes.has(nodeId),
+        )
+      ) {
+        continue;
+      }
+
+      const startRing = ringInfos.find((ring) =>
+        ring.definition.nodes.includes(path[0]),
+      );
+      const endRing = ringInfos.find((ring) =>
+        ring.definition.nodes.includes(
+          path[path.length - 1],
+        ),
+      );
+      const ring =
+        startRing && !endRing
+          ? startRing
+          : endRing && !startRing
+            ? endRing
+            : undefined;
+      if (!ring) continue;
+
+      const ringAtStart = Boolean(startRing);
+      const anchorIndex = ringAtStart
+        ? 0
+        : path.length - 1;
+
+      for (let index = 1; index < path.length - 1; index += 1) {
+        const nodeId = path[index];
+        const point = crossRegionRepaired[nodeId];
+        const dx = point.x - ring.geoCenter.x;
+        const dy = point.y - ring.geoCenter.y;
+        const radius = Math.max(1, Math.hypot(dx, dy));
+        const stepsFromRing = Math.abs(index - anchorIndex);
+
+        // The station immediately before the interchange still needs enough
+        // space for two badges; stations farther away get progressively more
+        // clearance from the ring.
+        const minimumRadius =
+          ring.targetRadius +
+          42 +
+          Math.min(90, Math.max(0, stepsFromRing - 1) * 8);
+
+        if (radius < minimumRadius) {
+          crossRegionRepaired[nodeId] = {
+            x:
+              ring.geoCenter.x +
+              (dx / radius) * minimumRadius,
+            y:
+              ring.geoCenter.y +
+              (dy / radius) * minimumRadius,
+          };
+        }
+      }
+    }
+  }
+
   // Keep the repaired connector and ring circles fixed. If another ordinary
   // station crowds this passenger-wayfinding backbone, move only that other
   // station. This preserves the connector's no-self-crossing geometry.
