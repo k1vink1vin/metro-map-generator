@@ -8,7 +8,6 @@ export async function downloadExcelTemplate() {
   workbook.creator = 'Metro Map Generator';
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  workbook.calcProperties.forceFullCalc = true;
 
   const stations = workbook.addWorksheet('Stations');
   stations.columns = [
@@ -80,45 +79,6 @@ export async function downloadExcelTemplate() {
       fgColor: { argb: 'FFF1F5F9' },
     };
   }
-
-  // Highlight coordinate validation failures.
-  stations.addConditionalFormatting({
-    ref: 'F2:F500',
-    rules: [
-      {
-        type: 'expression',
-        formulae: ['LEFT(F2,5)="ERROR"'],
-        style: {
-          fill: {
-            type: 'pattern',
-            pattern: 'solid',
-            bgColor: { argb: 'FFFECACA' },
-            fgColor: { argb: 'FFFECACA' },
-          },
-          font: {
-            color: { argb: 'FF991B1B' },
-            bold: true,
-          },
-        },
-      },
-      {
-        type: 'expression',
-        formulae: ['LEFT(F2,2)="OK"'],
-        style: {
-          fill: {
-            type: 'pattern',
-            pattern: 'solid',
-            bgColor: { argb: 'FFDCFCE7' },
-            fgColor: { argb: 'FFDCFCE7' },
-          },
-          font: {
-            color: { argb: 'FF166534' },
-            bold: true,
-          },
-        },
-      },
-    ],
-  });
 
   const lines = workbook.addWorksheet('Lines');
   lines.columns = [
