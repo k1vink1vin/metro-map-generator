@@ -4,10 +4,169 @@ import type {
   GraphModel,
   GraphNode,
   NetworkInput,
+  Station,
 } from '../types';
 
 export function edgeKey(a: string, b: string): string {
   return a < b ? `${a}::${b}` : `${b}::${a}`;
+}
+
+const AUTO_SAME_POINT_METERS = 25;
+const AUTO_SAME_NAME_METERS = 450;
+
+function normalizeStationName(name?: string): string {
+  return (name ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\s\-_—–·・.,，。()（）\[\]【】]/g, '');
+}
+
+function distanceMeters(a: Station, b: Station): number {
+  const earthRadius = 6_371_000;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const deltaLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const deltaLon = ((b.lon - a.lon) * Math.PI) / 180;
+
+  const sinLat = Math.sin(deltaLat / 2);
+  const sinLon = Math.sin(deltaLon / 2);
+  const haversine =
+    sinLat * sinLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+
+  return (
+    earthRadius *
+    2 *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
+
+class StationUnionFind {
+  private readonly parent: number[];
+  private readonly rank: number[];
+  private readonly explicitComplex: Array<string | undefined>;
+
+  constructor(stations: Station[]) {
+    this.parent = stations.map((_, index) => index);
+    this.rank = stations.map(() => 0);
+    this.explicitComplex = stations.map(
+      (station) => station.complexId?.trim() || undefined,
+    );
+  }
+
+  find(index: number): number {
+    if (this.parent[index] !== index) {
+      this.parent[index] = this.find(this.parent[index]);
+    }
+    return this.parent[index];
+  }
+
+  union(a: number, b: number): boolean {
+    let rootA = this.find(a);
+    let rootB = this.find(b);
+    if (rootA === rootB) return true;
+
+    const explicitA = this.explicitComplex[rootA];
+    const explicitB = this.explicitComplex[rootB];
+
+    // Two different explicit complex IDs are a hard user override and must
+    // never be auto-merged through a chain of inferred matches.
+    if (explicitA && explicitB && explicitA !== explicitB) {
+      return false;
+    }
+
+    if (this.rank[rootA] < this.rank[rootB]) {
+      [rootA, rootB] = [rootB, rootA];
+    }
+
+    this.parent[rootB] = rootA;
+    if (this.rank[rootA] === this.rank[rootB]) {
+      this.rank[rootA] += 1;
+    }
+
+    this.explicitComplex[rootA] = explicitA ?? explicitB;
+    return true;
+  }
+
+  explicitId(index: number): string | undefined {
+    return this.explicitComplex[this.find(index)];
+  }
+}
+
+function buildStationGroups(stations: Station[]): Map<string, Station[]> {
+  const unionFind = new StationUnionFind(stations);
+
+  // Explicit complexId remains the strongest/manual grouping mechanism.
+  const explicitRoots = new Map<string, number>();
+  stations.forEach((station, index) => {
+    const complexId = station.complexId?.trim();
+    if (!complexId) return;
+
+    const first = explicitRoots.get(complexId);
+    if (first == null) {
+      explicitRoots.set(complexId, index);
+    } else {
+      unionFind.union(first, index);
+    }
+  });
+
+  // Automatic grouping lets users simply repeat one physical interchange with
+  // different station IDs. We use conservative rules:
+  // 1) practically the same coordinate, or
+  // 2) the same normalized name and geographically close.
+  for (let aIndex = 0; aIndex < stations.length; aIndex += 1) {
+    const a = stations[aIndex];
+    const aName = normalizeStationName(a.name);
+
+    for (let bIndex = aIndex + 1; bIndex < stations.length; bIndex += 1) {
+      const b = stations[bIndex];
+
+      const rootA = unionFind.find(aIndex);
+      const rootB = unionFind.find(bIndex);
+      if (rootA === rootB) continue;
+
+      const explicitA = unionFind.explicitId(rootA);
+      const explicitB = unionFind.explicitId(rootB);
+      if (explicitA && explicitB && explicitA !== explicitB) {
+        continue;
+      }
+
+      const meters = distanceMeters(a, b);
+      const samePoint = meters <= AUTO_SAME_POINT_METERS;
+      const bName = normalizeStationName(b.name);
+      const sameNameNearby =
+        Boolean(aName) &&
+        aName === bName &&
+        meters <= AUTO_SAME_NAME_METERS;
+
+      if (samePoint || sameNameNearby) {
+        unionFind.union(aIndex, bIndex);
+      }
+    }
+  }
+
+  const byRoot = new Map<number, Station[]>();
+  stations.forEach((station, index) => {
+    const root = unionFind.find(index);
+    const group = byRoot.get(root) ?? [];
+    group.push(station);
+    byRoot.set(root, group);
+  });
+
+  const groups = new Map<string, Station[]>();
+
+  for (const [root, group] of byRoot) {
+    const explicitId = unionFind.explicitId(root);
+    const groupId =
+      explicitId ??
+      (group.length > 1
+        ? `__AUTO_TRANSFER__${group[0].id}`
+        : group[0].id);
+
+    groups.set(groupId, group);
+  }
+
+  return groups;
 }
 
 export function buildGraph(input: NetworkInput): GraphModel {
@@ -17,35 +176,46 @@ export function buildGraph(input: NetworkInput): GraphModel {
 
   const seenStationIds = new Set<string>();
   for (const station of input.stations) {
+    if (!station.id) throw new Error('Station id cannot be empty.');
     if (seenStationIds.has(station.id)) {
       throw new Error(`Duplicate station id: ${station.id}.`);
     }
     seenStationIds.add(station.id);
-  }
 
-  const byStation = new Map(input.stations.map((station) => [station.id, station]));
-  const groups = new Map<string, typeof input.stations>();
-
-  for (const station of input.stations) {
-    if (!station.id) throw new Error('Station id cannot be empty.');
     if (!Number.isFinite(station.lat) || !Number.isFinite(station.lon)) {
       throw new Error(`Invalid coordinates for station ${station.id}.`);
     }
-    const groupId = station.complexId?.trim() || station.id;
-    const group = groups.get(groupId) ?? [];
-    group.push(station);
-    groups.set(groupId, group);
   }
+
+  const byStation = new Map(
+    input.stations.map((station) => [station.id, station]),
+  );
+  const groups = buildStationGroups(input.stations);
 
   const stationToNode = new Map<string, string>();
   const nodes: GraphNode[] = [];
 
   for (const [groupId, stations] of groups) {
-    const lat = stations.reduce((sum, item) => sum + item.lat, 0) / stations.length;
-    const lon = stations.reduce((sum, item) => sum + item.lon, 0) / stations.length;
+    const lat =
+      stations.reduce((sum, item) => sum + item.lat, 0) /
+      stations.length;
+    const lon =
+      stations.reduce((sum, item) => sum + item.lon, 0) /
+      stations.length;
+
+    const normalizedNames = new Map<string, string>();
+    for (const station of stations) {
+      const normalized = normalizeStationName(station.name);
+      if (normalized && station.name?.trim()) {
+        normalizedNames.set(normalized, station.name.trim());
+      }
+    }
+
     const name =
-      stations.find((item) => item.name?.trim())?.name?.trim() ??
-      stations.map((item) => item.id).join(' / ');
+      normalizedNames.size === 1
+        ? [...normalizedNames.values()][0]
+        : stations.find((item) => item.name?.trim())?.name?.trim() ??
+          stations.map((item) => item.id).join(' / ');
 
     nodes.push({
       id: groupId,
@@ -55,12 +225,13 @@ export function buildGraph(input: NetworkInput): GraphModel {
       lon,
     });
 
-    for (const station of stations) stationToNode.set(station.id, groupId);
+    for (const station of stations) {
+      stationToNode.set(station.id, groupId);
+    }
   }
 
   const edgeMap = new Map<string, GraphEdge>();
   const graphLines: GraphLine[] = [];
-
   const seenLineIds = new Set<string>();
 
   for (const line of input.lines) {
@@ -73,19 +244,24 @@ export function buildGraph(input: NetworkInput): GraphModel {
     const paths = line.paths.map((path, pathIndex) => {
       const mapped = path.map((stationId) => {
         if (!byStation.has(stationId)) {
-          throw new Error(`Line ${line.id} references unknown station ${stationId}.`);
+          throw new Error(
+            `Line ${line.id} references unknown station ${stationId}.`,
+          );
         }
         return stationToNode.get(stationId)!;
       });
 
       const collapsed = mapped.filter(
-        (nodeId, index) => index === 0 || nodeId !== mapped[index - 1],
+        (nodeId, index) =>
+          index === 0 || nodeId !== mapped[index - 1],
       );
+
       if (collapsed.length < 2) {
         throw new Error(
           `Line ${line.id} path ${pathIndex + 1} must contain at least two distinct topology nodes.`,
         );
       }
+
       return collapsed;
     });
 
@@ -101,12 +277,21 @@ export function buildGraph(input: NetworkInput): GraphModel {
         const a = path[i];
         const b = path[i + 1];
         if (a === b) continue;
+
         const key = edgeKey(a, b);
         const existing = edgeMap.get(key);
+
         if (existing) {
-          if (!existing.lineIds.includes(line.id)) existing.lineIds.push(line.id);
+          if (!existing.lineIds.includes(line.id)) {
+            existing.lineIds.push(line.id);
+          }
         } else {
-          edgeMap.set(key, { key, a, b, lineIds: [line.id] });
+          edgeMap.set(key, {
+            key,
+            a,
+            b,
+            lineIds: [line.id],
+          });
         }
       }
     }
@@ -121,7 +306,9 @@ export function buildGraph(input: NetworkInput): GraphModel {
     edge.lineIds.sort();
   }
 
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const nodeById = new Map(
+    nodes.map((node) => [node.id, node]),
+  );
   const edges = [...edgeMap.values()];
 
   return {
@@ -135,7 +322,10 @@ export function buildGraph(input: NetworkInput): GraphModel {
   };
 }
 
-export function nodeDegree(graph: GraphModel, nodeId: string): number {
+export function nodeDegree(
+  graph: GraphModel,
+  nodeId: string,
+): number {
   return graph.adjacency.get(nodeId)?.length ?? 0;
 }
 
@@ -155,7 +345,12 @@ export function findSimpleCycles(
     const variants: string[] = [];
     for (const candidate of [cycle, [...cycle].reverse()]) {
       for (let i = 0; i < candidate.length; i += 1) {
-        variants.push([...candidate.slice(i), ...candidate.slice(0, i)].join('|'));
+        variants.push(
+          [
+            ...candidate.slice(i),
+            ...candidate.slice(0, i),
+          ].join('|'),
+        );
       }
     }
     return variants.sort()[0];
@@ -166,9 +361,16 @@ export function findSimpleCycles(
     const path = [start];
 
     const dfs = (current: string) => {
-      if (cycles.size >= maxCycles || path.length > maxLength) return;
+      if (
+        cycles.size >= maxCycles ||
+        path.length > maxLength
+      ) {
+        return;
+      }
 
-      for (const next of graph.adjacency.get(current) ?? []) {
+      for (
+        const next of graph.adjacency.get(current) ?? []
+      ) {
         if (next === start && path.length >= 3) {
           const cycle = [...path];
           cycles.set(canonicalize(cycle), cycle);
@@ -177,7 +379,6 @@ export function findSimpleCycles(
         }
 
         if (visited.has(next)) continue;
-        // Prevent exploring equivalent cycles from every possible smallest node.
         if (next < start) continue;
 
         visited.add(next);

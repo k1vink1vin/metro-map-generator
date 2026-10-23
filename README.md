@@ -12,7 +12,8 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 - Excel (.xlsx) import with `Stations` and `Lines` worksheets
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
-- transfer-complex merging through `complexId`
+- automatic transfer-station grouping across different station IDs
+- optional `complexId` manual override for exceptional transfers
 - Geographic reference view
 - Taipei-inspired 45° layout
 - London-inspired 45° layout
@@ -28,7 +29,7 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 
 ## Input
 
-Stations:
+Stations may repeat one physical interchange with different IDs:
 
 ```json
 [
@@ -36,20 +37,20 @@ Stations:
     "id": "G03",
     "name": "Songzhu",
     "lat": 24.181,
-    "lon": 120.698,
-    "complexId": "X_SONGZHU"
+    "lon": 120.698
   },
   {
     "id": "T01",
     "name": "Songzhu",
     "lat": 24.1815,
-    "lon": 120.699,
-    "complexId": "X_SONGZHU"
+    "lon": 120.699
   }
 ]
 ```
 
-Two records with the same `complexId` are treated as one transfer node by the topology/layout engine.
+The original IDs stay distinct for route input (`G03`, `T01`), but the topology engine automatically groups them into one transfer node because the normalized station name matches and the coordinates are nearby.
+
+`complexId` remains optional as a manual override. Use it when two services refer to the same physical transfer with different names, such as `HSR Taichung` and `Xinwuri`, or to explicitly prevent two nearby same-name records from being merged by assigning different complex IDs.
 
 Routes:
 
@@ -129,11 +130,22 @@ Use these columns in `Stations.csv` or the Excel worksheet named `Stations`:
 ```text
 id,name,lat,lon,complexId
 G01,Station A,24.123,120.456,
-G02,Transfer B,24.124,120.457,X_B
-T02,Transfer B,24.1242,120.4571,X_B
+G02,Transfer B,24.1240,120.4570,
+T02,Transfer B,24.1242,120.4571,
+H01,HSR Taichung,24.1120,120.6160,X_HSR
+T06,Xinwuri,24.1110,120.6150,X_HSR
 ```
 
-`complexId` is optional. Give records from different services the same `complexId` when they should behave as one transfer complex in topology.
+The intended input model is **one row per service-specific station ID**, even when several IDs represent the same physical interchange.
+
+Automatic grouping rules are conservative:
+
+- stations within about 25 m are treated as the same physical point,
+- stations with the same normalized name within about 450 m are treated as the same transfer complex,
+- two different explicit `complexId` values are never auto-merged,
+- the same explicit `complexId` always forces grouping.
+
+Routes still reference the original service-specific IDs. The grouping only happens internally when building the union transit graph.
 
 ### Lines
 

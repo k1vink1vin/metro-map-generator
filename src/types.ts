@@ -12,8 +12,11 @@ export interface Station {
   lat: number;
   lon: number;
   /**
-   * Stations with the same complexId are treated as one transfer node by
-   * topology/layout while keeping their original station IDs in route input.
+   * Optional manual transfer-complex override.
+   *
+   * Different station IDs can be auto-grouped when they describe the same
+   * nearby physical station. complexId is useful when station names differ,
+   * or when the user wants to force/prevent automatic grouping.
    */
   complexId?: string;
 }

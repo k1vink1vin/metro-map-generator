@@ -264,6 +264,7 @@ export function App() {
               </div>
               <small>
                 Excel 需包含 Stations、Lines 兩個工作表；CSV 則分開匯入車站與路線。
+                同一個轉乘站可以重複列出、保留不同 station ID；系統會依站名與座標自動合併。
                 Lines.csv 使用 pathId + sequence 描述主線與 Y 型支線。
               </small>
             </div>
