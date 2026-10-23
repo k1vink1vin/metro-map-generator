@@ -7,7 +7,7 @@ Private Function NormalizeStationName(ByVal value As Variant) As String
     NormalizeStationName = LCase$(Trim$(CStr(value)))
 End Function
 
-Public Sub ValidateTransferCoordinates()
+Public Sub CompleteTransfersAndValidate()
     Dim ws As Worksheet
     Dim lastRow As Long
     Dim rowIndex As Long
@@ -34,26 +34,29 @@ Public Sub ValidateTransferCoordinates()
         Exit Sub
     End If
 
-    ws.Range("A2:D" & lastRow).Interior.Pattern = xlNone
+    ws.Cells(1, "E").Value = "Transfer Group"
+    ws.Cells(1, "F").Value = "Transfer Validation"
+    ws.Range("E2:F" & lastRow).ClearContents
+    ws.Range("A2:F" & lastRow).Interior.Pattern = xlNone
 
+    ' First pass: count station names and validate coordinates.
     For rowIndex = 2 To lastRow
         stationId = Trim$(CStr(ws.Cells(rowIndex, "A").Value))
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
 
         If stationId <> "" And stationName <> "" Then
+            If counts.Exists(stationName) Then
+                counts(stationName) = CLng(counts(stationName)) + 1
+            Else
+                counts(stationName) = 1
+            End If
+
             If Not IsNumeric(ws.Cells(rowIndex, "C").Value) Or _
                Not IsNumeric(ws.Cells(rowIndex, "D").Value) Then
-                ws.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
                 mismatches(stationName) = True
             Else
                 latitude = CDbl(ws.Cells(rowIndex, "C").Value)
                 longitude = CDbl(ws.Cells(rowIndex, "D").Value)
-
-                If counts.Exists(stationName) Then
-                    counts(stationName) = CLng(counts(stationName)) + 1
-                Else
-                    counts(stationName) = 1
-                End If
 
                 If Not info.Exists(stationName) Then
                     info(stationName) = Array(latitude, longitude, stationId, rowIndex)
@@ -68,28 +71,42 @@ Public Sub ValidateTransferCoordinates()
         End If
     Next rowIndex
 
+    ' Second pass: auto-fill transfer group and validation columns.
     For rowIndex = 2 To lastRow
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
-        If stationName <> "" And counts.Exists(stationName) Then
-            If CLng(counts(stationName)) > 1 Then
-                transferRowCount = transferRowCount + 1
-                If mismatches.Exists(stationName) Then
-                    ws.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(254, 202, 202)
-                Else
-                    ws.Range("A" & rowIndex & ":D" & rowIndex).Interior.Color = RGB(220, 252, 231)
-                End If
+
+        If stationName = "" Then
+            ws.Cells(rowIndex, "E").ClearContents
+            ws.Cells(rowIndex, "F").ClearContents
+        ElseIf counts.Exists(stationName) And CLng(counts(stationName)) > 1 Then
+            transferRowCount = transferRowCount + 1
+            ws.Cells(rowIndex, "E").Value = Trim$(CStr(ws.Cells(rowIndex, "B").Value))
+
+            If mismatches.Exists(stationName) Then
+                ws.Cells(rowIndex, "F").Value = "ERROR - Coordinates Mismatch"
+                ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(254, 202, 202)
+            Else
+                ws.Cells(rowIndex, "F").Value = "OK - Coordinates Match"
+                ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(220, 252, 231)
             End If
+        Else
+            ws.Cells(rowIndex, "E").ClearContents
+            ws.Cells(rowIndex, "F").ClearContents
         End If
     Next rowIndex
 
     mismatchCount = mismatches.Count
 
     If mismatchCount = 0 Then
-        MsgBox "Validation passed. Duplicate station names use consistent coordinates." & vbCrLf & _
-               "Transfer-station rows checked: " & transferRowCount, vbInformation
+        MsgBox "Transfer fields completed and validation passed." & vbCrLf & _
+               "Transfer-station rows: " & transferRowCount, vbInformation
     Else
-        MsgBox "Validation failed. " & mismatchCount & _
-               " duplicated station name(s) have inconsistent coordinates." & vbCrLf & _
+        MsgBox "Transfer fields completed, but validation failed." & vbCrLf & _
+               mismatchCount & " duplicated station name(s) have inconsistent coordinates." & vbCrLf & _
                "Rows in red need correction.", vbCritical
     End If
+End Sub
+
+Public Sub ValidateTransferCoordinates()
+    CompleteTransfersAndValidate
 End Sub
