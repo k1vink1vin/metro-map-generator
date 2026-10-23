@@ -1,4 +1,5 @@
 import type { GraphModel, Point } from '../types';
+import { layoutTaipei } from './octilinear';
 import {
   regularizeRouteCorridors,
   relaxPathKinksSafely,
@@ -47,10 +48,11 @@ export function layoutHexilinear(
     structuralMaxShift: 16,
   });
 
+  const topologyReference = layoutTaipei(graph, geographic);
   return repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
-    geographic,
+    topologyReference,
     24,
   );
 }
