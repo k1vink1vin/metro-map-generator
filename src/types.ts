@@ -71,9 +71,22 @@ export interface GraphModel {
   lines: GraphLine[];
 }
 
+export interface RingCandidateDiagnostic {
+  nodes: string[];
+  score: number;
+  routeIds: string[];
+  transferCount: number;
+  outwardConnections: number;
+  areaCoverage: number;
+  shapeFill: number;
+  aspectScore: number;
+  radialConsistency: number;
+}
+
 export interface LayoutResult {
   style: StyleId;
   positions: Record<string, Point>;
   geographicPositions: Record<string, Point>;
   primaryRing?: string[];
+  ringCandidates?: RingCandidateDiagnostic[];
 }

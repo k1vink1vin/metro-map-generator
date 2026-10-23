@@ -46,6 +46,7 @@ export function computeLayout(graph: GraphModel, style: StyleId): LayoutResult {
       positions: result.positions,
       geographicPositions: geographic,
       primaryRing: result.primaryRing,
+      ringCandidates: result.ringCandidates,
     };
   }
 

@@ -1,6 +1,6 @@
 import { edgeKey, findSimpleCycles } from '../core/graph';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
-import type { GraphModel, Point } from '../types';
+import type { GraphModel, Point, RingCandidateDiagnostic } from '../types';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -15,11 +15,76 @@ function polygonArea(points: Point[]): number {
   return Math.abs(area) / 2;
 }
 
-function cycleScore(
+function networkBoundingArea(
+  graph: GraphModel,
+  geographic: Record<string, Point>,
+): number {
+  const points = graph.nodes.map((node) => geographic[node.id]);
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  return Math.max(1, (maxX - minX) * (maxY - minY));
+}
+
+function minimumLineSwitches(graph: GraphModel, cycle: string[]): number {
+  const edgeOptions = cycle.map((a, index) => {
+    const b = cycle[(index + 1) % cycle.length];
+    return graph.edgeByKey.get(edgeKey(a, b))?.lineIds ?? [];
+  });
+
+  if (edgeOptions.some((options) => options.length === 0)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let best = Number.POSITIVE_INFINITY;
+
+  for (const startLine of edgeOptions[0]) {
+    let costs = new Map<string, number>([[startLine, 0]]);
+
+    for (let edgeIndex = 1; edgeIndex < edgeOptions.length; edgeIndex += 1) {
+      const nextCosts = new Map<string, number>();
+
+      for (const nextLine of edgeOptions[edgeIndex]) {
+        let nextBest = Number.POSITIVE_INFINITY;
+        for (const [previousLine, previousCost] of costs) {
+          const cost = previousCost + (previousLine === nextLine ? 0 : 1);
+          nextBest = Math.min(nextBest, cost);
+        }
+        nextCosts.set(nextLine, nextBest);
+      }
+
+      costs = nextCosts;
+    }
+
+    for (const [endLine, cost] of costs) {
+      best = Math.min(best, cost + (endLine === startLine ? 0 : 1));
+    }
+  }
+
+  return Number.isFinite(best) ? best : 0;
+}
+
+function radialConsistency(points: Point[]): number {
+  const center = {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+  const radii = points.map((point) => Math.hypot(point.x - center.x, point.y - center.y));
+  const mean = radii.reduce((sum, radius) => sum + radius, 0) / radii.length;
+  if (mean <= 1e-9) return 0;
+  const variance =
+    radii.reduce((sum, radius) => sum + (radius - mean) ** 2, 0) / radii.length;
+  const deviation = Math.sqrt(variance);
+  return clamp(1 - deviation / mean, 0, 1);
+}
+
+function scoreCycle(
   graph: GraphModel,
   geographic: Record<string, Point>,
   cycle: string[],
-): number {
+  networkArea: number,
+): RingCandidateDiagnostic {
   const points = cycle.map((id) => geographic[id]);
   const minX = Math.min(...points.map((point) => point.x));
   const maxX = Math.max(...points.map((point) => point.x));
@@ -27,9 +92,11 @@ function cycleScore(
   const maxY = Math.max(...points.map((point) => point.y));
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
-  const bboxArea = width * height;
-  const fill = polygonArea(points) / bboxArea;
-  const aspect = Math.min(width, height) / Math.max(width, height);
+  const cycleArea = polygonArea(points);
+  const shapeFill = clamp(cycleArea / (width * height), 0, 1);
+  const aspectScore = Math.min(width, height) / Math.max(width, height);
+  const areaCoverage = clamp(cycleArea / networkArea, 0, 1);
+  const radial = radialConsistency(points);
 
   const routeIds = new Set<string>();
   let outwardConnections = 0;
@@ -46,25 +113,53 @@ function cycleScore(
     ).length;
   }
 
-  const compositeBonus = routeIds.size > 1 ? Math.min(18, (routeIds.size - 1) * 8) : 0;
+  const transferCount = minimumLineSwitches(graph, cycle);
+  const nodeCoverage = cycle.length / Math.max(1, graph.nodes.length);
+  const spokeScore = clamp(outwardConnections / Math.max(2, cycle.length / 2), 0, 1);
+  const tinyLoopPenalty = areaCoverage < 0.025 ? (0.025 - areaCoverage) * 240 : 0;
 
-  return (
-    cycle.length * 3.2 +
-    fill * 18 +
-    aspect * 14 +
-    outwardConnections * 2.5 +
-    compositeBonus
-  );
+  const score =
+    Math.sqrt(areaCoverage) * 38 +
+    shapeFill * 14 +
+    aspectScore * 8 +
+    radial * 12 +
+    spokeScore * 18 +
+    Math.min(nodeCoverage, 0.65) * 12 -
+    transferCount * 2.5 -
+    tinyLoopPenalty;
+
+  return {
+    nodes: cycle,
+    score,
+    routeIds: [...routeIds].sort(),
+    transferCount,
+    outwardConnections,
+    areaCoverage,
+    shapeFill,
+    aspectScore,
+    radialConsistency: radial,
+  };
+}
+
+export function findRingCandidates(
+  graph: GraphModel,
+  geographic: Record<string, Point>,
+): RingCandidateDiagnostic[] {
+  const maxLength = Math.min(graph.nodes.length, 60);
+  const cycles = findSimpleCycles(graph, maxLength, 1200);
+  const networkArea = networkBoundingArea(graph, geographic);
+
+  return cycles
+    .map((cycle) => scoreCycle(graph, geographic, cycle, networkArea))
+    .filter((candidate) => candidate.nodes.length >= 3)
+    .sort((a, b) => b.score - a.score);
 }
 
 export function findPrimaryRing(
   graph: GraphModel,
   geographic: Record<string, Point>,
-): string[] | undefined {
-  const cycles = findSimpleCycles(graph);
-  return cycles
-    .map((cycle) => ({ cycle, score: cycleScore(graph, geographic, cycle) }))
-    .sort((a, b) => b.score - a.score)[0]?.cycle;
+): RingCandidateDiagnostic | undefined {
+  return findRingCandidates(graph, geographic)[0];
 }
 
 function angleDistance(a: number, b: number): number {
@@ -131,18 +226,31 @@ function multiSourceHopDistance(graph: GraphModel, sources: string[]): Map<strin
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
-): { positions: Record<string, Point>; primaryRing?: string[] } {
-  const detected = findPrimaryRing(graph, geographic);
-  if (!detected?.length) {
-    return { positions: layoutConcentric(graph, geographic) };
+): {
+  positions: Record<string, Point>;
+  primaryRing?: string[];
+  ringCandidates: RingCandidateDiagnostic[];
+} {
+  const candidates = findRingCandidates(graph, geographic);
+  const detected = candidates[0];
+
+  if (!detected?.nodes.length) {
+    return {
+      positions: layoutConcentric(graph, geographic),
+      ringCandidates: candidates,
+    };
   }
 
   const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
   const ringGeoCenter = {
-    x: detected.reduce((sum, id) => sum + geographic[id].x, 0) / detected.length,
-    y: detected.reduce((sum, id) => sum + geographic[id].y, 0) / detected.length,
+    x:
+      detected.nodes.reduce((sum, id) => sum + geographic[id].x, 0) /
+      detected.nodes.length,
+    y:
+      detected.nodes.reduce((sum, id) => sum + geographic[id].y, 0) /
+      detected.nodes.length,
   };
-  const ring = orientRing(detected, geographic, ringGeoCenter);
+  const ring = orientRing(detected.nodes, geographic, ringGeoCenter);
   const ringPoints = ring.map((id) => geographic[id]);
   const width =
     Math.max(...ringPoints.map((point) => point.x)) -
@@ -206,7 +314,7 @@ export function layoutMoscow(
     };
   }
 
-  return { positions, primaryRing: ring };
+  return { positions, primaryRing: ring, ringCandidates: candidates };
 }
 
 export function layoutConcentric(

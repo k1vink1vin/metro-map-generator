@@ -90,6 +90,61 @@ button {
   color: #e5e7eb;
 }
 
+.file-button,
+.mini-file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-button input,
+.mini-file-button input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.import-box {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  margin-bottom: 18px;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #fbbf24;
+  background: #fff;
+}
+
+.import-box strong {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.import-box small {
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.import-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mini-file-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #1f2937;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .button.generate {
   margin-left: auto;
   background: #111827;
@@ -233,6 +288,14 @@ select {
   font-weight: 650;
 }
 
+.notice-banner {
+  padding: 10px 12px;
+  background: #ecfdf5;
+  border-left: 4px solid #059669;
+  color: #065f46;
+  font-weight: 650;
+}
+
 .canvas-frame {
   flex: 1;
   min-height: 500px;
@@ -335,6 +398,14 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ring-status {
+  min-width: 0;
+}
+
+.ring-status small + small {
+  margin-top: 2px;
 }
 
 footer {

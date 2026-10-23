@@ -41,29 +41,38 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
         </g>
       ) : null}
 
-      <g id="lines">
-        {graph.lines.flatMap((line) =>
-          line.paths.map((path, pathIndex) => {
-            const points = offsetPathForLine(
-              graph,
-              path,
-              layout.positions,
-              line.id,
-              9,
-            );
-            return (
-              <path
-                key={`${line.id}-${pathIndex}`}
-                d={roundedPath(points, 16)}
-                fill="none"
-                stroke={line.color}
-                strokeWidth={10}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            );
-          }),
-        )}
+      <g id="lines" data-route-count={graph.lines.length}>
+        {graph.lines.map((line) => (
+          <g
+            key={line.id}
+            id={`route-${line.id}`}
+            data-line-id={line.id}
+            data-path-count={line.paths.length}
+          >
+            {line.paths.map((path, pathIndex) => {
+              const points = offsetPathForLine(
+                graph,
+                path,
+                layout.positions,
+                line.id,
+                9,
+              );
+              return (
+                <path
+                  key={`${line.id}-${pathIndex}`}
+                  data-line-id={line.id}
+                  data-path-index={pathIndex}
+                  d={roundedPath(points, 16)}
+                  fill="none"
+                  stroke={line.color}
+                  strokeWidth={10}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              );
+            })}
+          </g>
+        ))}
       </g>
 
       <g id="stations">
