@@ -1,14 +1,38 @@
 import type { GraphModel, Point } from '../types';
-import { schematizeOnAngularGrid } from './common';
+import {
+  regularizeRouteCorridors,
+  schematizeOnAngularGrid,
+} from './common';
 
+/**
+ * Hex / tri-axial style.
+ *
+ * The first phase attracts edges to the 0°/60°/120° axis family. The second
+ * phase works on whole station runs between structural nodes, eliminating the
+ * short alternating zig-zags that occur when every segment is snapped
+ * independently.
+ */
 export function layoutHexilinear(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  return schematizeOnAngularGrid(graph, geographic, {
+  const snapped = schematizeOnAngularGrid(graph, geographic, {
     angleStep: 60,
-    geographyWeight: 0.42,
-    equalSpacingWeight: 0.44,
-    iterations: 110,
+    geographyWeight: 0.38,
+    equalSpacingWeight: 0.5,
+    iterations: 115,
   });
+
+  return regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 60,
+      passes: 7,
+      runBlend: 0.82,
+      geographyTether: 0.12,
+      equalSpacingWeight: 0.62,
+    },
+  );
 }
