@@ -42,8 +42,8 @@ Stations may repeat one physical interchange with different IDs:
   {
     "id": "T01",
     "name": "Songzhu",
-    "lat": 24.1815,
-    "lon": 120.699
+    "lat": 24.181,
+    "lon": 120.698
   }
 ]
 ```
