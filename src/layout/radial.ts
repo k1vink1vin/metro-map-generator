@@ -626,21 +626,149 @@ export function layoutMoscow(
   positions: Record<string, Point>;
   moscowRings: ValidatedMoscowRing[];
 } {
-  // Regional Moscow style: preserve the true north-up geographic topology.
-  // The validated rings are emphasized by the renderer instead of forcing
-  // unrelated Taipei/New Taipei and Taoyuan loops into artificial circles.
-  // This avoids pulling every spoke and transfer corridor into zig-zags.
+  if (!definedRings.length) {
+    return {
+      positions: Object.fromEntries(
+        graph.nodes.map((node) => [
+          node.id,
+          { ...geographic[node.id] },
+        ]),
+      ),
+      moscowRings: [],
+    };
+  }
+
+  const positions: Record<string, Point> = Object.fromEntries(
+    graph.nodes.map((node) => [
+      node.id,
+      { ...geographic[node.id] },
+    ]),
+  );
+
+  const ringNodeSet = new Set<string>();
+  const ringTransforms = definedRings.map((definition) => {
+    const rawPoints = definition.nodes.map((id) => geographic[id]);
+    const center = {
+      x:
+        rawPoints.reduce((sum, point) => sum + point.x, 0) /
+        Math.max(1, rawPoints.length),
+      y:
+        rawPoints.reduce((sum, point) => sum + point.y, 0) /
+        Math.max(1, rawPoints.length),
+    };
+
+    const radii = rawPoints.map((point) =>
+      Math.hypot(point.x - center.x, point.y - center.y),
+    );
+    const meanRadius =
+      radii.reduce((sum, radius) => sum + radius, 0) /
+      Math.max(1, radii.length);
+
+    const minX = Math.min(...rawPoints.map((point) => point.x));
+    const maxX = Math.max(...rawPoints.map((point) => point.x));
+    const minY = Math.min(...rawPoints.map((point) => point.y));
+    const maxY = Math.max(...rawPoints.map((point) => point.y));
+    const bboxRadius = Math.sqrt(
+      Math.max(1, (maxX - minX) * (maxY - minY)),
+    ) / 2;
+
+    // Each validated loop becomes its own true circle. The centre stays at
+    // that loop's geographic centroid, so Taipei/New Taipei and Taoyuan are
+    // emphasized independently instead of being forced into concentric rings.
+    const radius = Math.max(105, meanRadius * 0.82, bboxRadius * 0.88);
+    const ring = orientRing(definition.nodes, geographic, center);
+    const slot = (Math.PI * 2) / ring.length;
+    const deltas = new Map<string, Point>();
+
+    ring.forEach((id, index) => {
+      ringNodeSet.add(id);
+      const equalAngle = -Math.PI / 2 + slot * index;
+      const geoAngle = Math.atan2(
+        geographic[id].y - center.y,
+        geographic[id].x - center.x,
+      );
+      const adjustment = clamp(
+        signedAngleDelta(equalAngle, geoAngle),
+        -slot * 0.42,
+        slot * 0.42,
+      );
+      const angle = equalAngle + adjustment;
+      const target = {
+        x: center.x + Math.cos(angle) * radius,
+        y: center.y + Math.sin(angle) * radius,
+      };
+
+      positions[id] = target;
+      deltas.set(id, {
+        x: target.x - geographic[id].x,
+        y: target.y - geographic[id].y,
+      });
+    });
+
+    return {
+      definition: { ...definition, nodes: ring },
+      center,
+      radius,
+      deltas,
+      hops: multiSourceHopDistance(graph, ring),
+    };
+  });
+
+  // Blend the circle deformation into nearby spokes instead of leaving a
+  // hard elbow at the first non-ring station. Only the nearest few graph
+  // hops move, so regional north-up geography remains intact.
+  for (const node of graph.nodes) {
+    if (ringNodeSet.has(node.id)) continue;
+
+    let chosen:
+      | {
+          transform: (typeof ringTransforms)[number];
+          hops: number;
+        }
+      | undefined;
+
+    for (const transform of ringTransforms) {
+      const hops = transform.hops.get(node.id);
+      if (hops == null || hops > 3) continue;
+      if (!chosen || hops < chosen.hops) {
+        chosen = { transform, hops };
+      }
+    }
+
+    if (!chosen) continue;
+
+    const decay =
+      chosen.hops === 1
+        ? 0.62
+        : chosen.hops === 2
+          ? 0.32
+          : 0.14;
+
+    let nearestRingId = chosen.transform.definition.nodes[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const ringId of chosen.transform.definition.nodes) {
+      const distance = Math.hypot(
+        geographic[node.id].x - geographic[ringId].x,
+        geographic[node.id].y - geographic[ringId].y,
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestRingId = ringId;
+      }
+    }
+
+    const delta = chosen.transform.deltas.get(nearestRingId);
+    if (!delta) continue;
+
+    positions[node.id] = {
+      x: geographic[node.id].x + delta.x * decay,
+      y: geographic[node.id].y + delta.y * decay,
+    };
+  }
+
   return {
-    positions: Object.fromEntries(
-      graph.nodes.map((node) => [
-        node.id,
-        { ...geographic[node.id] },
-      ]),
-    ),
-    moscowRings: definedRings.map((ring) => ({
-      ...ring,
-      nodes: [...ring.nodes],
-    })),
+    positions,
+    moscowRings: ringTransforms.map((item) => item.definition),
   };
 }
 
