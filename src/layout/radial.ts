@@ -876,9 +876,14 @@ function safelyFanOutSelfCrossingMoscowPaths(
             candidate,
           );
 
+          // Judge the whole visual result, not external crossings in
+          // isolation. Moving a tangled branch outward may introduce one
+          // clean crossing while removing many self-crossings; that is still
+          // a large readability improvement.
           if (
             self >= currentSelf ||
-            external > currentExternal
+            self + external >=
+              currentSelf + currentExternal
           ) {
             continue;
           }
