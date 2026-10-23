@@ -110,7 +110,7 @@ export function App() {
     setValidatedMoscowRings(nextRings);
     resetMapZoom();
     setError('');
-    return nextGraph;
+    return { graph: nextGraph, rings: nextRings };
   };
 
   const generate = (nextStyle = style) => {
@@ -120,10 +120,15 @@ export function App() {
       if (!Array.isArray(stations) || !Array.isArray(lines)) {
         throw new Error('Stations and lines must both be JSON arrays.');
       }
-      generateFrom(stations, lines, moscowRingDefinitions, nextStyle);
+      const generated = generateFrom(
+        stations,
+        lines,
+        moscowRingDefinitions,
+        nextStyle,
+      );
       setNotice(
         nextStyle === 'moscow'
-          ? `莫斯科環驗證通過：${validatedMoscowRings.length} 個環。`
+          ? `莫斯科環驗證通過：${generated.rings.length} 個環。`
           : '',
       );
     } catch (cause) {
