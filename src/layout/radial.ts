@@ -269,7 +269,7 @@ function smoothMoscowCorridors(
     }
   }
 
-  for (let iteration = 0; iteration < 4; iteration += 1) {
+  for (let iteration = 0; iteration < 8; iteration += 1) {
     const next = Object.fromEntries(
       Object.entries(current).map(([id, point]) => [id, { ...point }]),
     );
@@ -318,8 +318,8 @@ function smoothMoscowCorridors(
       const shiftLength = Math.hypot(dx, dy);
       if (shiftLength < 1) continue;
 
-      const maxShift = Math.min(inLength, outLength) * 0.18;
-      const applied = Math.min(shiftLength * 0.48, maxShift);
+      const maxShift = Math.min(inLength, outLength) * 0.26;
+      const applied = Math.min(shiftLength * 0.66, maxShift);
       const scale = applied / shiftLength;
 
       next[node.id] = {
@@ -334,7 +334,7 @@ function smoothMoscowCorridors(
   // A second pass specifically removes S-shaped A-B-C-D doglegs. These are
   // visually distracting on passenger maps because the line changes side
   // twice within only a few stations.
-  for (let iteration = 0; iteration < 2; iteration += 1) {
+  for (let iteration = 0; iteration < 4; iteration += 1) {
     const next = Object.fromEntries(
       Object.entries(current).map(([id, point]) => [id, { ...point }]),
     );
@@ -394,7 +394,7 @@ function smoothMoscowCorridors(
             const dy = target.y - point.y;
             const length = Math.hypot(dx, dy);
             if (length < 1) return { ...point };
-            const applied = Math.min(length * 0.62, localLength * 0.22);
+            const applied = Math.min(length * 0.78, localLength * 0.3);
             return {
               x: point.x + (dx / length) * applied,
               y: point.y + (dy / length) * applied,
