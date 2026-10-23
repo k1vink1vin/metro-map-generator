@@ -1,12 +1,12 @@
 import { projectGeographic } from '../core/projection';
-import type { GraphModel, LayoutResult, StyleId } from '../types';
+import type { GraphModel, LayoutResult, StyleId, ValidatedMoscowRing } from '../types';
 import { finalizeLayoutPositions } from './finalize';
 import { layoutHexilinear } from './hexilinear';
 import { layoutLondon, layoutTaipei } from './octilinear';
 import { layoutConcentric, layoutMoscow } from './radial';
 
 export interface LayoutOptions {
-  moscowRingCandidateId?: string;
+  moscowRings?: ValidatedMoscowRing[];
 }
 
 function finish(
@@ -17,7 +17,7 @@ function finish(
   extra: Partial<
     Pick<
       LayoutResult,
-      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates'
+      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings'
     >
   > = {},
 ): LayoutResult {
@@ -74,13 +74,12 @@ export function computeLayout(
     const result = layoutMoscow(
       graph,
       geographic,
-      options.moscowRingCandidateId,
+      options.moscowRings ?? [],
     );
 
     return finish(graph, style, geographic, result.positions, {
-      primaryRing: result.primaryRing,
-      primaryRingCandidateId: result.primaryRingCandidateId,
-      ringCandidates: result.ringCandidates,
+      moscowRings: result.moscowRings,
+      primaryRing: result.moscowRings[0]?.nodes,
     });
   }
 
