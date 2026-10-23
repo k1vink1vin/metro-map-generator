@@ -640,9 +640,10 @@ function moscowSegmentsCross(
   );
 }
 
-function safelyFanOutSelfCrossingMoscowPaths(
+function repairCrossRegionMoscowPaths(
   graph: GraphModel,
   positions: Record<string, Point>,
+  geographic: Record<string, Point>,
   fixedNodes: Set<string>,
 ): Record<string, Point> {
   const result = Object.fromEntries(
@@ -652,7 +653,7 @@ function safelyFanOutSelfCrossingMoscowPaths(
     ]),
   );
 
-  const pathSelfCrossings = (
+  const selfCrossings = (
     path: string[],
     source: Record<string, Point>,
   ): number => {
@@ -674,237 +675,60 @@ function safelyFanOutSelfCrossingMoscowPaths(
     return count;
   };
 
-  const pathExternalCrossings = (
-    path: string[],
-    source: Record<string, Point>,
-  ): number => {
-    let count = 0;
-    const pathEdgeKeys = new Set<string>();
-    for (let i = 0; i < path.length - 1; i += 1) {
-      pathEdgeKeys.add(
-        [path[i], path[i + 1]].sort().join('::'),
-      );
-    }
-
-    for (let i = 0; i < path.length - 1; i += 1) {
-      const aId = path[i];
-      const bId = path[i + 1];
-      for (const edge of graph.edges) {
-        const edgeKeyValue = [edge.a, edge.b]
-          .sort()
-          .join('::');
-        if (pathEdgeKeys.has(edgeKeyValue)) continue;
-        if (
-          aId === edge.a ||
-          aId === edge.b ||
-          bId === edge.a ||
-          bId === edge.b
-        ) {
-          continue;
-        }
-        if (
-          moscowSegmentsCross(
-            source[aId],
-            source[bId],
-            source[edge.a],
-            source[edge.b],
-          )
-        ) {
-          count += 1;
-        }
-      }
-    }
-    return count;
-  };
-
-  const candidateIsReadable = (
-    path: string[],
-    candidate: Record<string, Point>,
-  ): boolean => {
-    const pathSet = new Set(path);
-
-    for (let i = 1; i < path.length - 1; i += 1) {
-      const id = path[i];
-      const point = candidate[id];
-
-      for (const node of graph.nodes) {
-        if (node.id === id) continue;
-        if (pathSet.has(node.id)) continue;
-        const other = candidate[node.id] ?? result[node.id];
-        if (
-          Math.hypot(
-            point.x - other.x,
-            point.y - other.y,
-          ) < 30
-        ) {
-          return false;
-        }
-      }
-    }
-
-    for (let i = 0; i < path.length - 1; i += 1) {
-      if (
-        Math.hypot(
-          candidate[path[i + 1]].x -
-            candidate[path[i]].x,
-          candidate[path[i + 1]].y -
-            candidate[path[i]].y,
-        ) < 32
-      ) {
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  const networkCenter = {
-    x:
-      graph.nodes.reduce(
-        (sum, node) => sum + result[node.id].x,
-        0,
-      ) / Math.max(1, graph.nodes.length),
-    y:
-      graph.nodes.reduce(
-        (sum, node) => sum + result[node.id].y,
-        0,
-      ) / Math.max(1, graph.nodes.length),
-  };
-
   for (const line of graph.lines) {
     for (const path of line.paths) {
       if (path.length < 5) continue;
-      const currentSelf = pathSelfCrossings(path, result);
-      if (currentSelf < 2) continue;
-      if (
-        path.slice(1, -1).some((id) => fixedNodes.has(id))
-      ) {
-        continue;
-      }
+      const currentCrossings = selfCrossings(path, result);
+      if (currentCrossings < 2) continue;
 
-      const start = result[path[0]];
-      const end = result[path[path.length - 1]];
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const chord = Math.max(1, Math.hypot(dx, dy));
-      const nx = -dy / chord;
-      const ny = dx / chord;
-      const midpoint = {
-        x: (start.x + end.x) / 2,
-        y: (start.y + end.y) / 2,
+      // Only use this repair when the source geography itself is clean.
+      // That tells us the crossings were introduced by the schematic
+      // regional transforms rather than by the real route topology.
+      if (selfCrossings(path, geographic) !== 0) continue;
+
+      const startId = path[0];
+      const endId = path[path.length - 1];
+      const startDelta = {
+        x: result[startId].x - geographic[startId].x,
+        y: result[startId].y - geographic[startId].y,
       };
-      const preferredSide =
-        nx * (networkCenter.x - midpoint.x) +
-          ny * (networkCenter.y - midpoint.y) >
-        0
-          ? -1
-          : 1;
+      const endDelta = {
+        x: result[endId].x - geographic[endId].x,
+        y: result[endId].y - geographic[endId].y,
+      };
 
-      const currentExternal =
-        pathExternalCrossings(path, result);
-      let best:
-        | {
-            positions: Record<string, Point>;
-            self: number;
-            external: number;
-          }
-        | undefined;
-
-      const baseAmplitude = Math.max(
-        110,
-        (path.length - 2) * 28,
-        chord * 0.42,
+      const candidate = Object.fromEntries(
+        Object.entries(result).map(([id, point]) => [
+          id,
+          { ...point },
+        ]),
       );
 
-      for (const side of [
-        preferredSide,
-        -preferredSide,
-      ]) {
-        for (const factor of [
-          1,
-          1.35,
-          1.7,
-          2.1,
-          2.6,
-          3.3,
-          4.2,
-          5.2,
-          6.5,
-        ]) {
-          const amplitude = baseAmplitude * factor;
-          const control = {
-            x: midpoint.x + nx * amplitude * side,
-            y: midpoint.y + ny * amplitude * side,
-          };
-          const candidate: Record<string, Point> =
-            Object.fromEntries(
-              Object.entries(result).map(([id, point]) => [
-                id,
-                { ...point },
-              ]),
-            );
-
-          for (
-            let index = 1;
-            index < path.length - 1;
-            index += 1
-          ) {
-            const t = index / (path.length - 1);
-            const omt = 1 - t;
-            candidate[path[index]] = {
-              x:
-                omt * omt * start.x +
-                2 * omt * t * control.x +
-                t * t * end.x,
-              y:
-                omt * omt * start.y +
-                2 * omt * t * control.y +
-                t * t * end.y,
-            };
-          }
-
-          if (!candidateIsReadable(path, candidate)) {
-            continue;
-          }
-
-          const self = pathSelfCrossings(
-            path,
-            candidate,
-          );
-          const external = pathExternalCrossings(
-            path,
-            candidate,
-          );
-
-          // Judge the whole visual result, not external crossings in
-          // isolation. Moving a tangled branch outward may introduce one
-          // clean crossing while removing many self-crossings; that is still
-          // a large readability improvement.
-          if (
-            self >= currentSelf ||
-            self + external >=
-              currentSelf + currentExternal
-          ) {
-            continue;
-          }
-
-          if (
-            !best ||
-            self + external <
-              best.self + best.external
-          ) {
-            best = {
-              positions: candidate,
-              self,
-              external,
-            };
-          }
-        }
+      for (let index = 1; index < path.length - 1; index += 1) {
+        const nodeId = path[index];
+        if (fixedNodes.has(nodeId)) continue;
+        const t = index / (path.length - 1);
+        candidate[nodeId] = {
+          x:
+            geographic[nodeId].x +
+            startDelta.x * (1 - t) +
+            endDelta.x * t,
+          y:
+            geographic[nodeId].y +
+            startDelta.y * (1 - t) +
+            endDelta.y * t,
+        };
       }
 
-      if (best) {
-        for (const id of path.slice(1, -1)) {
-          result[id] = best.positions[id];
+      // Never accept a repair that makes the route less orderly.
+      if (
+        selfCrossings(path, candidate) <
+        currentCrossings
+      ) {
+        for (const nodeId of path.slice(1, -1)) {
+          if (!fixedNodes.has(nodeId)) {
+            result[nodeId] = candidate[nodeId];
+          }
         }
       }
     }
@@ -1269,15 +1093,16 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
-  const fannedOut =
-    safelyFanOutSelfCrossingMoscowPaths(
+  const crossRegionRepaired =
+    repairCrossRegionMoscowPaths(
       graph,
       smoothed,
+      geographic,
       ringNodeSet,
     );
   const optimized = reduceMoscowCrossings(
     graph,
-    fannedOut,
+    crossRegionRepaired,
     ringNodeSet,
   );
 
