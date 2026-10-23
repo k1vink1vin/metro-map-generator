@@ -244,6 +244,44 @@ function crossingPairs(
   return pairs;
 }
 
+function selfCrossingPathDetails(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+) {
+  return graph.lines.flatMap((line) =>
+    line.paths.flatMap((path, pathIndex) => {
+      let crossings = 0;
+      for (let first = 0; first < path.length - 1; first += 1) {
+        for (
+          let second = first + 2;
+          second < path.length - 1;
+          second += 1
+        ) {
+          if (
+            properIntersection(
+              positions[path[first]],
+              positions[path[first + 1]],
+              positions[path[second]],
+              positions[path[second + 1]],
+            )
+          ) {
+            crossings += 1;
+          }
+        }
+      }
+      if (!crossings) return [];
+      return [{
+        line: line.id,
+        path: line.pathIds?.[pathIndex] ?? String(pathIndex),
+        crossings,
+        stations: path.map(
+          (id) => graph.nodeById.get(id)?.name ?? id,
+        ),
+      }];
+    }),
+  );
+}
+
 function angularError(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -662,6 +700,21 @@ for (const result of results) {
       selfCrossings: result.selfCrossings,
       worst: result.sharpDetails.slice(0, 8),
     });
+    if (result.selfCrossings) {
+      console.log(
+        'self-crossing paths:',
+        JSON.stringify(
+          selfCrossingPathDetails(
+            graph,
+            computeLayout(graph, result.style, {
+              moscowRings: rings,
+            }).positions,
+          ),
+          null,
+          2,
+        ),
+      );
+    }
   }
   if (result.closePairList.length) {
     console.log(
