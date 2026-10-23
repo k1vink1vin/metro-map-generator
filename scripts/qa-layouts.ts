@@ -11,6 +11,42 @@ const input = await importExcelBuffer(data);
 const graph = buildGraph(input);
 const rings = validateMoscowRings(graph, input.moscowRings ?? []);
 
+
+const multiColorLines = graph.lines
+  .map((line) => ({
+    id: line.id,
+    pathIds: line.pathIds ?? line.paths.map((_, index) => String(index)),
+    colors: line.pathColors ?? line.paths.map(() => line.color),
+  }))
+  .filter((line) => new Set(line.colors).size > 1);
+
+for (const line of graph.lines) {
+  if (
+    line.pathColors &&
+    line.pathColors.length !== line.paths.length
+  ) {
+    throw new Error(
+      `${line.id}: pathColors length does not match paths length`,
+    );
+  }
+}
+
+if (!multiColorLines.length) {
+  throw new Error(
+    'TPE_Metro.xlsm is expected to contain at least one multi-color branch path.',
+  );
+}
+
+console.log(
+  'Per-path color overrides:',
+  multiColorLines.map((line) => ({
+    line: line.id,
+    paths: line.pathIds.map(
+      (pathId, index) => `${pathId}=${line.colors[index]}`,
+    ),
+  })),
+);
+
 const styles: StyleId[] = [
   'geographic',
   'taipei',
@@ -110,6 +146,51 @@ function angularError(
   return errors.reduce((sum, value) => sum + value, 0) / Math.max(1, errors.length);
 }
 
+
+function signedTurn(a: Point, b: Point, c: Point): number {
+  const first = Math.atan2(b.y - a.y, b.x - a.x);
+  const second = Math.atan2(c.y - b.y, c.x - b.x);
+  let turn = second - first;
+  while (turn > Math.PI) turn -= Math.PI * 2;
+  while (turn < -Math.PI) turn += Math.PI * 2;
+  return turn;
+}
+
+function moscowDoglegs(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+): number {
+  let count = 0;
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      const turns: number[] = [];
+      for (let index = 1; index < path.length - 1; index += 1) {
+        turns.push(
+          signedTurn(
+            positions[path[index - 1]],
+            positions[path[index]],
+            positions[path[index + 1]],
+          ),
+        );
+      }
+
+      for (let index = 0; index < turns.length - 1; index += 1) {
+        const first = turns[index];
+        const second = turns[index + 1];
+        const opposite = Math.sign(first) !== Math.sign(second);
+        const strong =
+          Math.abs(first) > (24 * Math.PI) / 180 &&
+          Math.abs(second) > (24 * Math.PI) / 180;
+
+        if (opposite && strong) count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
 function metrics(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -171,6 +252,11 @@ function metrics(
       angleError * (angleStep ? 0.7 : 0),
   );
 
+  const doglegs =
+    style === 'moscow'
+      ? moscowDoglegs(graph, positions)
+      : 0;
+
   return {
     style,
     canvas: `${Math.round(width)}x${Math.round(height)}`,
@@ -181,6 +267,7 @@ function metrics(
     shortEdges,
     crossings,
     angleError,
+    doglegs,
     score,
     crossingList,
     closePairList: closePairList
@@ -210,6 +297,7 @@ console.table(
     shortEdges: result.shortEdges,
     crossings: result.crossings,
     angleError: result.angleError.toFixed(1),
+    doglegs: result.doglegs,
     score: result.score.toFixed(1),
   })),
 );
