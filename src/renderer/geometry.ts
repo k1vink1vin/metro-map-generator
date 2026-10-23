@@ -131,7 +131,11 @@ export function offsetPathForLine(
   });
 }
 
-export function roundedPath(points: Point[], radius = 14): string {
+export function roundedPath(
+  points: Point[],
+  radius = 14,
+  maxTrimRatio = 0.32,
+): string {
   if (!points.length) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
   if (points.length === 2) {
@@ -147,7 +151,11 @@ export function roundedPath(points: Point[], radius = 14): string {
 
     const inLength = Math.hypot(current.x - previous.x, current.y - previous.y);
     const outLength = Math.hypot(next.x - current.x, next.y - current.y);
-    const trim = Math.min(radius, inLength * 0.32, outLength * 0.32);
+    const trim = Math.min(
+      radius,
+      inLength * maxTrimRatio,
+      outLength * maxTrimRatio,
+    );
 
     const start = {
       x: current.x + ((previous.x - current.x) / Math.max(1, inLength)) * trim,
