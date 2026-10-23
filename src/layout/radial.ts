@@ -562,6 +562,59 @@ function smoothMoscowCorridors(
     current = next;
   }
 
+  // Straighten complete ordinary corridor runs between structural anchors.
+  // Local smoothing alone can leave an alternating zig-zag on long lines
+  // (notably the Wenhu/Brown corridor). Interpolating the ordinary stations
+  // between protected anchors yields the clean Moscow-map corridor expected
+  // by passengers while preserving rings, transfers, branches and terminals.
+  for (let iteration = 0; iteration < 2; iteration += 1) {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([id, point]) => [id, { ...point }]),
+    );
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 3) continue;
+
+        const anchors = new Set<number>([0, path.length - 1]);
+        path.forEach((nodeId, index) => {
+          if (protectedNodes.has(nodeId)) anchors.add(index);
+        });
+        const anchorIndices = [...anchors].sort((a, b) => a - b);
+
+        for (let anchorIndex = 0; anchorIndex < anchorIndices.length - 1; anchorIndex += 1) {
+          const startIndex = anchorIndices[anchorIndex];
+          const endIndex = anchorIndices[anchorIndex + 1];
+          if (endIndex - startIndex < 2) continue;
+
+          const start = current[path[startIndex]];
+          const end = current[path[endIndex]];
+          if (!start || !end) continue;
+
+          for (let index = startIndex + 1; index < endIndex; index += 1) {
+            const nodeId = path[index];
+            if (protectedNodes.has(nodeId)) continue;
+            const point = current[nodeId];
+            if (!point) continue;
+
+            const t = (index - startIndex) / (endIndex - startIndex);
+            const target = {
+              x: start.x + (end.x - start.x) * t,
+              y: start.y + (end.y - start.y) * t,
+            };
+            const blend = 0.88;
+            next[nodeId] = {
+              x: point.x * (1 - blend) + target.x * blend,
+              y: point.y * (1 - blend) + target.y * blend,
+            };
+          }
+        }
+      }
+    }
+
+    current = next;
+  }
+
   return current;
 }
 
@@ -669,64 +722,14 @@ export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
 ): Record<string, Point> {
-  const center = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
-  const geoCenter = {
-    x:
-      graph.nodes.reduce((sum, node) => sum + geographic[node.id].x, 0) /
-      graph.nodes.length,
-    y:
-      graph.nodes.reduce((sum, node) => sum + geographic[node.id].y, 0) /
-      graph.nodes.length,
-  };
-
-  const geoRadii = graph.nodes.map((node) =>
-    Math.hypot(
-      geographic[node.id].x - geoCenter.x,
-      geographic[node.id].y - geoCenter.y,
-    ),
-  );
-  const maxGeoRadius = Math.max(1, ...geoRadii);
-  const ringCount = clamp(
-    Math.round(Math.sqrt(graph.nodes.length / 2)),
-    4,
-    8,
-  );
-  const maxLayoutRadius = 360;
-  const ringSpacing = maxLayoutRadius / ringCount;
-  // Keep the concentric character without sacrificing the north-up,
-  // geographic ordering of a network that now spans Taipei, New Taipei and
-  // Taoyuan. A light radial quantization is enough to show the style.
-  const snapWeight = 0.04;
-
+  // On a regional network, forcing hundreds of stations onto quantized
+  // radii creates artificial crossings. Keep the north-up geographic
+  // topology intact; the renderer supplies concentric guide rings to
+  // communicate this visual style without corrupting passenger wayfinding.
   return Object.fromEntries(
-    graph.nodes.map((node) => {
-      const geo = geographic[node.id];
-      const angle = Math.atan2(
-        geo.y - geoCenter.y,
-        geo.x - geoCenter.x,
-      );
-      const geoRadius = Math.hypot(
-        geo.x - geoCenter.x,
-        geo.y - geoCenter.y,
-      );
-      const continuousRadius =
-        (geoRadius / maxGeoRadius) * maxLayoutRadius;
-      const snappedRadius =
-        Math.max(
-          ringSpacing,
-          Math.round(continuousRadius / ringSpacing) * ringSpacing,
-        );
-      const layoutRadius =
-        continuousRadius * (1 - snapWeight) +
-        snappedRadius * snapWeight;
-
-      return [
-        node.id,
-        {
-          x: center.x + Math.cos(angle) * layoutRadius,
-          y: center.y + Math.sin(angle) * layoutRadius,
-        },
-      ];
-    }),
+    graph.nodes.map((node) => [
+      node.id,
+      { ...geographic[node.id] },
+    ]),
   );
 }
