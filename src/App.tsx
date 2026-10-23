@@ -1,10 +1,6 @@
 import { useMemo, useState } from 'react';
 import { buildGraph } from './core/graph';
-import {
-  importExcelWorkbook,
-  parseLinesCsv,
-  parseStationsCsv,
-} from './io/importData';
+import { importExcelWorkbook } from './io/importData';
 import { downloadSvg } from './io/exportSvg';
 import { computeLayout } from './layout';
 import { SvgMap } from './renderer/SvgMap';
@@ -98,30 +94,6 @@ export function App() {
     }
   };
 
-  const importStationsFile = async (file?: File) => {
-    if (!file) return;
-    try {
-      const stations = parseStationsCsv(await file.text());
-      setStationsText(pretty(stations));
-      setNotice(`已匯入 ${stations.length} 個車站。請按 Generate 套用。`);
-      setError('');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-
-  const importLinesFile = async (file?: File) => {
-    if (!file) return;
-    try {
-      const lines = parseLinesCsv(await file.text());
-      setLinesText(pretty(lines));
-      setNotice(`已匯入 ${lines.length} 條路線。請按 Generate 套用。`);
-      setError('');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-
   const importExcelFile = async (file?: File) => {
     if (!file) return;
     try {
@@ -206,7 +178,7 @@ export function App() {
             匯入 Excel
             <input
               type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
               onChange={(event) => {
                 void importExcelFile(event.currentTarget.files?.[0]);
                 event.currentTarget.value = '';
@@ -229,43 +201,20 @@ export function App() {
         {dataOpen ? (
           <aside className="data-panel">
             <div className="import-box">
-              <strong>CSV / Excel Input</strong>
-              <div className="import-actions">
-                <label className="mini-file-button">
-                  Stations CSV
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => {
-                      void importStationsFile(event.currentTarget.files?.[0]);
-                      event.currentTarget.value = '';
-                    }}
-                  />
-                </label>
-                <label className="mini-file-button">
-                  Lines CSV
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => {
-                      void importLinesFile(event.currentTarget.files?.[0]);
-                      event.currentTarget.value = '';
-                    }}
-                  />
-                </label>
-              </div>
+              <strong>Excel Input</strong>
               <div className="example-links">
-                <a href="/metro-map-generator/examples/stations.csv" download>
-                  下載範例 Stations.csv
+                <a href="/metro-map-generator/examples/metro-map-input-template.xlsx" download>
+                  下載 Excel 範本
                 </a>
-                <a href="/metro-map-generator/examples/lines.csv" download>
-                  下載範例 Lines.csv
+                <a href="/metro-map-generator/examples/ValidateTransfers.bas" download>
+                  下載 VBA 驗證模組
                 </a>
               </div>
               <small>
-                Excel 需包含 Stations、Lines 兩個工作表；CSV 則分開匯入車站與路線。
-                同一個轉乘站可以重複列出、保留不同 station ID；系統會依站名與座標自動合併。
-                Lines.csv 使用 pathId + sequence 描述主線與 Y 型支線。
+                Stations 工作表固定使用 4 欄：Station ID / Station Name / Latitude / Longitude。
+                同一個實體轉乘站請重複列出，每條路線保留自己的 Station ID。
+                同名轉乘站的經緯度必須完全一致，網站匯入時也會驗證。
+                若要使用 VBA，請將範本另存為 .xlsm 後匯入 ValidateTransfers.bas。
               </small>
             </div>
 
@@ -429,7 +378,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.3 route completeness + selectable Moscow rings + CSV examples</span>
+        <span>V0.4 Excel input + transfer coordinate validation</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
