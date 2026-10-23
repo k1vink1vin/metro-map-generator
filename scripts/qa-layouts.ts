@@ -711,6 +711,62 @@ console.log(
   })),
 );
 
+const moscowLayoutForPathDiagnostics = computeLayout(
+  graph,
+  'moscow',
+  { moscowRings: rings },
+);
+const moscowRingNodes = new Set(
+  rings.flatMap((ring) => ring.nodes),
+);
+const selfCrossingPathDiagnostics = graph.lines.flatMap((line) =>
+  line.paths.flatMap((path, pathIndex) => {
+    let crossings = 0;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      for (let j = i + 2; j < path.length - 1; j += 1) {
+        if (
+          properIntersection(
+            moscowLayoutForPathDiagnostics.positions[path[i]],
+            moscowLayoutForPathDiagnostics.positions[path[i + 1]],
+            moscowLayoutForPathDiagnostics.positions[path[j]],
+            moscowLayoutForPathDiagnostics.positions[path[j + 1]],
+          )
+        ) {
+          crossings += 1;
+        }
+      }
+    }
+    if (!crossings) return [];
+    return [{
+      line: line.id,
+      path: line.pathIds?.[pathIndex] ?? String(pathIndex),
+      crossings,
+      anchors: path
+        .map((nodeId, index) => ({
+          index,
+          nodeId,
+          name: graph.nodeById.get(nodeId)?.name ?? nodeId,
+          ring: moscowRingNodes.has(nodeId),
+          degree: graph.adjacency.get(nodeId)?.length ?? 0,
+          stationIds: graph.nodeById.get(nodeId)?.stationIds ?? [],
+        }))
+        .filter(
+          (item) =>
+            item.ring ||
+            item.degree > 2 ||
+            item.stationIds.length > 1,
+        ),
+      stations: path.map(
+        (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
+      ),
+    }];
+  }),
+);
+console.log(
+  'Moscow self-crossing route paths:',
+  selfCrossingPathDiagnostics,
+);
+
 const moscowResult = results.find((result) => result.style === 'moscow');
 if (moscowResult?.doglegDetails.length) {
   console.log('Moscow dogleg details:', moscowResult.doglegDetails);
