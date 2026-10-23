@@ -11,23 +11,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Build embedded VBA project
-        run: bash scripts/build-vba-project.sh
-
-      - name: Verify embedded VBA asset
+      - name: Verify canonical TPE_Metro.xlsm
         run: |
-          test -s public/examples/vbaProject.bin
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("public/examples/vbaProject.bin")
-          assert path.stat().st_size > 1024
-          print(f"vbaProject.bin verified: {path.stat().st_size} bytes")
-          PY
+          test -s TPE_Metro.xlsm
+          unzip -l TPE_Metro.xlsm | grep -q 'xl/vbaProject.bin'
+          echo "TPE_Metro.xlsm exists and contains embedded VBA."
 
       - name: Setup Node
         uses: actions/setup-node@v4
