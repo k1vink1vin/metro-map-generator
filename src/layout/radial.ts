@@ -618,6 +618,162 @@ function smoothMoscowCorridors(
   return current;
 }
 
+function moscowSegmentsCross(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+): boolean {
+  const orient = (p: Point, q: Point, r: Point) =>
+    (q.x - p.x) * (r.y - p.y) -
+    (q.y - p.y) * (r.x - p.x);
+
+  const o1 = orient(a, b, c);
+  const o2 = orient(a, b, d);
+  const o3 = orient(c, d, a);
+  const o4 = orient(c, d, b);
+  const eps = 1e-6;
+
+  return (
+    ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
+    ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))
+  );
+}
+
+function reduceMoscowCrossings(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  fixedNodes: Set<string>,
+): Record<string, Point> {
+  const result = Object.fromEntries(
+    Object.entries(positions).map(([id, point]) => [
+      id,
+      { ...point },
+    ]),
+  );
+
+  const incidentEdges = new Map<
+    string,
+    typeof graph.edges
+  >();
+  for (const node of graph.nodes) {
+    incidentEdges.set(
+      node.id,
+      graph.edges.filter(
+        (edge) =>
+          edge.a === node.id || edge.b === node.id,
+      ),
+    );
+  }
+
+  const localCrossings = (nodeId: string): number => {
+    let count = 0;
+    for (const first of incidentEdges.get(nodeId) ?? []) {
+      for (const second of graph.edges) {
+        if (first === second) continue;
+        if (
+          first.a === second.a ||
+          first.a === second.b ||
+          first.b === second.a ||
+          first.b === second.b
+        ) {
+          continue;
+        }
+        if (
+          moscowSegmentsCross(
+            result[first.a],
+            result[first.b],
+            result[second.a],
+            result[second.b],
+          )
+        ) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  const safeDistance = (
+    nodeId: string,
+    candidate: Point,
+  ): boolean => {
+    for (const node of graph.nodes) {
+      if (node.id === nodeId) continue;
+      const other = result[node.id];
+      if (
+        Math.hypot(
+          candidate.x - other.x,
+          candidate.y - other.y,
+        ) < 27
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  for (let pass = 0; pass < 7; pass += 1) {
+    const ranked = graph.nodes
+      .filter(
+        (node) =>
+          !fixedNodes.has(node.id) &&
+          (graph.adjacency.get(node.id)?.length ?? 0) <= 3,
+      )
+      .map((node) => ({
+        id: node.id,
+        crossings: localCrossings(node.id),
+      }))
+      .filter((item) => item.crossings > 0)
+      .sort((a, b) => b.crossings - a.crossings)
+      .slice(0, 36);
+
+    let improved = false;
+
+    for (const item of ranked) {
+      const original = { ...result[item.id] };
+      let best = original;
+      let bestCrossings = localCrossings(item.id);
+
+      const steps = [28, 18, 10];
+      for (const step of steps) {
+        for (let direction = 0; direction < 8; direction += 1) {
+          const angle =
+            (Math.PI * 2 * direction) / 8;
+          const candidate = {
+            x: original.x + Math.cos(angle) * step,
+            y: original.y + Math.sin(angle) * step,
+          };
+
+          if (!safeDistance(item.id, candidate)) {
+            continue;
+          }
+
+          result[item.id] = candidate;
+          const candidateCrossings =
+            localCrossings(item.id);
+          if (candidateCrossings < bestCrossings) {
+            bestCrossings = candidateCrossings;
+            best = candidate;
+          }
+        }
+      }
+
+      result[item.id] = best;
+      if (
+        best.x !== original.x ||
+        best.y !== original.y
+      ) {
+        improved = true;
+      }
+    }
+
+    if (!improved) break;
+  }
+
+  return result;
+}
+
 export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
@@ -840,8 +996,14 @@ export function layoutMoscow(
     if (!moved) break;
   }
 
+  const optimized = reduceMoscowCrossings(
+    graph,
+    smoothed,
+    ringNodeSet,
+  );
+
   return {
-    positions: smoothed,
+    positions: optimized,
     moscowRings: ringInfos.map((info) => info.definition),
   };
 }
