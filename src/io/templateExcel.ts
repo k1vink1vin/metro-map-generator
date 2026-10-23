@@ -39,15 +39,20 @@ export async function downloadExcelTemplate() {
   for (let row = 2; row <= 500; row += 1) {
     stations.getCell(row, 5).value = {
       formula:
-        `IF(B${row}="","",IF(COUNTIF($B$2:$B$500,B${row})>1,B${row},""))`,
+        `IF(OR(C${row}="",D${row}=""),"",LET(` +
+        `k,TEXT(C${row},"0.0000000")&"|"&TEXT(D${row},"0.0000000"),` +
+        `all,TEXT($C$2:$C$500,"0.0000000")&"|"&TEXT($D$2:$D$500,"0.0000000"),` +
+        `u,IFERROR(SORT(FILTER(UNIQUE(all),(UNIQUE(all)<>"|")*(COUNTIF(all,UNIQUE(all))>1))),""),` +
+        `IF(COUNTIF(all,k)>1,"XFER_"&TEXT(XMATCH(k,u),"000"),"")))`,
     };
 
     stations.getCell(row, 6).value = {
       formula:
-        `IF(B${row}="","",IF(E${row}="","",` +
+        `IF(B${row}="","",IF(COUNTIF($B$2:$B$500,B${row})<=1,` +
+        `IF(E${row}="","","正常 - 轉乘群組已建立"),` +
         `IF(COUNTIFS($B$2:$B$500,B${row},$C$2:$C$500,C${row},` +
         `$D$2:$D$500,D${row})=COUNTIF($B$2:$B$500,B${row}),` +
-        `"正常 - 座標一致","錯誤 - 座標不一致")))`,
+        `"正常 - 座標一致","錯誤 - 同名站座標不一致")))`,
     };
   }
 
@@ -119,9 +124,9 @@ export async function downloadExcelTemplate() {
     '「車站」工作表 A-D 欄是使用者輸入欄位；E-F 欄由公式自動完成。',
     '同一個實體轉乘站請重複列出，每條路線保留自己的車站編號。',
     '例如 G05 / B03 都叫「市政府」，且經緯度必須完全一致。',
-    '「轉乘群組」：同名站出現 2 次以上時，自動填入車站名稱。',
-    '「轉乘驗證」：同名站經緯度全部一致時顯示「正常」，否則顯示「錯誤」。',
-    '網站匯入時仍會再次驗證同名站經緯度，避免錯誤資料進入路網。',
+    '「轉乘群組」：相同經緯度出現 2 個以上 Station ID 時，自動產生 XFER_001 / XFER_002...。',
+    '「轉乘驗證」：同名站若使用不同經緯度會顯示「錯誤」；轉乘 ID 不依賴站名。',
+    '網站 topology 優先使用 XFER ID；改站名不會破壞既有轉乘關係。',
     '「路線」工作表使用 路線編號 / 路徑編號 / 順序 / 車站編號 描述主線與 Y 型支線。',
     '網站同時相容英文工作表 Stations / Lines 與英文欄位名稱。',
     '此檔案直接下載為 .xlsm，可繼續加入 VBA；另提供 ValidateTransfers.bas。',
