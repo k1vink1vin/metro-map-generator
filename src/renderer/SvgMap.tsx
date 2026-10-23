@@ -9,6 +9,7 @@ import {
 interface SvgMapProps {
   graph: GraphModel;
   layout: LayoutResult;
+  zoom?: number;
 }
 
 interface RenderedRoutePath {
@@ -288,7 +289,8 @@ function renderBounds(
   };
 }
 
-export function SvgMap({ graph, layout }: SvgMapProps) {
+export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
+  const labelScale = zoom > 1 ? 1 / zoom : 1;
   const ringSet = new Set(layout.primaryRing ?? []);
   const geometricBundles = buildGeometricBundleMap(
     graph,
@@ -437,6 +439,10 @@ export function SvgMap({ graph, layout }: SvgMapProps) {
             y={label.y}
             textAnchor={label.textAnchor}
             className="station-label"
+            style={{
+              fontSize: `${11.5 * labelScale}px`,
+              strokeWidth: 3.5 * labelScale,
+            }}
           >
             {label.text}
           </text>
