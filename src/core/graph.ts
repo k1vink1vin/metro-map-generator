@@ -81,14 +81,28 @@ function buildStationGroups(stations: Station[]): Map<string, Station[]> {
     }
   }
 
+  const explicitIdsByCoordinate = new Map<string, string[]>();
+
   for (const [complexId, group] of explicitComplexes) {
     assertCoordinatesMatch(group, complexId);
     groups.set(complexId, group);
+
+    const key = coordinateKey(group[0]);
+    const ids = explicitIdsByCoordinate.get(key) ?? [];
+    ids.push(complexId);
+    explicitIdsByCoordinate.set(key, ids);
   }
 
   const byCoordinate = new Map<string, Station[]>();
   for (const station of unassigned) {
     const key = coordinateKey(station);
+    const matchingExplicitIds = explicitIdsByCoordinate.get(key) ?? [];
+
+    if (matchingExplicitIds.length === 1) {
+      groups.get(matchingExplicitIds[0])!.push(station);
+      continue;
+    }
+
     const group = byCoordinate.get(key) ?? [];
     group.push(station);
     byCoordinate.set(key, group);
