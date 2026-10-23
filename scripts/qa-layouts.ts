@@ -203,6 +203,62 @@ function moscowDoglegDetails(
   return details;
 }
 
+function moscowTerminalHookDetails(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+) {
+  const details: Array<{
+    line: string;
+    path: string;
+    stations: string[];
+    angle: number;
+  }> = [];
+
+  const inspect = (
+    lineId: string,
+    pathId: string,
+    triplet: string[],
+  ) => {
+    const [aId, bId, cId] = triplet;
+    if ((graph.adjacency.get(cId)?.length ?? 0) > 1) return;
+
+    const turn = Math.abs(
+      signedTurn(
+        positions[aId],
+        positions[bId],
+        positions[cId],
+      ),
+    );
+    const degrees = (turn * 180) / Math.PI;
+    if (degrees < 24) return;
+
+    details.push({
+      line: lineId,
+      path: pathId,
+      stations: triplet.map(
+        (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
+      ),
+      angle: degrees,
+    });
+  };
+
+  for (const line of graph.lines) {
+    line.paths.forEach((path, pathIndex) => {
+      if (path.length < 3) return;
+      const pathId = line.pathIds?.[pathIndex] ?? String(pathIndex);
+      inspect(line.id, pathId, [path[2], path[1], path[0]]);
+      const last = path.length - 1;
+      inspect(line.id, pathId, [
+        path[last - 2],
+        path[last - 1],
+        path[last],
+      ]);
+    });
+  }
+
+  return details;
+}
+
 function metrics(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -269,6 +325,11 @@ function metrics(
       ? moscowDoglegDetails(graph, positions)
       : [];
   const doglegs = doglegDetails.length;
+  const terminalHookDetails =
+    style === 'moscow'
+      ? moscowTerminalHookDetails(graph, positions)
+      : [];
+  const terminalHooks = terminalHookDetails.length;
 
   return {
     style,
@@ -282,6 +343,8 @@ function metrics(
     angleError,
     doglegs,
     doglegDetails,
+    terminalHooks,
+    terminalHookDetails,
     score,
     crossingList,
     closePairList: closePairList
@@ -312,6 +375,7 @@ console.table(
     crossings: result.crossings,
     angleError: result.angleError.toFixed(1),
     doglegs: result.doglegs,
+    terminalHooks: result.terminalHooks,
     score: result.score.toFixed(1),
   })),
 );
@@ -387,4 +451,12 @@ if (failures.length) {
 const moscowResult = results.find((result) => result.style === 'moscow');
 if (moscowResult?.doglegDetails.length) {
   console.log('Moscow dogleg details:', moscowResult.doglegDetails);
+}
+
+
+if (moscowResult?.terminalHookDetails.length) {
+  console.log(
+    'Moscow terminal hook details:',
+    moscowResult.terminalHookDetails,
+  );
 }
