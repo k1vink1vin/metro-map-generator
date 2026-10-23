@@ -205,17 +205,15 @@ export function App() {
               <strong>Excel 輸入</strong>
               <div className="example-links">
                 <button type="button" onClick={() => void downloadExcelTemplate()}>
-                  下載 XLSM 範本
+                  下載 XLSM 範本（已內建 VBA）
                 </button>
-                <a href="/metro-map-generator/examples/ValidateTransfers.bas" download>
-                  下載 VBA 驗證模組
-                </a>
               </div>
               <small>
                 「車站」工作表 A-D 欄是手動輸入：車站編號 / 車站名稱 / 緯度 / 經度。
-                E 欄「轉乘群組」會依重複的經緯度自動產生 XFER_001 / XFER_002...，
+                E 欄「轉乘群組」會自動產生 XFER_001 / XFER_002...，
                 F 欄「轉乘驗證」會檢查同名站的經緯度是否一致。
-                topology 優先使用 XFER ID，所以日後修改站名不會破壞轉乘關係；英文 Stations / Lines 舊格式仍可匯入。
+                XLSM 已直接內建 VBA，不需要再下載第二個檔案；啟用巨集後會自動完成轉乘群組與驗證。
+                topology 優先使用 XFER ID，所以日後修改站名不會破壞轉乘關係。
               </small>
             </div>
 
@@ -379,7 +377,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.7 穩定 XFER ID + 中文 XLSM</span>
+        <span>V0.8 內建 VBA XLSM + 自動 XFER 編號</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
