@@ -213,8 +213,9 @@ export function App() {
               </div>
               <small>
                 「車站」工作表 A-D 欄是手動輸入：車站編號 / 車站名稱 / 緯度 / 經度。
-                E 欄「轉乘群組」會依同名站自動完成，F 欄「轉乘驗證」會檢查同名轉乘站的經緯度是否一致。
-                中文範本直接下載為 .xlsm；英文 Stations / Lines 舊格式仍可匯入。
+                E 欄「轉乘群組」會依重複的經緯度自動產生 XFER_001 / XFER_002...，
+                F 欄「轉乘驗證」會檢查同名站的經緯度是否一致。
+                topology 優先使用 XFER ID，所以日後修改站名不會破壞轉乘關係；英文 Stations / Lines 舊格式仍可匯入。
               </small>
             </div>
 
@@ -378,7 +379,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.6 中文 XLSM + 自動轉乘欄位</span>
+        <span>V0.7 穩定 XFER ID + 中文 XLSM</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
