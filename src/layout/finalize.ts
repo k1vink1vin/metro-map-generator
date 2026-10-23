@@ -99,7 +99,14 @@ function separateOverlappingNodes(
   return { positions, separatedNodePairs };
 }
 
+function passengerCanvasScale(graph: GraphModel): number {
+  const nodeFactor = Math.sqrt(graph.nodes.length / 45);
+  const edgeFactor = Math.sqrt(graph.edges.length / 55);
+  return Math.max(1, Math.min(2.6, Math.max(nodeFactor, edgeFactor)));
+}
+
 function fitToCanvas(
+  graph: GraphModel,
   positions: Record<string, Point>,
   padding = 86,
 ): Record<string, Point> {
@@ -124,8 +131,13 @@ function fitToCanvas(
 
   const sourceWidth = maxX - minX;
   const sourceHeight = maxY - minY;
-  const availableWidth = CANVAS_WIDTH - padding * 2;
-  const availableHeight = CANVAS_HEIGHT - padding * 2;
+  const passengerScale = passengerCanvasScale(graph);
+  const targetWidth = CANVAS_WIDTH * passengerScale;
+  const targetHeight = CANVAS_HEIGHT * passengerScale;
+  const scaledPadding = padding * Math.max(1, Math.sqrt(passengerScale));
+
+  const availableWidth = targetWidth - scaledPadding * 2;
+  const availableHeight = targetHeight - scaledPadding * 2;
   const scale = Math.min(
     availableWidth / sourceWidth,
     availableHeight / sourceHeight,
@@ -133,8 +145,8 @@ function fitToCanvas(
 
   const usedWidth = sourceWidth * scale;
   const usedHeight = sourceHeight * scale;
-  const offsetX = (CANVAS_WIDTH - usedWidth) / 2;
-  const offsetY = (CANVAS_HEIGHT - usedHeight) / 2;
+  const offsetX = (targetWidth - usedWidth) / 2;
+  const offsetY = (targetHeight - usedHeight) / 2;
 
   return Object.fromEntries(
     entries.map(([id, point]) => [
@@ -218,7 +230,7 @@ export function finalizeLayoutPositions(
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
   const separated = separateOverlappingNodes(graph, completed.positions);
-  const positions = fitToCanvas(separated.positions);
+  const positions = fitToCanvas(graph, separated.positions);
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {
