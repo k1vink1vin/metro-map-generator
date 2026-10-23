@@ -676,23 +676,12 @@ export function layoutMoscow(
       );
     const targetRadius = Math.max(
       radiusForStationSpacing,
-      geoRadius * 0.9,
-      150,
+      165,
     );
 
     ring.forEach((id, index) => {
       ringNodeSet.add(id);
-      const equalAngle = -Math.PI / 2 + slot * index;
-      const geoAngle = Math.atan2(
-        geographic[id].y - geoCenter.y,
-        geographic[id].x - geoCenter.x,
-      );
-      const adjustment = clamp(
-        signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.28,
-        slot * 0.28,
-      );
-      const angle = equalAngle + adjustment;
+      const angle = -Math.PI / 2 + slot * index;
 
       positions[id] = {
         x: geoCenter.x + Math.cos(angle) * targetRadius,
@@ -787,17 +776,7 @@ export function layoutMoscow(
     const slot =
       (Math.PI * 2) / ring.definition.nodes.length;
     ring.definition.nodes.forEach((id, index) => {
-      const equalAngle = -Math.PI / 2 + slot * index;
-      const geoAngle = Math.atan2(
-        geographic[id].y - ring.geoCenter.y,
-        geographic[id].x - ring.geoCenter.x,
-      );
-      const adjustment = clamp(
-        signedAngleDelta(equalAngle, geoAngle),
-        -slot * 0.28,
-        slot * 0.28,
-      );
-      const angle = equalAngle + adjustment;
+      const angle = -Math.PI / 2 + slot * index;
       smoothed[id] = {
         x:
           ring.geoCenter.x +
