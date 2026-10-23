@@ -408,6 +408,17 @@ select {
   fill: #ffffff;
 }
 
+.moscow-ring-halo {
+  fill: none;
+  stroke: #d8dee8;
+  stroke-width: 16;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.72;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .concentric-guide {
   fill: none;
   stroke: #dbe4ee;
