@@ -33,17 +33,21 @@ The 60° mode uses the same relaxation framework but snaps to six directions on 
 
 ### Moscow ring-radial
 
-Moscow mode does **not** ask whether one route is a loop. It searches the union transit graph for bounded simple cycles and scores each candidate using:
+Moscow mode does **not** ask whether one route is a loop. It searches the union transit graph for bounded simple cycles. Transfer records sharing a `complexId` are merged first, so a ring may be composed of multiple routes or transport modes.
 
-- cycle length,
-- geographic enclosed shape,
-- aspect/circularity,
+Every candidate is scored with inspectable metrics:
+
+- geographic enclosed area relative to the whole network,
+- polygon fill/shape quality,
+- ellipse aspect quality,
+- radial consistency,
 - outward radial connections,
-- route diversity.
+- cycle node coverage,
+- minimum route-switch count around the closed cycle.
 
-A ring may therefore contain segments from multiple routes or modes. The selected cycle is regularized to an ellipse while preserving cycle order. Non-ring nodes are assigned inward or outward radial positions according to geographic position and graph-hop distance from the ring.
+Route diversity itself is not a requirement and is not rejected: a two-service ring is valid, but excessive route switching is penalized. The selected cycle is regularized to an ellipse while preserving cycle order. Non-ring nodes are assigned inward or outward radial positions according to geography and graph-hop distance from the ring.
 
-Cycle enumeration is bounded because enumerating all simple cycles can grow exponentially. A future quality pass should add biconnected-component decomposition, minimum/chordless cycle candidates and disjoint-path ring candidates.
+Cycle enumeration is bounded because enumerating all simple cycles can grow exponentially. A future quality pass should add biconnected-component decomposition, minimum/chordless cycle candidates and disjoint-path ring candidates, plus manual ring override.
 
 ### Concentric
 
