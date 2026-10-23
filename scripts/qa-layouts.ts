@@ -772,6 +772,40 @@ for (const result of results) {
     );
   }
 
+  if (result.style !== 'geographic' && result.selfCrossings > 0) {
+    failures.push(
+      `${result.style}: ${result.selfCrossings} route self-crossings; schematic styles must preserve unambiguous route topology`,
+    );
+  }
+
+  const sharpTurnBudget: Record<StyleId, number> = {
+    geographic: 100,
+    taipei: 70,
+    london: 60,
+    moscow: 25,
+    concentric: 60,
+    hex: 65,
+  };
+  const zigzagBudget: Record<StyleId, number> = {
+    geographic: 140,
+    taipei: 120,
+    london: 105,
+    moscow: 55,
+    concentric: 70,
+    hex: 125,
+  };
+
+  if (result.sharpTurns > sharpTurnBudget[result.style]) {
+    failures.push(
+      `${result.style}: ${result.sharpTurns} sharp turns > style budget ${sharpTurnBudget[result.style]}`,
+    );
+  }
+  if (result.zigzags > zigzagBudget[result.style]) {
+    failures.push(
+      `${result.style}: ${result.zigzags} zig-zags > style budget ${zigzagBudget[result.style]}`,
+    );
+  }
+
   const northMinimum =
     result.style === 'concentric' ? 0.76 : 0.82;
   const eastMinimum =
