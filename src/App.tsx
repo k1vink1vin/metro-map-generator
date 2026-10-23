@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
+import { validateMoscowRings } from './core/moscowRings';
 import { importExcelWorkbook } from './io/importData';
 import { downloadExcelTemplate } from './io/templateExcel';
 import { downloadSvg } from './io/exportSvg';
@@ -9,7 +10,8 @@ import { sampleNetwork } from './sample';
 import type {
   GraphModel,
   LayoutResult,
-  RingCandidateDiagnostic,
+  MoscowRingDefinition,
+  ValidatedMoscowRing,
   Station,
   StyleId,
   TransitLine,
@@ -19,7 +21,7 @@ const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'geographic', label: 'Geographic', note: '真實相對位置基準' },
   { id: 'taipei', label: 'Taipei 45°', note: '地理位置權重較高' },
   { id: 'london', label: 'London 45°', note: '拓撲與等距優先' },
-  { id: 'moscow', label: 'Moscow Ring', note: '先偵測候選環，再由使用者指定主環' },
+  { id: 'moscow', label: 'Moscow Ring', note: '環由 XLSM 定義並驗證，最多 3 個' },
   { id: 'concentric', label: 'Concentric', note: '同心圓量化' },
   { id: 'hex', label: 'Hex 60°', note: '六方向 / triangular grid' },
 ];
@@ -43,14 +45,6 @@ function createInitial() {
   return { graph, layout };
 }
 
-function ringOptionLabel(
-  candidate: RingCandidateDiagnostic,
-  index: number,
-): string {
-  const routes = candidate.routeIds.join('+') || 'mixed';
-  return `環 ${index + 1}｜${routes}｜${candidate.nodes.length}站｜score ${candidate.score.toFixed(1)}`;
-}
-
 export function App() {
   const initial = useMemo(createInitial, []);
   const [stationsText, setStationsText] = useState(pretty(sampleNetwork.stations));
@@ -58,7 +52,8 @@ export function App() {
   const [style, setStyle] = useState<StyleId>('taipei');
   const [graph, setGraph] = useState<GraphModel>(initial.graph);
   const [layout, setLayout] = useState<LayoutResult>(initial.layout);
-  const [selectedRingCandidateId, setSelectedRingCandidateId] = useState('');
+  const [moscowRingDefinitions, setMoscowRingDefinitions] = useState<MoscowRingDefinition[]>(sampleNetwork.moscowRings ?? []);
+  const [validatedMoscowRings, setValidatedMoscowRings] = useState<ValidatedMoscowRing[]>(() => validateMoscowRings(initial.graph, sampleNetwork.moscowRings ?? []));
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
@@ -101,13 +96,18 @@ export function App() {
   const generateFrom = (
     stations: Station[],
     lines: TransitLine[],
+    rings: MoscowRingDefinition[] = moscowRingDefinitions,
     nextStyle = style,
   ) => {
     const nextGraph = buildGraph({ stations, lines });
-    const nextLayout = computeLayout(nextGraph, nextStyle);
+    const nextRings = validateMoscowRings(nextGraph, rings);
+    const nextLayout = computeLayout(nextGraph, nextStyle, {
+      moscowRings: nextRings,
+    });
     setGraph(nextGraph);
     setLayout(nextLayout);
-    setSelectedRingCandidateId('');
+    setMoscowRingDefinitions(rings);
+    setValidatedMoscowRings(nextRings);
     resetMapZoom();
     setError('');
     return nextGraph;
@@ -120,10 +120,10 @@ export function App() {
       if (!Array.isArray(stations) || !Array.isArray(lines)) {
         throw new Error('Stations and lines must both be JSON arrays.');
       }
-      generateFrom(stations, lines, nextStyle);
+      generateFrom(stations, lines, moscowRingDefinitions, nextStyle);
       setNotice(
         nextStyle === 'moscow'
-          ? '已偵測路網候選環。請在「主環」下拉選單選擇要正規化成環的候選。'
+          ? `莫斯科環驗證通過：${validatedMoscowRings.length} 個環。`
           : '',
       );
     } catch (cause) {
@@ -137,37 +137,29 @@ export function App() {
       const network = await importExcelWorkbook(file);
       setStationsText(pretty(network.stations));
       setLinesText(pretty(network.lines));
-      generateFrom(network.stations, network.lines);
+      generateFrom(
+        network.stations,
+        network.lines,
+        network.moscowRings ?? [],
+      );
       setNotice(
-        `Excel 匯入完成：${network.stations.length} 個車站、${network.lines.length} 條路線。`,
+        `Excel 匯入完成：${network.stations.length} 個車站、${network.lines.length} 條路線、${network.moscowRings?.length ?? 0} 個莫斯科環；環閉合驗證通過。`,
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
-  const selectMoscowRing = (candidateId: string) => {
-    setSelectedRingCandidateId(candidateId);
-    const nextLayout = computeLayout(graph, 'moscow', {
-      moscowRingCandidateId: candidateId || undefined,
-    });
-    setLayout(nextLayout);
-    setNotice(
-      candidateId
-        ? '已套用你選擇的 Moscow 主環。'
-        : '已取消主環選擇；目前只保留候選環偵測結果。',
-    );
-    setError('');
-  };
-
   const resetSample = () => {
     setStationsText(pretty(sampleNetwork.stations));
     setLinesText(pretty(sampleNetwork.lines));
     setStyle('taipei');
-    setSelectedRingCandidateId('');
+    setMoscowRingDefinitions(sampleNetwork.moscowRings ?? []);
     const nextGraph = buildGraph(sampleNetwork);
     setGraph(nextGraph);
-    setLayout(computeLayout(nextGraph, 'taipei'));
+    const rings = validateMoscowRings(nextGraph, sampleNetwork.moscowRings ?? []);
+    setValidatedMoscowRings(rings);
+    setLayout(computeLayout(nextGraph, 'taipei', { moscowRings: rings }));
     resetMapZoom();
     setNotice('');
     setError('');
@@ -193,13 +185,12 @@ export function App() {
 
   const selectedStyle = STYLE_OPTIONS.find((option) => option.id === style)!;
   const stationCount = safeArrayLength(stationsText);
-  const ringCandidates = layout.ringCandidates ?? [];
-  const selectedCandidate = ringCandidates.find(
-    (candidate) => candidate.id === layout.primaryRingCandidateId,
-  );
-  const suggestedCandidate = ringCandidates[0];
-  const ringNames =
-    layout.primaryRing?.map((nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId) ?? [];
+  const ringNames = validatedMoscowRings.map((ring) => ({
+    id: ring.id,
+    names: ring.nodes.map(
+      (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
+    ),
+  }));
 
   return (
     <div className="app-shell">
@@ -308,23 +299,10 @@ export function App() {
             </label>
 
             {style === 'moscow' ? (
-              <label className="ring-selector">
-                <span>主環</span>
-                <select
-                  value={selectedRingCandidateId}
-                  onChange={(event) => selectMoscowRing(event.target.value)}
-                >
-                  <option value="">
-                    尚未選擇｜已偵測 {ringCandidates.length} 個候選環
-                  </option>
-                  {ringCandidates.map((candidate, index) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {ringOptionLabel(candidate, index)}
-                      {index === 0 ? '｜推薦' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="ring-selector">
+                <span>莫斯科環</span>
+                <strong>{validatedMoscowRings.length}/3 個環已由 XLSM 定義並通過閉合驗證</strong>
+              </div>
             ) : null}
 
             <div className="style-description">
@@ -420,36 +398,15 @@ export function App() {
             </div>
             <div className="ring-status">
               <span>Moscow rings</span>
-              {style !== 'moscow' ? (
-                <strong>切換到 Moscow 查看</strong>
-              ) : selectedCandidate ? (
-                <>
-                  <strong>
-                    已選環 · {selectedCandidate.nodes.length}站 · score{' '}
-                    {selectedCandidate.score.toFixed(1)}
-                  </strong>
-                  <small>{ringNames.join(' → ')}</small>
-                  <small>
-                    routes {selectedCandidate.routeIds.join(' + ')} · transfers{' '}
-                    {selectedCandidate.transferCount} · spokes{' '}
-                    {selectedCandidate.outwardConnections} · area{' '}
-                    {(selectedCandidate.areaCoverage * 100).toFixed(1)}%
+              <strong>{validatedMoscowRings.length}/3 已驗證</strong>
+              {ringNames.length ? (
+                ringNames.map((ring) => (
+                  <small key={ring.id}>
+                    {ring.id}: {ring.names.join(' → ')} → {ring.names[0]}
                   </small>
-                  <small>共偵測 {ringCandidates.length} 個候選環，可由上方下拉選單更換。</small>
-                </>
+                ))
               ) : (
-                <>
-                  <strong>已偵測 {ringCandidates.length} 個候選環，等待你選擇</strong>
-                  {suggestedCandidate ? (
-                    <small>
-                      推薦：{suggestedCandidate.routeIds.join(' + ')} ·{' '}
-                      {suggestedCandidate.nodes.length}站 · score{' '}
-                      {suggestedCandidate.score.toFixed(1)}
-                    </small>
-                  ) : (
-                    <small>目前路網沒有偵測到閉合 cycle。</small>
-                  )}
-                </>
+                <small>請在 XLSM「莫斯科環」工作表定義環。</small>
               )}
             </div>
           </div>
@@ -457,7 +414,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.11 放大時站名字體反向縮放</span>
+        <span>V0.12 細節縮放 + XLSM 多環 Moscow</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
