@@ -396,7 +396,7 @@ select {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(90px, 120px)) minmax(260px, 1fr);
+  grid-template-columns: repeat(4, minmax(90px, 120px)) minmax(260px, 1fr);
   border-top: 1px solid #cbd5e1;
   background: #f8fafc;
 }
@@ -427,8 +427,13 @@ select {
   white-space: nowrap;
 }
 
+.coverage-status,
 .ring-status {
   min-width: 0;
+}
+
+.coverage-status strong {
+  color: #047857;
 }
 
 .ring-status small + small {
@@ -471,9 +476,10 @@ footer {
   }
 
   .status-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  .coverage-status,
   .ring-status {
     grid-column: 1 / -1;
   }
