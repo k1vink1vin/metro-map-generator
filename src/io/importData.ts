@@ -70,7 +70,18 @@ function rowsToRecords(rows: string[][]): RecordRow[] {
 }
 
 function stationRecordsToStations(records: RecordRow[]): Station[] {
-  return records.map((row, index) => {
+  const meaningfulRecords = records.filter((row) => {
+    const id = pick(row, ['id', 'stationId', 'station', '車站編號', '站號', '車站ID']);
+    const name = pick(row, ['name', 'stationName', '車站名稱', '站名']);
+    const latText = pick(row, ['lat', 'latitude', '緯度']);
+    const lonText = pick(row, ['lon', 'lng', 'longitude', '經度']);
+
+    // Ignore preformatted/template rows where only Transfer Group /
+    // Transfer Validation formulas exist. A-D are the actual station inputs.
+    return Boolean(id || name || latText || lonText);
+  });
+
+  return meaningfulRecords.map((row, index) => {
     const id = pick(row, [
       'id',
       'stationId',
