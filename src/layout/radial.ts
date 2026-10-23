@@ -1335,6 +1335,55 @@ export function layoutMoscow(
           };
         }
       }
+
+      // The radial clearance pass above can stretch some sections more than
+      // others. Re-sample this already-clean connector once more by arc
+      // length so consecutive station badges remain evenly readable.
+      const points = path.map(
+        (nodeId) => crossRegionRepaired[nodeId],
+      );
+      const cumulative = [0];
+      for (let index = 1; index < points.length; index += 1) {
+        cumulative.push(
+          cumulative[index - 1] +
+            Math.hypot(
+              points[index].x - points[index - 1].x,
+              points[index].y - points[index - 1].y,
+            ),
+        );
+      }
+      const total = cumulative[cumulative.length - 1];
+
+      if (total > 1) {
+        const resampled = points.map((point) => ({ ...point }));
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const target = (total * index) / (path.length - 1);
+          let segment = 0;
+          while (
+            segment < cumulative.length - 2 &&
+            cumulative[segment + 1] < target
+          ) {
+            segment += 1;
+          }
+          const startDistance = cumulative[segment];
+          const endDistance = cumulative[segment + 1];
+          const span = Math.max(
+            1e-6,
+            endDistance - startDistance,
+          );
+          const t = (target - startDistance) / span;
+          const a = points[segment];
+          const b = points[segment + 1];
+          resampled[index] = {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+          };
+        }
+
+        for (let index = 1; index < path.length - 1; index += 1) {
+          crossRegionRepaired[path[index]] = resampled[index];
+        }
+      }
     }
   }
 
