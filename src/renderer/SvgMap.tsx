@@ -73,14 +73,25 @@ function padded(rect: Rect, amount: number): Rect {
 }
 
 function parseStationCode(stationId: string) {
-  const match = stationId.trim().match(/^([A-Za-z]+)[-_ ]?(\d+[A-Za-z]?)$/);
+  const normalized = stationId.trim().toUpperCase();
+  const match = normalized.match(/^([A-Z]+)[-_ ]?(\d+)([A-Z]?)$/);
   if (!match) {
-    return { prefix: stationId.trim().toUpperCase(), number: '' };
+    return { prefix: normalized, number: '', suffix: '' };
   }
   return {
-    prefix: match[1].toUpperCase(),
+    prefix: match[1],
     number: match[2],
+    suffix: match[3] ?? '',
   };
+}
+
+function stationBadgeWidth(
+  baseWidth: number,
+  stationId: string,
+  visualScale: number,
+): number {
+  const { suffix } = parseStationCode(stationId);
+  return (baseWidth + (suffix ? 5 : 0)) * visualScale;
 }
 
 function nodeLineColors(graph: GraphModel, nodeId: string): string[] {
@@ -148,15 +159,41 @@ function stationMarkerRadius(
   const isInterchange = isInterchangeNode(graph, node);
 
   if (stationStyle === 'tokyo') {
-    const count = Math.max(1, node.stationIds.length);
-    return Math.max(16, (count * 22 + (count - 1) * 2) / 2);
+    const ids = node.stationIds.length ? node.stationIds : [node.id];
+    const totalWidth =
+      ids.reduce(
+        (sum, stationId) =>
+          sum + stationBadgeWidth(22, stationId, 1),
+        0,
+      ) +
+      Math.max(0, ids.length - 1) * 2;
+    return Math.max(16, totalWidth / 2);
   }
 
   if (stationStyle === 'taipei') {
-    const count = Math.max(1, node.stationIds.length);
+    const ids = node.stationIds.length ? node.stationIds : [node.id];
+    const totalWidth =
+      ids.reduce(
+        (sum, stationId) =>
+          sum + stationBadgeWidth(16, stationId, 1),
+        0,
+      ) +
+      Math.max(0, ids.length - 1) * 2;
     return isInterchange
-      ? Math.max(14, (count * 16 + (count - 1) * 2) / 2)
-      : 12;
+      ? Math.max(14, totalWidth / 2 + 4)
+      : Math.max(12, totalWidth / 2);
+  }
+
+  if (stationStyle === 'osaka') {
+    const ids = node.stationIds.length ? node.stationIds : [node.id];
+    const totalWidth =
+      ids.reduce(
+        (sum, stationId) =>
+          sum + stationBadgeWidth(24, stationId, 1),
+        0,
+      ) +
+      Math.max(0, ids.length - 1) * 2;
+    return Math.max(15, totalWidth / 2 + (isInterchange ? 3 : 0));
   }
 
   return isInterchange ? 12 : 7;
@@ -168,10 +205,14 @@ function renderTokyoStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const width = 22 * visualScale;
   const height = 31 * visualScale;
   const gap = 2 * visualScale;
-  const totalWidth = ids.length * width + (ids.length - 1) * gap;
+  const widths = ids.map((stationId) =>
+    stationBadgeWidth(22, stationId, visualScale),
+  );
+  const totalWidth =
+    widths.reduce((sum, width) => sum + width, 0) +
+    (ids.length - 1) * gap;
   const startX = -totalWidth / 2;
 
   return (
@@ -179,7 +220,11 @@ function renderTokyoStation(
       {ids.map((stationId, index) => {
         const color = stationCodeColor(graph, node.id, stationId);
         const code = parseStationCode(stationId);
-        const x = startX + index * (width + gap);
+        const width = widths[index];
+        const x =
+          startX +
+          widths.slice(0, index).reduce((sum, value) => sum + value, 0) +
+          index * gap;
 
         return (
           <g key={stationId}>
@@ -214,7 +259,7 @@ function renderTokyoStation(
               {code.prefix}
             </text>
             <text
-              x={x + width / 2}
+              x={x + width / 2 - (code.suffix ? 1.4 * visualScale : 0)}
               y={8.8 * visualScale}
               textAnchor="middle"
               className="station-code-number"
@@ -222,6 +267,17 @@ function renderTokyoStation(
             >
               {code.number}
             </text>
+            {code.suffix ? (
+              <text
+                x={x + width - 4.2 * visualScale}
+                y={7.2 * visualScale}
+                textAnchor="middle"
+                className="station-code-suffix"
+                style={{ fontSize: 5.8 * visualScale, fontWeight: 900 }}
+              >
+                {code.suffix}
+              </text>
+            ) : null}
           </g>
         );
       })}
@@ -235,11 +291,14 @@ function renderTaipeiStation(
   visualScale: number,
 ) {
   const ids = node.stationIds.length ? node.stationIds : [node.id];
-  const badgeWidth = 16 * visualScale;
   const badgeHeight = 24 * visualScale;
   const gap = 2 * visualScale;
+  const widths = ids.map((stationId) =>
+    stationBadgeWidth(16, stationId, visualScale),
+  );
   const totalWidth =
-    ids.length * badgeWidth + (ids.length - 1) * gap;
+    widths.reduce((sum, width) => sum + width, 0) +
+    (ids.length - 1) * gap;
   const startX = -totalWidth / 2;
   const isInterchange = isInterchangeNode(graph, node);
 
@@ -259,7 +318,11 @@ function renderTaipeiStation(
       {ids.map((stationId, index) => {
         const color = stationCodeColor(graph, node.id, stationId);
         const code = parseStationCode(stationId);
-        const x = startX + index * (badgeWidth + gap);
+        const badgeWidth = widths[index];
+        const x =
+          startX +
+          widths.slice(0, index).reduce((sum, value) => sum + value, 0) +
+          index * gap;
 
         return (
           <g key={stationId}>
@@ -285,7 +348,7 @@ function renderTaipeiStation(
               {code.prefix}
             </text>
             <text
-              x={x + badgeWidth / 2}
+              x={x + badgeWidth / 2 - (code.suffix ? 1.2 * visualScale : 0)}
               y={8.5 * visualScale}
               textAnchor="middle"
               className="station-code-number"
@@ -293,6 +356,106 @@ function renderTaipeiStation(
             >
               {code.number}
             </text>
+            {code.suffix ? (
+              <text
+                x={x + badgeWidth - 3.6 * visualScale}
+                y={7.2 * visualScale}
+                textAnchor="middle"
+                className="station-code-suffix"
+                style={{ fontSize: 5.2 * visualScale, fontWeight: 900 }}
+              >
+                {code.suffix}
+              </text>
+            ) : null}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function renderOsakaStation(
+  graph: GraphModel,
+  node: GraphNode,
+  visualScale: number,
+) {
+  const ids = node.stationIds.length ? node.stationIds : [node.id];
+  const badgeHeight = 29 * visualScale;
+  const gap = 2 * visualScale;
+  const widths = ids.map((stationId) =>
+    stationBadgeWidth(24, stationId, visualScale),
+  );
+  const totalWidth =
+    widths.reduce((sum, width) => sum + width, 0) +
+    (ids.length - 1) * gap;
+  const startX = -totalWidth / 2;
+  const isInterchange = isInterchangeNode(graph, node);
+
+  return (
+    <g className="station-style-osaka">
+      {isInterchange ? (
+        <rect
+          x={startX - 3 * visualScale}
+          y={-badgeHeight / 2 - 3 * visualScale}
+          width={totalWidth + 6 * visualScale}
+          height={badgeHeight + 6 * visualScale}
+          rx={2.5 * visualScale}
+          className="osaka-transfer-shell"
+          style={{ strokeWidth: 1.6 * visualScale }}
+        />
+      ) : null}
+      {ids.map((stationId, index) => {
+        const color = stationCodeColor(graph, node.id, stationId);
+        const code = parseStationCode(stationId);
+        const width = widths[index];
+        const x =
+          startX +
+          widths.slice(0, index).reduce((sum, value) => sum + value, 0) +
+          index * gap;
+
+        return (
+          <g key={stationId}>
+            <rect
+              x={x}
+              y={-badgeHeight / 2}
+              width={width}
+              height={badgeHeight}
+              rx={1.4 * visualScale}
+              className="osaka-code-badge"
+              style={{
+                fill: color,
+                strokeWidth: 1.4 * visualScale,
+              }}
+            />
+            <text
+              x={x + width / 2}
+              y={-2.5 * visualScale}
+              textAnchor="middle"
+              className="osaka-code-prefix"
+              style={{ fontSize: 7.5 * visualScale }}
+            >
+              {code.prefix}
+            </text>
+            <text
+              x={x + width / 2 - (code.suffix ? 1.5 * visualScale : 0)}
+              y={9 * visualScale}
+              textAnchor="middle"
+              className="osaka-code-number"
+              style={{ fontSize: 10.2 * visualScale }}
+            >
+              {code.number}
+            </text>
+            {code.suffix ? (
+              <text
+                x={x + width - 4.3 * visualScale}
+                y={7.2 * visualScale}
+                textAnchor="middle"
+                className="osaka-code-suffix"
+                style={{ fontSize: 5.8 * visualScale }}
+              >
+                {code.suffix}
+              </text>
+            ) : null}
           </g>
         );
       })}
@@ -695,9 +858,11 @@ export function SvgMap({
             >
               {stationStyle === 'tokyo'
                 ? renderTokyoStation(graph, node, visualScale)
-                : stationStyle === 'moscow'
-                  ? renderMoscowStation(graph, node, visualScale)
-                  : renderTaipeiStation(graph, node, visualScale)}
+                : stationStyle === 'osaka'
+                  ? renderOsakaStation(graph, node, visualScale)
+                  : stationStyle === 'moscow'
+                    ? renderMoscowStation(graph, node, visualScale)
+                    : renderTaipeiStation(graph, node, visualScale)}
             </g>
           );
         })}
@@ -717,7 +882,9 @@ export function SvgMap({
                   ? 12.4
                   : stationStyle === 'tokyo'
                     ? 12
-                    : 11.5) * visualScale
+                    : stationStyle === 'osaka'
+                      ? 12.2
+                      : 11.5) * visualScale
               }px`,
               strokeWidth:
                 (stationStyle === 'moscow' ? 3 : 3.5) * visualScale,
