@@ -318,3 +318,25 @@ Moscow layout now performs passenger-map line-shape cleanup after ring/radial pl
 - QA tracks alternating doglegs so future changes cannot silently restore the previous zigzag behavior.
 
 The canonical Taipei Moscow QA baseline currently has one geometric crossing, zero short edges, and a passenger-readability score above 98.
+
+
+## Station visual styles
+
+Network layout and station-marker appearance are independent controls.
+
+Available station-marker systems:
+
+- `taipei` — compact colored line-code badges; interchange codes share a framed group.
+- `tokyo` — rounded dark outer shells with colored inner line-code badges.
+- `moscow` — line-colored circular stations and concentric transfer rings.
+
+The selected station style is rendered directly into the live SVG and therefore remains identical in SVG export. QA renders all three station styles from `TPE_Metro.xlsm` on every CI run.
+
+## Moscow terminal exits
+
+Moscow smoothing now distinguishes two cases:
+
+- ordinary corridor doglegs: move degree-2 intermediate stations,
+- terminal extensions leaving a fixed ring/transfer hub: keep the hub fixed and move the terminal extension onto the incoming corridor direction.
+
+This specifically prevents sharp passenger-map hooks such as the former `台北101/世貿 → 象山 → 廣慈/奉天宮` geometry. CI requires zero Moscow terminal-hook violations.
