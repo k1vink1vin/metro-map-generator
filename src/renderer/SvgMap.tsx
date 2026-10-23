@@ -768,16 +768,27 @@ export function SvgMap({
         d: roundedPath(
           points,
           layout.style === 'moscow'
-            ? 42
+            ? 48
             : layout.style === 'hex'
-              ? 28
+              ? 30
               : layout.style === 'concentric'
-                ? 26
+                ? 28
                 : layout.style === 'taipei'
-                  ? 22
+                  ? 24
                   : layout.style === 'london'
-                    ? 18
+                    ? 20
                     : 14,
+          layout.style === 'moscow'
+            ? 0.46
+            : layout.style === 'hex'
+              ? 0.4
+              : layout.style === 'concentric'
+                ? 0.4
+                : layout.style === 'taipei'
+                  ? 0.38
+                  : layout.style === 'london'
+                    ? 0.35
+                    : 0.32,
         ),
       };
     }),
@@ -848,7 +859,7 @@ export function SvgMap({
             return (
               <path
                 key={ring.id}
-                d={roundedPath(points, 48)}
+                d={roundedPath(points, 54, 0.46)}
                 className="moscow-ring-halo"
               />
             );
