@@ -8,6 +8,7 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 
 - JSON station/route editor
 - CSV import for stations and route rows
+- downloadable example CSV files in `public/examples/`
 - Excel (.xlsx) import with `Stations` and `Lines` worksheets
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
@@ -167,4 +168,16 @@ For every candidate cycle, the current scorer considers:
 - fraction of network nodes on the cycle,
 - minimum number of route changes needed to travel around the cycle.
 
-The highest-scoring candidate becomes the visual backbone. The UI shows its score, route IDs, route-change count, outward connections, area coverage, and number of candidate cycles evaluated. Automatic selection is therefore inspectable rather than a hidden `route.isLoop` rule.
+The detector ranks all candidate cycles, but it does **not** automatically force the highest-scoring cycle to become the map ring. In Moscow mode, the UI lists detected candidates and the user explicitly chooses which cycle becomes the visual backbone. The top-scoring cycle is only marked as a recommendation.
+
+The UI shows each selected ring's score, route IDs, route-change count, outward connections, area coverage, and station chain.
+
+
+## Downloadable CSV examples
+
+The deployed app exposes these ready-to-import examples:
+
+- `public/examples/stations.csv`
+- `public/examples/lines.csv`
+
+They demonstrate transfer complexes, a Y-shaped branch using multiple `pathId` values, and a composite ring candidate formed across different services.
