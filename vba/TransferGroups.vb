@@ -1,7 +1,22 @@
-Attribute VB_Name = "ValidateTransfers"
 Option Explicit
 
 Private Const COORD_TOLERANCE As Double = 0.0000001
+
+Private Function StationSheetNameZh() As String
+    StationSheetNameZh = ChrW(&H8ECA) & ChrW(&H7AD9)
+End Function
+
+Private Function TextOkPrefix() As String
+    TextOkPrefix = ChrW(&H6B63) & ChrW(&H5E38) & " - "
+End Function
+
+Private Function TextErrorMismatch() As String
+    TextErrorMismatch = _
+        ChrW(&H932F) & ChrW(&H8AA4) & " - " & _
+        ChrW(&H540C) & ChrW(&H540D) & ChrW(&H7AD9) & _
+        ChrW(&H5EA7) & ChrW(&H6A19) & _
+        ChrW(&H4E0D) & ChrW(&H4E00) & ChrW(&H81F4)
+End Function
 
 Private Function NormalizeStationName(ByVal value As Variant) As String
     NormalizeStationName = LCase$(Trim$(CStr(value)))
@@ -13,7 +28,7 @@ End Function
 
 Private Function GetStationWorksheet() As Worksheet
     On Error Resume Next
-    Set GetStationWorksheet = ThisWorkbook.Worksheets("車站")
+    Set GetStationWorksheet = ThisWorkbook.Worksheets(StationSheetNameZh())
     If GetStationWorksheet Is Nothing Then
         Set GetStationWorksheet = ThisWorkbook.Worksheets("Stations")
     End If
@@ -36,7 +51,17 @@ Private Function NextTransferId(ByVal usedIds As Object) As String
     Loop
 End Function
 
+Public Sub Auto_Open()
+    On Error Resume Next
+    CompleteTransfersAndValidateCore False
+    On Error GoTo 0
+End Sub
+
 Public Sub CompleteTransfersAndValidate()
+    CompleteTransfersAndValidateCore True
+End Sub
+
+Private Sub CompleteTransfersAndValidateCore(ByVal showMessage As Boolean)
     Dim ws As Worksheet
     Dim lastRow As Long
     Dim rowIndex As Long
@@ -59,14 +84,13 @@ Public Sub CompleteTransfersAndValidate()
     Set ws = GetStationWorksheet()
 
     If ws Is Nothing Then
-        MsgBox "找不到「車站」或「Stations」工作表。", vbCritical
+        If showMessage Then MsgBox "Station worksheet not found.", vbCritical
         Exit Sub
     End If
 
     lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
-
     If lastRow < 2 Then
-        MsgBox "車站工作表沒有資料。", vbExclamation
+        If showMessage Then MsgBox "Station worksheet has no data.", vbExclamation
         Exit Sub
     End If
 
@@ -76,22 +100,18 @@ Public Sub CompleteTransfersAndValidate()
     Set coordTransfer = CreateObject("Scripting.Dictionary")
     Set usedTransferIds = CreateObject("Scripting.Dictionary")
 
-    ws.Cells(1, "E").Value = "轉乘群組"
-    ws.Cells(1, "F").Value = "轉乘驗證"
     ws.Range("A2:F" & lastRow).Interior.Pattern = xlNone
 
-    ' 第一階段：
-    ' 1. 驗證同名站的經緯度是否一致。
-    ' 2. 統計完全相同座標出現幾次。
-    ' 3. 保留既有 XFER ID，避免站名修改或資料重排後改變 topology。
+    ' First pass: count coordinates, validate same-name coordinates,
+    ' and preserve any existing XFER IDs.
     For rowIndex = 2 To lastRow
         stationId = Trim$(CStr(ws.Cells(rowIndex, "A").Value))
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
 
-        If stationId <> "" And stationName <> "" Then
+        If stationId <> "" Then
             If Not IsNumeric(ws.Cells(rowIndex, "C").Value) Or _
                Not IsNumeric(ws.Cells(rowIndex, "D").Value) Then
-                nameMismatch(stationName) = True
+                If stationName <> "" Then nameMismatch(stationName) = True
             Else
                 latitude = CDbl(ws.Cells(rowIndex, "C").Value)
                 longitude = CDbl(ws.Cells(rowIndex, "D").Value)
@@ -103,12 +123,14 @@ Public Sub CompleteTransfersAndValidate()
                     coordCounts(coordKey) = 1
                 End If
 
-                If nameFirstCoord.Exists(stationName) Then
-                    If CStr(nameFirstCoord(stationName)) <> coordKey Then
-                        nameMismatch(stationName) = True
+                If stationName <> "" Then
+                    If nameFirstCoord.Exists(stationName) Then
+                        If CStr(nameFirstCoord(stationName)) <> coordKey Then
+                            nameMismatch(stationName) = True
+                        End If
+                    Else
+                        nameFirstCoord(stationName) = coordKey
                     End If
-                Else
-                    nameFirstCoord(stationName) = coordKey
                 End If
 
                 existingTransfer = Trim$(CStr(ws.Cells(rowIndex, "E").Value))
@@ -122,7 +144,7 @@ Public Sub CompleteTransfersAndValidate()
         End If
     Next rowIndex
 
-    ' 第二階段：對每個重複座標群組建立/保留穩定的 XFER ID。
+    ' Second pass: assign XFER IDs in first-appearance order.
     For rowIndex = 2 To lastRow
         stationId = Trim$(CStr(ws.Cells(rowIndex, "A").Value))
 
@@ -142,18 +164,19 @@ Public Sub CompleteTransfersAndValidate()
         End If
     Next rowIndex
 
-    ' 第三階段：寫回轉乘群組與驗證結果。
+    ' Third pass: write Transfer Group and validation result.
     For rowIndex = 2 To lastRow
+        stationId = Trim$(CStr(ws.Cells(rowIndex, "A").Value))
         stationName = NormalizeStationName(ws.Cells(rowIndex, "B").Value)
 
-        If Trim$(CStr(ws.Cells(rowIndex, "A").Value)) = "" Then
+        If stationId = "" Then
             ws.Cells(rowIndex, "E").ClearContents
             ws.Cells(rowIndex, "F").ClearContents
 
         ElseIf Not IsNumeric(ws.Cells(rowIndex, "C").Value) Or _
                Not IsNumeric(ws.Cells(rowIndex, "D").Value) Then
             ws.Cells(rowIndex, "E").ClearContents
-            ws.Cells(rowIndex, "F").Value = "錯誤 - 經緯度不是數字"
+            ws.Cells(rowIndex, "F").Value = "ERROR - Invalid coordinates"
             ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(254, 202, 202)
 
         Else
@@ -169,10 +192,10 @@ Public Sub CompleteTransfersAndValidate()
             End If
 
             If stationName <> "" And nameMismatch.Exists(stationName) Then
-                ws.Cells(rowIndex, "F").Value = "錯誤 - 同名站座標不一致"
+                ws.Cells(rowIndex, "F").Value = TextErrorMismatch()
                 ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(254, 202, 202)
             ElseIf coordTransfer.Exists(coordKey) Then
-                ws.Cells(rowIndex, "F").Value = "正常 - " & CStr(coordTransfer(coordKey))
+                ws.Cells(rowIndex, "F").Value = TextOkPrefix() & CStr(coordTransfer(coordKey))
                 ws.Range("A" & rowIndex & ":F" & rowIndex).Interior.Color = RGB(220, 252, 231)
             Else
                 ws.Cells(rowIndex, "F").ClearContents
@@ -182,17 +205,13 @@ Public Sub CompleteTransfersAndValidate()
 
     mismatchCount = nameMismatch.Count
 
-    If mismatchCount = 0 Then
-        MsgBox "轉乘群組已完成，經緯度驗證通過。" & vbCrLf & _
-               "轉乘資料列：" & transferRowCount & vbCrLf & _
-               "轉乘群組使用穩定的 XFER_### ID。", vbInformation
-    Else
-        MsgBox "轉乘群組已完成，但驗證失敗。" & vbCrLf & _
-               mismatchCount & " 個同名站的經緯度不一致。" & vbCrLf & _
-               "請修正紅色資料列。", vbCritical
+    If showMessage Then
+        If mismatchCount = 0 Then
+            MsgBox "Transfer groups updated. Rows in transfer groups: " & _
+                   CStr(transferRowCount), vbInformation
+        Else
+            MsgBox "Transfer groups updated, but " & CStr(mismatchCount) & _
+                   " same-name station group(s) have inconsistent coordinates.", vbCritical
+        End If
     End If
-End Sub
-
-Public Sub ValidateTransferCoordinates()
-    CompleteTransfersAndValidate
 End Sub

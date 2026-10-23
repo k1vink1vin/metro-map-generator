@@ -10,13 +10,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build embedded VBA project
+        run: bash scripts/build-vba-project.sh
+
+      - name: Verify embedded VBA asset
+        run: |
+          test -s public/examples/vbaProject.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("public/examples/vbaProject.bin")
+          assert path.stat().st_size > 1024
+          print(f"vbaProject.bin verified: {path.stat().st_size} bytes")
+          PY
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package.json
+
       - name: Install
         run: npm install --no-audit --no-fund
+
       - name: Build
         run: npm run build

@@ -20,16 +20,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build embedded VBA project
+        run: bash scripts/build-vba-project.sh
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install
         run: npm install --no-audit --no-fund
+
       - name: Build
         run: npm run build
+
+      - name: Verify VBA is in Pages artifact
+        run: test -s dist/examples/vbaProject.bin
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

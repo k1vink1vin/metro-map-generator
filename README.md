@@ -10,7 +10,7 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 - Excel (`.xlsx` / `.xlsm`) input with Chinese `車站` / `路線` worksheets
 - backward-compatible import for English `Stations` / `Lines` worksheets
 - downloadable `.xlsm` input template generated in the browser
-- transfer-coordinate formula validation plus optional VBA validator
+- transfer-coordinate formula validation plus VBA embedded directly in the XLSM
 - latitude/longitude projection
 - Y-shaped routes through multiple `paths`
 - automatic transfer-station grouping across different station IDs
@@ -150,7 +150,7 @@ Rules:
 
 The downloadable template is directly generated as `metro-map-input-template-zh.xlsm`. `轉乘群組 / Transfer Group` automatically generates stable `XFER_###` IDs from repeated coordinates, while `轉乘驗證 / Transfer Validation` checks same-name coordinate consistency.
 
-An optional `ValidateTransfers.bas` VBA module is also provided. Its `CompleteTransfersAndValidate` macro performs both operations in one step.
+The XLSM now contains its VBA project directly. When macros are enabled, `Auto_Open` reruns the transfer grouping and validation automatically; `CompleteTransfersAndValidate` can also be run manually from Excel's macro dialog.
 
 ### 路線 / Lines
 
@@ -200,7 +200,7 @@ The deployed app provides a generated `metro-map-input-template-zh.xlsm` contain
 
 The importer accepts both Chinese and English worksheet/header names, so older workbooks remain usable.
 
-The repository also includes `public/examples/ValidateTransfers.bas` for optional VBA validation.
+There is no separate VBA download. GitHub Actions compiles the VBA source into `vbaProject.bin` and includes it in the deployed XLSM template.
 
 
 ## Route completeness invariant
@@ -235,3 +235,23 @@ B03,市政府,24.154,120.663,XFER_001
 ```
 
 If the user later renames both rows to `市府`, `XFER_001` remains the topology key. The website also auto-generates XFER IDs for repeated coordinates when the transfer column is blank. Existing XFER IDs take precedence, and automatically generated IDs avoid collisions with existing groups.
+
+
+## Self-contained XLSM
+
+The download flow is intentionally a single file:
+
+```text
+metro-map-input-template-zh.xlsm
+```
+
+The workbook contains:
+
+- visible Chinese input sheets,
+- legacy-compatible formulas that auto-number repeated-coordinate transfer groups as `XFER_001 / XFER_002 / ...`,
+- hidden helper columns used only for stable formula calculation,
+- an embedded VBA project compiled during CI,
+- `Auto_Open` to refresh transfer groups and validation when macros are enabled,
+- `CompleteTransfersAndValidate` for manual reruns.
+
+CI fails if `vbaProject.bin` cannot be compiled, so Pages will not deploy a macro-less XLSM by accident.
