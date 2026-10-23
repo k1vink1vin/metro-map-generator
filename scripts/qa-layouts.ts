@@ -248,23 +248,48 @@ function moscowDoglegDetails(
     path: string;
     stations: string[];
   }> = [];
+  const ringNodeSet = new Set(rings.flatMap((ring) => ring.nodes));
+
+  const isOrdinaryCorridorNode = (nodeId: string): boolean => {
+    const node = graph.nodeById.get(nodeId);
+    if (!node) return false;
+    if (ringNodeSet.has(nodeId)) return false;
+    if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return false;
+    if (node.stationIds.length !== 1) return false;
+
+    const incidentLines = new Set<string>();
+    for (const neighbor of graph.adjacency.get(nodeId) ?? []) {
+      const edge = graph.edgeByKey.get(
+        [nodeId, neighbor].sort().join('::'),
+      );
+      for (const lineId of edge?.lineIds ?? []) {
+        incidentLines.add(lineId);
+      }
+    }
+    return incidentLines.size === 1;
+  };
 
   for (const line of graph.lines) {
     line.paths.forEach((path, pathIndex) => {
-      const turns: number[] = [];
-      for (let index = 1; index < path.length - 1; index += 1) {
-        turns.push(
-          signedTurn(
-            positions[path[index - 1]],
-            positions[path[index]],
-            positions[path[index + 1]],
-          ),
-        );
-      }
+      for (let index = 0; index < path.length - 3; index += 1) {
+        const [aId, bId, cId, dId] = path.slice(index, index + 4);
+        if (
+          !isOrdinaryCorridorNode(bId) ||
+          !isOrdinaryCorridorNode(cId)
+        ) {
+          continue;
+        }
 
-      for (let index = 0; index < turns.length - 1; index += 1) {
-        const first = turns[index];
-        const second = turns[index + 1];
+        const first = signedTurn(
+          positions[aId],
+          positions[bId],
+          positions[cId],
+        );
+        const second = signedTurn(
+          positions[bId],
+          positions[cId],
+          positions[dId],
+        );
         const opposite = Math.sign(first) !== Math.sign(second);
         const strong =
           Math.abs(first) > (24 * Math.PI) / 180 &&
@@ -274,9 +299,9 @@ function moscowDoglegDetails(
           details.push({
             line: line.id,
             path: line.pathIds?.[pathIndex] ?? String(pathIndex),
-            stations: path
-              .slice(index, index + 4)
-              .map((nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId),
+            stations: [aId, bId, cId, dId].map(
+              (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
+            ),
           });
         }
       }
@@ -611,13 +636,6 @@ console.log(
   })),
 );
 
-if (failures.length) {
-  throw new Error(
-    'Passenger-map QA regression:\n' + failures.join('\n'),
-  );
-}
-
-
 const moscowResult = results.find((result) => result.style === 'moscow');
 if (moscowResult?.doglegDetails.length) {
   console.log('Moscow dogleg details:', moscowResult.doglegDetails);
@@ -628,5 +646,11 @@ if (moscowResult?.terminalHookDetails.length) {
   console.log(
     'Moscow terminal hook details:',
     moscowResult.terminalHookDetails,
+  );
+}
+
+if (failures.length) {
+  throw new Error(
+    'Passenger-map QA regression:\n' + failures.join('\n'),
   );
 }
