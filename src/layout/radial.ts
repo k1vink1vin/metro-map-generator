@@ -720,11 +720,85 @@ function repairCrossRegionMoscowPaths(
         };
       }
 
+      // If the repaired geographic corridor is still too short for all
+      // station markers, lengthen it by amplifying only its lateral shape
+      // relative to the fixed endpoint chord. This preserves endpoint
+      // geography and route order while creating schematic breathing room.
+      let polyline = path.map((nodeId) => candidate[nodeId]);
+      const rawLength = polyline
+        .slice(1)
+        .reduce(
+          (sum, point, index) =>
+            sum +
+            Math.hypot(
+              point.x - polyline[index].x,
+              point.y - polyline[index].y,
+            ),
+          0,
+        );
+      const desiredLength = (path.length - 1) * 38;
+
+      if (rawLength < desiredLength) {
+        const startPoint = polyline[0];
+        const endPoint = polyline[polyline.length - 1];
+        const chordDx = endPoint.x - startPoint.x;
+        const chordDy = endPoint.y - startPoint.y;
+        const chordLength = Math.max(
+          1,
+          Math.hypot(chordDx, chordDy),
+        );
+        const nx = -chordDy / chordLength;
+        const ny = chordDx / chordLength;
+        const shapeScale = clamp(
+          desiredLength / Math.max(1, rawLength),
+          1,
+          3.8,
+        );
+
+        polyline = polyline.map((point, index) => {
+          if (index === 0 || index === polyline.length - 1) {
+            return point;
+          }
+          const t = index / (polyline.length - 1);
+          const chordPoint = {
+            x: startPoint.x + chordDx * t,
+            y: startPoint.y + chordDy * t,
+          };
+          const deviationX = point.x - chordPoint.x;
+          const deviationY = point.y - chordPoint.y;
+          let lateral =
+            deviationX * nx + deviationY * ny;
+
+          if (Math.abs(lateral) < 4) {
+            const side = index <= polyline.length / 2 ? 1 : -1;
+            lateral += side * 10 * Math.sin(Math.PI * t);
+          }
+
+          const along =
+            deviationX * (chordDx / chordLength) +
+            deviationY * (chordDy / chordLength);
+
+          return {
+            x:
+              chordPoint.x +
+              (chordDx / chordLength) * along +
+              nx * lateral * shapeScale,
+            y:
+              chordPoint.y +
+              (chordDy / chordLength) * along +
+              ny * lateral * shapeScale,
+          };
+        });
+
+        path.forEach((nodeId, index) => {
+          candidate[nodeId] = polyline[index];
+        });
+      }
+
       // Re-space stations uniformly along the repaired polyline. This keeps
       // both endpoints fixed and preserves the clean geographic corridor,
       // while preventing uneven real-world station spacing from collapsing
       // badges in a schematic map.
-      const polyline = path.map((nodeId) => candidate[nodeId]);
       const cumulative = [0];
       for (let index = 1; index < polyline.length; index += 1) {
         cumulative.push(
