@@ -150,6 +150,7 @@ export function downloadSvg(
     0.25,
     Number(svg.dataset.detailZoom || '1'),
   );
+  const stationStyle = svg.dataset.stationStyle || 'taipei';
   const viewBox = svg.viewBox.baseVal;
   clone.setAttribute(
     'width',
@@ -175,6 +176,7 @@ export function downloadSvg(
     ),
     routes: expectedRoutes,
     detailZoom,
+    stationStyle,
   });
   clone.insertBefore(metadata, clone.firstChild);
 
