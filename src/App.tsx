@@ -205,17 +205,16 @@ export function App() {
               <strong>Excel Input</strong>
               <div className="example-links">
                 <button type="button" onClick={() => void downloadExcelTemplate()}>
-                  下載 Excel 範本
+                  下載 XLSM 範本
                 </button>
                 <a href="/metro-map-generator/examples/ValidateTransfers.bas" download>
                   下載 VBA 驗證模組
                 </a>
               </div>
               <small>
-                Stations 工作表固定使用 4 欄：Station ID / Station Name / Latitude / Longitude。
-                同一個實體轉乘站請重複列出，每條路線保留自己的 Station ID。
-                同名轉乘站的經緯度必須完全一致，網站匯入時也會驗證。
-                若要使用 VBA，請將範本另存為 .xlsm 後匯入 ValidateTransfers.bas。
+                Stations 的 A-D 欄是手動輸入：Station ID / Station Name / Latitude / Longitude。
+                E 欄 Transfer Group 會依同名站自動完成，F 欄會驗證同名轉乘站的經緯度是否一致。
+                範本直接下載為 .xlsm；另提供 VBA 模組，可一次完成轉乘欄與座標驗證。
               </small>
             </div>
 
@@ -379,7 +378,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.4 Excel input + transfer coordinate validation</span>
+        <span>V0.5 XLSM input + automatic transfer fields</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>
