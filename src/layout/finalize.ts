@@ -105,16 +105,19 @@ function passengerCanvasScale(
 ): number {
   const nodeFactor = Math.sqrt(graph.nodes.length / 45);
   const edgeFactor = Math.sqrt(graph.edges.length / 55);
-  const base = Math.max(1, Math.max(nodeFactor, edgeFactor));
+  // Dense multi-system maps need more breathing room than the original
+  // Taipei-only fixture. Keep the same geometry, but increase the passenger
+  // canvas instead of shrinking station labels into unreadability.
+  const base = Math.max(1, Math.max(nodeFactor, edgeFactor)) * 1.18;
   const styleMultiplier: Record<StyleId, number> = {
-    geographic: 1,
-    taipei: 1,
-    london: 1.1,
-    moscow: 1.7,
-    concentric: 1,
-    hex: 1.08,
+    geographic: 1.05,
+    taipei: 1.08,
+    london: 1.12,
+    moscow: 1.25,
+    concentric: 1.08,
+    hex: 1.12,
   };
-  return Math.min(3.2, base * styleMultiplier[style]);
+  return Math.min(4.5, base * styleMultiplier[style]);
 }
 
 function fitToCanvas(
