@@ -27,6 +27,12 @@ export const sampleNetwork: NetworkInput = {
     { id: 'B02', name: '大學', lat: 24.183, lon: 120.641 },
     { id: 'B03', name: '市政府', lat: 24.154, lon: 120.663 },
   ],
+  moscowRings: [
+    {
+      id: 'RING_1',
+      stationIds: ['G03', 'G04', 'G05', 'G06', 'G07', 'T04', 'T03', 'T02'],
+    },
+  ],
   lines: [
     {
       id: 'GREEN',
