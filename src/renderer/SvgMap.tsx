@@ -316,10 +316,12 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
 
       return {
         lineId: line.id,
-        lineColor: line.color,
+        lineColor:
+          line.pathColors?.[pathIndex] ??
+          line.color,
         pathIndex,
         points,
-        d: roundedPath(points, 16),
+        d: roundedPath(points, layout.style === 'moscow' ? 22 : 16),
       };
     }),
   );
@@ -377,6 +379,7 @@ export function SvgMap({ graph, layout, zoom = 1 }: SvgMapProps) {
                   key={`${line.id}-${routePath.pathIndex}`}
                   data-line-id={line.id}
                   data-path-index={routePath.pathIndex}
+                  data-path-id={line.pathIds?.[routePath.pathIndex] ?? routePath.pathIndex}
                   d={routePath.d}
                   fill="none"
                   stroke={routePath.lineColor}
