@@ -5,6 +5,7 @@ import type {
   Point,
   StationVisualStyle,
 } from '../types';
+import { nodeDegree } from '../core/graph';
 import {
   buildGeometricBundleMap,
   offsetPathForLine,
@@ -690,6 +691,7 @@ export function SvgMap({
               key={node.id}
               transform={`translate(${point.x} ${point.y})`}
               data-node-id={node.id}
+              data-interchange={isInterchangeNode(graph, node) ? 'true' : 'false'}
             >
               {stationStyle === 'tokyo'
                 ? renderTokyoStation(graph, node, visualScale)
