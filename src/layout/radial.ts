@@ -1615,7 +1615,7 @@ export function layoutConcentric(
   // radial-shell solution with the north-up geography: the centre receives
   // stronger shell structure, while outer districts retain more of their
   // natural topology.
-  return Object.fromEntries(
+  const blended = Object.fromEntries(
     graph.nodes.map((node) => {
       const geo = geographic[node.id];
       const shell = target[node.id] ?? geo;
@@ -1636,4 +1636,12 @@ export function layoutConcentric(
       ];
     }),
   );
+
+  return relaxPathKinksSafely(graph, blended, {
+    passes: 5,
+    thresholdDegrees: 96,
+    minimumNodeDistance: 34,
+    maxShift: 24,
+    structuralMaxShift: 12,
+  });
 }
