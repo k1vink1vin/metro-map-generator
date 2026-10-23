@@ -15,6 +15,14 @@ export function buildGraph(input: NetworkInput): GraphModel {
     throw new Error('At least one station is required.');
   }
 
+  const seenStationIds = new Set<string>();
+  for (const station of input.stations) {
+    if (seenStationIds.has(station.id)) {
+      throw new Error(`Duplicate station id: ${station.id}.`);
+    }
+    seenStationIds.add(station.id);
+  }
+
   const byStation = new Map(input.stations.map((station) => [station.id, station]));
   const groups = new Map<string, typeof input.stations>();
 
@@ -53,9 +61,16 @@ export function buildGraph(input: NetworkInput): GraphModel {
   const edgeMap = new Map<string, GraphEdge>();
   const graphLines: GraphLine[] = [];
 
+  const seenLineIds = new Set<string>();
+
   for (const line of input.lines) {
     if (!line.id) throw new Error('Line id cannot be empty.');
-    const paths = line.paths.map((path) => {
+    if (seenLineIds.has(line.id)) {
+      throw new Error(`Duplicate line id: ${line.id}.`);
+    }
+    seenLineIds.add(line.id);
+
+    const paths = line.paths.map((path, pathIndex) => {
       const mapped = path.map((stationId) => {
         if (!byStation.has(stationId)) {
           throw new Error(`Line ${line.id} references unknown station ${stationId}.`);
@@ -63,7 +78,15 @@ export function buildGraph(input: NetworkInput): GraphModel {
         return stationToNode.get(stationId)!;
       });
 
-      return mapped.filter((nodeId, index) => index === 0 || nodeId !== mapped[index - 1]);
+      const collapsed = mapped.filter(
+        (nodeId, index) => index === 0 || nodeId !== mapped[index - 1],
+      );
+      if (collapsed.length < 2) {
+        throw new Error(
+          `Line ${line.id} path ${pathIndex + 1} must contain at least two distinct topology nodes.`,
+        );
+      }
+      return collapsed;
     });
 
     graphLines.push({
