@@ -46,10 +46,29 @@ function assertCoordinatesMatch(
   }
 }
 
+function coordinateKey(station: Station): string {
+  return `${station.lat.toFixed(7)}|${station.lon.toFixed(7)}`;
+}
+
 function buildStationGroups(stations: Station[]): Map<string, Station[]> {
+  const byName = new Map<string, Station[]>();
+  for (const station of stations) {
+    const normalizedName = normalizeStationName(station.name);
+    if (!normalizedName) continue;
+    const sameName = byName.get(normalizedName) ?? [];
+    sameName.push(station);
+    byName.set(normalizedName, sameName);
+  }
+
+  for (const group of byName.values()) {
+    if (group.length <= 1) continue;
+    const label = group[0].name?.trim() || group[0].id;
+    assertCoordinatesMatch(group, label);
+  }
+
   const groups = new Map<string, Station[]>();
   const explicitComplexes = new Map<string, Station[]>();
-  const byName = new Map<string, Station[]>();
+  const unassigned: Station[] = [];
 
   for (const station of stations) {
     const complexId = station.complexId?.trim();
@@ -57,36 +76,67 @@ function buildStationGroups(stations: Station[]): Map<string, Station[]> {
       const group = explicitComplexes.get(complexId) ?? [];
       group.push(station);
       explicitComplexes.set(complexId, group);
-      continue;
-    }
-
-    const normalizedName = normalizeStationName(station.name);
-    if (normalizedName) {
-      const group = byName.get(normalizedName) ?? [];
-      group.push(station);
-      byName.set(normalizedName, group);
     } else {
-      groups.set(station.id, [station]);
+      unassigned.push(station);
     }
   }
+
+  const explicitIdsByCoordinate = new Map<string, string[]>();
 
   for (const [complexId, group] of explicitComplexes) {
     assertCoordinatesMatch(group, complexId);
     groups.set(complexId, group);
+
+    const key = coordinateKey(group[0]);
+    const ids = explicitIdsByCoordinate.get(key) ?? [];
+    ids.push(complexId);
+    explicitIdsByCoordinate.set(key, ids);
   }
 
-  for (const [normalizedName, group] of byName) {
-    if (group.length === 1) {
-      const station = group[0];
-      groups.set(station.id, group);
+  const byCoordinate = new Map<string, Station[]>();
+  for (const station of unassigned) {
+    const key = coordinateKey(station);
+    const matchingExplicitIds = explicitIdsByCoordinate.get(key) ?? [];
+
+    if (matchingExplicitIds.length === 1) {
+      groups.get(matchingExplicitIds[0])!.push(station);
       continue;
     }
 
-    const displayName =
-      group.find((station) => station.name?.trim())?.name?.trim() ??
-      normalizedName;
-    assertCoordinatesMatch(group, displayName);
-    groups.set(`__AUTO_TRANSFER__${group[0].id}`, group);
+    const group = byCoordinate.get(key) ?? [];
+    group.push(station);
+    byCoordinate.set(key, group);
+  }
+
+  const transferKeys = [...byCoordinate.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([key]) => key)
+    .sort();
+
+  const usedGroupIds = new Set(groups.keys());
+  const autoIdByCoordinate = new Map<string, string>();
+  let nextTransferNumber = 1;
+
+  for (const key of transferKeys) {
+    let candidate = '';
+
+    do {
+      candidate = `XFER_${String(nextTransferNumber).padStart(3, '0')}`;
+      nextTransferNumber += 1;
+    } while (usedGroupIds.has(candidate));
+
+    usedGroupIds.add(candidate);
+    autoIdByCoordinate.set(key, candidate);
+  }
+
+  for (const [key, group] of byCoordinate) {
+    if (group.length === 1) {
+      groups.set(group[0].id, group);
+      continue;
+    }
+
+    const autoId = autoIdByCoordinate.get(key)!;
+    groups.set(autoId, group);
   }
 
   return groups;
