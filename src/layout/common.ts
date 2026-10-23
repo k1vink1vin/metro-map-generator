@@ -915,14 +915,28 @@ export function repairIntroducedPathSelfCrossings(
       );
       const startId = path[0];
       const endId = path[path.length - 1];
-      const startDelta = {
-        x: positions[startId].x - reference[startId].x,
-        y: positions[startId].y - reference[startId].y,
-      };
-      const endDelta = {
-        x: positions[endId].x - reference[endId].x,
-        y: positions[endId].y - reference[endId].y,
-      };
+      const referenceStart = reference[startId];
+      const referenceEnd = reference[endId];
+      const targetStart = positions[startId];
+      const targetEnd = positions[endId];
+
+      const referenceDx = referenceEnd.x - referenceStart.x;
+      const referenceDy = referenceEnd.y - referenceStart.y;
+      const targetDx = targetEnd.x - targetStart.x;
+      const targetDy = targetEnd.y - targetStart.y;
+      const referenceLength = Math.hypot(referenceDx, referenceDy);
+      const targetLength = Math.hypot(targetDx, targetDy);
+
+      // Closed rings need their own circular solver; this repair is for open
+      // paths whose two endpoints define a stable similarity transform.
+      if (referenceLength < 1e-6 || targetLength < 1e-6) continue;
+
+      const scaleFactor = targetLength / referenceLength;
+      const referenceAngle = Math.atan2(referenceDy, referenceDx);
+      const targetAngle = Math.atan2(targetDy, targetDx);
+      const rotation = targetAngle - referenceAngle;
+      const cos = Math.cos(rotation);
+      const sin = Math.sin(rotation);
 
       const candidate = Object.fromEntries(
         Object.entries(positions).map(([id, point]) => [
@@ -932,16 +946,16 @@ export function repairIntroducedPathSelfCrossings(
       );
 
       for (let index = 1; index < path.length - 1; index += 1) {
-        const t = index / (path.length - 1);
-        candidate[path[index]] = {
+        const nodeId = path[index];
+        const rx = reference[nodeId].x - referenceStart.x;
+        const ry = reference[nodeId].y - referenceStart.y;
+        candidate[nodeId] = {
           x:
-            reference[path[index]].x +
-            startDelta.x * (1 - t) +
-            endDelta.x * t,
+            targetStart.x +
+            (rx * cos - ry * sin) * scaleFactor,
           y:
-            reference[path[index]].y +
-            startDelta.y * (1 - t) +
-            endDelta.y * t,
+            targetStart.y +
+            (rx * sin + ry * cos) * scaleFactor,
         };
       }
 
