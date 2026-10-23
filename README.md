@@ -7,7 +7,8 @@ The project is being built as a static React/TypeScript app so it can be hosted 
 ## What works in v0.1
 
 - JSON station/route editor
-- Excel (`.xlsx` / `.xlsm`) input with `Stations` and `Lines` worksheets
+- Excel (`.xlsx` / `.xlsm`) input with Chinese `車站` / `路線` worksheets
+- backward-compatible import for English `Stations` / `Lines` worksheets
 - downloadable `.xlsm` input template generated in the browser
 - transfer-coordinate formula validation plus optional VBA validator
 - latitude/longitude projection
@@ -121,17 +122,19 @@ The Vite base path is set to:
 
 ## Excel input format
 
-The primary input is an Excel workbook with `Stations` and `Lines` worksheets.
+The primary input is an Excel workbook with Chinese `車站` and `路線` worksheets. English `Stations` / `Lines` sheets remain supported for backward compatibility.
 
-### Stations
+### 車站 / Stations
 
-`Stations` uses four user-input columns plus two automatic system columns:
+新版中文範本預設使用：
 
 ```text
-Station ID,Station Name,Latitude,Longitude,Transfer Group,Transfer Validation
-G05,City Hall,24.154,120.663,City Hall,OK - Coordinates Match
-B03,City Hall,24.154,120.663,City Hall,OK - Coordinates Match
+車站編號,車站名稱,緯度,經度,轉乘群組,轉乘驗證
+G05,市政府,24.154,120.663,市政府,正常 - 座標一致
+B03,市政府,24.154,120.663,市政府,正常 - 座標一致
 ```
+
+英文欄位 `Station ID / Station Name / Latitude / Longitude / Transfer Group / Transfer Validation` 也仍然可以匯入。
 
 One physical interchange may appear multiple times with different service-specific station IDs. The station name is the transfer key. Users only edit columns A-D; Transfer Group and Transfer Validation are filled automatically.
 
@@ -146,16 +149,18 @@ The downloadable template is directly generated as `metro-map-input-template.xls
 
 An optional `ValidateTransfers.bas` VBA module is also provided. Its `CompleteTransfersAndValidate` macro performs both operations in one step.
 
-### Lines
+### 路線 / Lines
 
-The `Lines` worksheet uses long-form rows:
+新版中文範本預設使用：
 
 ```text
-Line ID,Line Name,Color,Path ID,Sequence,Station ID
-GREEN,Green Line,#16a34a,main,1,G01
-GREEN,Green Line,#16a34a,main,2,G05
-ORANGE,Orange Line,#f97316,main,3,B03
+路線編號,路線名稱,顏色,路徑編號,順序,車站編號
+GREEN,綠線,#16a34a,main,1,G01
+GREEN,綠線,#16a34a,main,2,G05
+ORANGE,橘線,#f97316,main,3,B03
 ```
+
+英文欄位 `Line ID / Line Name / Color / Path ID / Sequence / Station ID` 也仍然可以匯入。
 
 Rows are grouped by `Line ID + Path ID` and ordered by `Sequence`. This supports main lines and Y-shaped branches while preserving each service's own station IDs.
 
@@ -184,12 +189,13 @@ The UI shows each selected ring's score, route IDs, route-change count, outward 
 
 ## Downloadable XLSM template
 
-The deployed app provides a generated `metro-map-input-template.xlsx` containing:
+The deployed app provides a generated `metro-map-input-template-zh.xlsm` containing:
 
-- `Stations` — four-column station input,
-- `Lines` — route/path order input,
-- `TransferCheck` — same-name coordinate consistency formulas,
-- `說明` — usage notes.
+- `車站` — 中文車站輸入與自動轉乘欄位,
+- `路線` — 中文路線 / 路徑順序輸入,
+- `說明` — 中文使用說明.
+
+The importer accepts both Chinese and English worksheet/header names, so older workbooks remain usable.
 
 The repository also includes `public/examples/ValidateTransfers.bas` for optional VBA validation.
 
