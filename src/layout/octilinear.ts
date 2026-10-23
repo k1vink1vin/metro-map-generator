@@ -102,10 +102,11 @@ export function layoutLondon(
     structuralMaxShift: 22,
   });
 
+  const topologyReference = layoutTaipei(graph, geographic);
   return repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
-    schematicReference,
+    topologyReference,
     24,
   );
 }
