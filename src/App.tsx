@@ -242,6 +242,7 @@ export function App() {
                 F 欄「轉乘驗證」會檢查同名站的經緯度是否一致。
                 XLSM 已直接內建 VBA，不需要再下載第二個檔案；啟用巨集後會自動完成轉乘群組與驗證。
                 topology 優先使用 XFER ID，所以日後修改站名不會破壞轉乘關係。
+                Moscow 環請直接在 XLSM「莫斯科環」工作表定義，最多 3 個；匯入網站後會檢查每一段與首尾是否真正閉合。
               </small>
             </div>
 
@@ -329,12 +330,12 @@ export function App() {
               );
             }}
           >
-            <div className="zoom-controls" aria-label="地圖縮放">
+            <div className="zoom-controls" aria-label="地圖細節倍率">
               <button
                 type="button"
                 onClick={() => changeMapZoom(mapZoom - 0.25)}
                 disabled={mapZoom <= 0.25}
-                title="縮小"
+                title="降低細節倍率"
               >
                 −
               </button>
@@ -342,7 +343,7 @@ export function App() {
                 type="button"
                 className="zoom-readout"
                 onClick={resetMapZoom}
-                title="適合畫面 / 回到 100%"
+                title="回到 100% 細節倍率"
               >
                 {Math.round(mapZoom * 100)}%
               </button>
@@ -350,11 +351,11 @@ export function App() {
                 type="button"
                 onClick={() => changeMapZoom(mapZoom + 0.25)}
                 disabled={mapZoom >= 4}
-                title="放大"
+                title="提高細節倍率"
               >
                 +
               </button>
-              <span>Ctrl + 滾輪縮放</span>
+              <span>Ctrl + 滾輪調整細節倍率</span>
             </div>
 
             <div
