@@ -95,7 +95,7 @@ export function layoutTaipei(
       maximumShift: 96,
       minimumTurnDegrees: 22,
       maxShapeAnchors: 2,
-      shapeTolerance: 46,
+      shapeTolerance: 18,
       diagnostics: true,
     },
   );
