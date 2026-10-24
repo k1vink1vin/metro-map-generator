@@ -80,7 +80,7 @@ export function layoutTaipei(
     24,
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, topologyReference, {
+  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
     angleStep: 45,
     passes: 5,
     minimumTurnDegrees: 24,
