@@ -42,14 +42,25 @@ export function layoutTaipei(
     },
   );
 
-  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+  // Geographic input is not guaranteed to be topologically drawable:
+  // real-world polylines can fold over themselves after transfer grouping.
+  // Build a clean 45° schematic reference first, then use that as the hard
+  // topology frame for the more aggressive S-bend cleanup.
+  const baselineRelaxed = relaxPathKinksSafely(graph, corridors, {
+    passes: 7,
+    thresholdDegrees: 84,
+    minimumNodeDistance: 29,
+    maxShift: 32,
+    structuralMaxShift: 18,
+  });
+  const topologyReference = repairIntroducedPathSelfCrossings(
     graph,
-    corridors,
+    baselineRelaxed,
     geographic,
     24,
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologyReference, {
     angleStep: 45,
     passes: 5,
     minimumTurnDegrees: 24,
@@ -69,7 +80,7 @@ export function layoutTaipei(
   return repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
-    geographic,
+    topologyReference,
     24,
   );
 }
