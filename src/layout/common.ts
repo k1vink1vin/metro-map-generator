@@ -100,6 +100,7 @@ export interface RouteAwareOptions {
   geographyTether: number;
   equalSpacingWeight: number;
   bendAnchorDegrees?: number;
+  endpointFallback?: 'anchored' | 'legacy';
 }
 
 function cross(a: Point, b: Point): number {
@@ -159,6 +160,7 @@ function angularTwoSegmentPath(
   end: Point,
   angleStep: number,
   references: Point[],
+  endpointFallback: 'anchored' | 'legacy' = 'anchored',
 ): Point[] {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -184,12 +186,11 @@ function angularTwoSegmentPath(
   const upperLength = cross(lower, delta) / determinant;
 
   if (lowerLength < -1e-6 || upperLength < -1e-6) {
-    // Never return a corridor that misses its real endpoint.  The previous
-    // fallback projected a full-length snapped vector from `start`, which
-    // left `end` off the corridor and forced the last route segment to form
-    // an artificial hook / saw-tooth.  Keeping the real endpoint is a harder
-    // passenger-map invariant than forcing one nearly-axis-aligned segment
-    // onto the angular grid.
+    if (endpointFallback === 'legacy') {
+      const snapped = snappedVector(start, end, angleStep, length);
+      return [start, add(start, snapped)];
+    }
+    // Never return a visible corridor that misses its real endpoint.
     return [start, end];
   }
 
@@ -197,9 +198,13 @@ function angularTwoSegmentPath(
     lowerLength < length * 0.08 ||
     upperLength < length * 0.08
   ) {
+    if (endpointFallback === 'legacy') {
+      const snapped = snappedVector(start, end, angleStep, length);
+      return [start, add(start, snapped)];
+    }
     // When one component is tiny the direct segment is already close to an
-    // allowed axis.  Using the true endpoint avoids concentrating the tiny
-    // angular correction into a sharp terminal kink.
+    // allowed axis. Using the true endpoint distributes that small correction
+    // instead of concentrating it into a terminal hook.
     return [start, end];
   }
 
@@ -324,6 +329,7 @@ export function regularizeRouteCorridors(
             end,
             options.angleStep,
             references,
+            options.endpointFallback ?? 'anchored',
           );
           const fractions = cumulativeFractions(
             ids,
