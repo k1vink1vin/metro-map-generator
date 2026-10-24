@@ -184,16 +184,23 @@ function angularTwoSegmentPath(
   const upperLength = cross(lower, delta) / determinant;
 
   if (lowerLength < -1e-6 || upperLength < -1e-6) {
-    const snapped = snappedVector(start, end, angleStep, length);
-    return [start, add(start, snapped)];
+    // Never return a corridor that misses its real endpoint.  The previous
+    // fallback projected a full-length snapped vector from `start`, which
+    // left `end` off the corridor and forced the last route segment to form
+    // an artificial hook / saw-tooth.  Keeping the real endpoint is a harder
+    // passenger-map invariant than forcing one nearly-axis-aligned segment
+    // onto the angular grid.
+    return [start, end];
   }
 
   if (
     lowerLength < length * 0.08 ||
     upperLength < length * 0.08
   ) {
-    const snapped = snappedVector(start, end, angleStep, length);
-    return [start, add(start, snapped)];
+    // When one component is tiny the direct segment is already close to an
+    // allowed axis.  Using the true endpoint avoids concentrating the tiny
+    // angular correction into a sharp terminal kink.
+    return [start, end];
   }
 
   const bendA = add(start, scale(lower, lowerLength));
@@ -974,7 +981,10 @@ export function repairIntroducedPathSelfCrossings(
       // must not introduce a self-crossing on a path that is clean in the
       // reference layout. Inter-route crossings remain a global soft
       // criterion and are validated by the whole-map QA afterwards.
-      if (candidateSelf < currentSelf) {
+      if (
+        candidateSelf < currentSelf &&
+        candidateExternal <= currentExternal
+      ) {
         for (const nodeId of path.slice(1, -1)) {
           positions[nodeId] = candidate[nodeId];
         }
