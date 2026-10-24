@@ -29,3 +29,13 @@ mkdirSync('qa-artifacts',{recursive:true});writeFileSync('qa-artifacts/moscow-ge
 console.log(JSON.stringify({...report,details:violations.slice(0,20)},null,2));
 
 if (violations.length) throw new Error(`Moscow geographic order: ${violations.length} significant inversions`);
+
+// Named regression: check both axes independently of the distance threshold.
+const huilong = graph.nodes.find(node => node.name === '迴龍');
+const taoyuan = graph.nodes.find(node => node.name === '桃園車站');
+if (!huilong || !taoyuan) throw new Error('Missing Huilong/Taoyuan station regression fixture');
+const hui = layout.positions[huilong.id], tao = layout.positions[taoyuan.id];
+if (!(huilong.lon > taoyuan.lon && huilong.lat > taoyuan.lat && hui.x > tao.x && hui.y < tao.y)) {
+  throw new Error('迴龍 must be northeast of 桃園車站 in both source coordinates and Moscow SVG');
+}
+console.log('迴龍 / 桃園車站: northeast relation confirmed on both axes.');

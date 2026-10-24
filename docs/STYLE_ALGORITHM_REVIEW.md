@@ -78,3 +78,20 @@ Moscow now gives independent circles more room in the geographic frame, optimize
 `qa:geography` compares 48,179 north/south and east/west relationships, using the existing 45-unit significance threshold in the original geographic projection. For this workbook, that is approximately 2.7945 km on either axis. The accepted result has zero inversions in those comparisons. It does NOT certify exact geographic distances, nearest-neighbor directions, or ordering of pairs below that threshold. The full report is `qa-artifacts/moscow-geography.json`, uploaded alongside SVGs by CI. Any significant inversion fails the new test.
 
 The accepted Moscow result retains independent perfect circles, zero route self-crossings, one inter-route crossing and minimum station spacing 32.2 display units. Exact rendered circular arcs remain separately regression-tested. Build, geometry tests, geographic-order test and the 24-combination render test are required before deployment. Angular layouts remain heuristic and have nonzero mean axis error.
+
+## Third review: eliminate remaining acute angular corners
+
+The second review reduced acute turns but left 12 London and 10 Hex station-center heading changes above 100 degrees. The previous midpoint-only relaxer can stall at interchanges: different route directions cancel in the average, and scoring only the moved station can transfer a kink to its neighbor.
+
+The new local search considers each route midpoint and a two-dimensional neighborhood. It scores all affected station occurrences and only accepts candidates that improve the neighborhood, preserve at least 40 display-unit station separation, do not increase incident crossings, and do not introduce route self-crossings. On the canonical workbook, London and Hex now have zero heading changes above 100 degrees. CI's acute-turn budgets are zero for both styles, rather than accepting a smaller nonzero count. This metric still permits normal schematic corners; it is not a claim that every curve has an operator-approved minimum radius.
+
+Smaller positive interpolation handles are tried before falling back to a straight segment, reducing abrupt joins where larger curves conflict with nearby routes. Existing curve-crossing and station-clearance checks remain active.
+
+The specifically requested Huilong/Taoyuan check is now independent of the 45-unit geographic significance threshold:
+
+| Station | Latitude | Longitude | SVG x | SVG y |
+| --- | --- | --- | --- | --- |
+| 迴龍 (O21/LG21) | 25.021862 | 121.411270 | 2092.6281 | 2481.0544 |
+| 桃園車站 (GR07) | 24.9887887 | 121.3136967 | 1628.6149 | 2774.6531 |
+
+Huilong is northeast of Taoyuan Station in both the workbook and the actual exported SVG (SVG y increases downward). This pair was already correctly ordered in `826d80ed`; no station coordinates were changed merely to agree with the reported suspicion. `qa:geography` now explicitly asserts both axes for this pair. Render QA also writes `moscow--huilong-taoyuan-detail.svg`, a crop of the full map with the two actual station anchors highlighted. Schematic distances and bearings are not exact survey geometry.

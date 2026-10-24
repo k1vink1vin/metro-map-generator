@@ -183,6 +183,18 @@ for (const style of selectedStyles) {
       `qa-artifacts/${style}--stations-${stationStyle}.svg`,
       '<?xml version="1.0" encoding="UTF-8"?>\n' + markup.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '),
     );
+    if (style === 'moscow' && stationStyle === 'taipei') {
+      const hui = graph.nodes.find(node => node.name === '迴龍');
+      const tao = graph.nodes.find(node => node.name === '桃園車站');
+      if (!hui || !tao) throw new Error('Missing named geographic comparison stations');
+      const a = layout.positions[hui.id], b = layout.positions[tao.id];
+      const padding = 110;
+      const focusBox = `${Math.min(a.x,b.x)-padding} ${Math.min(a.y,b.y)-padding} ${Math.abs(a.x-b.x)+padding*2} ${Math.abs(a.y-b.y)+padding*2}`;
+      const focus = markup.replace(/viewBox="[^"]+"/, `viewBox="${focusBox}"`)
+        .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')
+        .replace('</svg>', `<g fill="none" stroke="#111827" stroke-width="3"><circle cx="${a.x}" cy="${a.y}" r="24"/><circle cx="${b.x}" cy="${b.y}" r="24"/><path stroke-dasharray="8 6" d="M ${b.x} ${b.y} L ${a.x} ${a.y}"/></g><g fill="#111827" font-size="20" font-weight="bold"><text x="${a.x+28}" y="${a.y-30}">迴龍</text><text x="${b.x+28}" y="${b.y+44}">桃園車站</text></g></svg>`);
+      writeFileSync('qa-artifacts/moscow--huilong-taoyuan-detail.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + focus);
+    }
     renderCount += 1;
   }
 }

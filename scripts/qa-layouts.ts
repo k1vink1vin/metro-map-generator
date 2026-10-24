@@ -781,10 +781,10 @@ for (const result of results) {
   const sharpTurnBudget: Record<StyleId, number> = {
     geographic: 100,
     taipei: 20,
-    london: 15,
+    london: 0,
     moscow: 25,
     concentric: 60,
-    hex: 15,
+    hex: 0,
   };
   const zigzagBudget: Record<StyleId, number> = {
     geographic: 140,

@@ -602,6 +602,67 @@ export interface SafeKinkRelaxOptions {
   structuralMaxShift: number;
 }
 
+/** Search around an acute vertex, rather than only toward the average of
+ * its route neighbors (which can cancel at interchanges). Score the complete
+ * affected neighborhood so a corner is not merely transferred to the next
+ * station. Each accepted move keeps spacing and route topology safe. */
+export function eliminateAcuteRouteTurnsSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+): Record<string, Point> {
+  const positions = Object.fromEntries(Object.entries(input).map(([id, p]) => [id, { ...p }]));
+  const occurrences = new Map(graph.nodes.map(n => [n.id, localPathOccurrences(graph, n.id)]));
+  const threshold = 100 * Math.PI / 180;
+  const nodeCost = (id: string) => occurrences.get(id)!.reduce((cost, o) => {
+    const turn = Math.abs(signedHeadingChange(positions[o.previous], positions[id], positions[o.next]));
+    return cost + (turn > threshold ? 10000 + (turn - threshold) ** 2 * 100 : 0) + turn ** 2;
+  }, 0);
+  for (let pass = 0; pass < 20; pass++) {
+    let changed = false;
+    const ranked = graph.nodes.filter(n => occurrences.get(n.id)!.some(o =>
+      Math.abs(signedHeadingChange(positions[o.previous], positions[n.id], positions[o.next])) > threshold,
+    )).sort((a, b) => nodeCost(b.id) - nodeCost(a.id));
+    if (!ranked.length) break;
+    for (const node of ranked) {
+      const id = node.id;
+      const original = { ...positions[id] };
+      const affected = new Set([id, ...(graph.adjacency.get(id) ?? [])]);
+      const score = () => [...affected].reduce((sum, key) => sum + nodeCost(key), 0);
+      let bestScore = score(), best = original;
+      const beforeCross = incidentCrossingCount(graph, id, positions);
+      const beforeSelf = nodePathSelfCrossingCount(graph, new Set([id]), positions);
+      const candidates: Point[] = [];
+      for (const o of occurrences.get(id)!) {
+        const midpoint = { x: (positions[o.previous].x + positions[o.next].x) / 2,
+          y: (positions[o.previous].y + positions[o.next].y) / 2 };
+        for (const blend of [0.25, 0.5, 0.75, 1]) candidates.push({
+          x: original.x + (midpoint.x - original.x) * blend,
+          y: original.y + (midpoint.y - original.y) * blend,
+        });
+      }
+      for (const radius of [3, 6, 12, 24, 48, 96, 192, 384, 768]) for (let step = 0; step < 32; step++) {
+        const angle = step * Math.PI / 16;
+        candidates.push({ x: original.x + radius * Math.cos(angle), y: original.y + radius * Math.sin(angle) });
+      }
+      for (const candidate of candidates) {
+        if (graph.nodes.some(other => other.id !== id && distance(candidate, positions[other.id]) < 40)) continue;
+        positions[id] = candidate;
+        const candidateScore = score();
+        if (candidateScore < bestScore - 0.001 &&
+          incidentCrossingCount(graph, id, positions) <= beforeCross &&
+          nodePathSelfCrossingCount(graph, new Set([id]), positions) <= beforeSelf) {
+          best = candidate;
+          bestScore = candidateScore;
+        }
+      }
+      positions[id] = best;
+      changed ||= distance(original, best) > 0.001;
+    }
+    if (!changed) break;
+  }
+  return positions;
+}
+
 function properSegmentIntersection(
   a: Point,
   b: Point,

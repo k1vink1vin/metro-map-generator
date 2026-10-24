@@ -1,6 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
-import { repairGeographicOrderSafely, collapseRouteZigzagsSafely, relaxPathKinksSafely, repairIntroducedPathSelfCrossings, separateNodesSafely } from './common';
+import { eliminateAcuteRouteTurnsSafely, repairGeographicOrderSafely, collapseRouteZigzagsSafely, relaxPathKinksSafely, repairIntroducedPathSelfCrossings, separateNodesSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -289,7 +289,9 @@ export function finalizeLayoutPositions(
   const angularPositions = style === 'london' || style === 'hex'
     ? repairIntroducedPathSelfCrossings(graph, relaxed, simplified, 50) : relaxed;
   const positions = style === 'moscow'
-    ? repairGeographicOrderSafely(graph, angularPositions, geographic, fixedNodes) : angularPositions;
+    ? repairGeographicOrderSafely(graph, angularPositions, geographic, fixedNodes)
+    : style === 'london' || style === 'hex'
+      ? eliminateAcuteRouteTurnsSafely(graph, angularPositions) : angularPositions;
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {

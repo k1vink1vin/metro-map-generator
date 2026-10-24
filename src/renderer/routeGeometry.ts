@@ -142,7 +142,7 @@ export function stationAnchoredPath(
     const nextLength = i + 2 < points.length ? distance(b, points[i + 2]) : length;
     const obstacles = graph.edges.filter(e => ![e.a, e.b].some(id => id === path[i] || id === path[i + 1]));
     let accepted = false;
-    for (const factor of [1, 0.5, 0.25]) {
+    for (const factor of [1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125, 0.00390625]) {
       const h1 = Math.min(length, previousLength) * strength * factor;
       const h2 = Math.min(length, nextLength) * strength * factor;
       const c1 = { x: a.x + ta.x * h1, y: a.y + ta.y * h1 };
