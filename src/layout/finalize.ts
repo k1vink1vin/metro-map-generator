@@ -1,6 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
-import { collapseRouteZigzagsSafely, separateNodesSafely } from './common';
+import { repairGeographicOrderSafely, collapseRouteZigzagsSafely, relaxPathKinksSafely, repairIntroducedPathSelfCrossings, separateNodesSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -114,11 +114,11 @@ function passengerCanvasScale(
     geographic: 1.05,
     taipei: 2.1,
     london: 1.12,
-    moscow: 1.25,
+    moscow: 1.9,
     concentric: 1.08,
     hex: 1.12,
   };
-  return Math.min(4.5, base * styleMultiplier[style]);
+  return Math.min(style === 'moscow' ? 6 : 4.5, base * styleMultiplier[style]);
 }
 
 function fitToCanvas(
@@ -272,7 +272,7 @@ export function finalizeLayoutPositions(
   // when the pre-fit coordinates made its displacement look insignificant.
   // The corridor pass accepts only moves that preserve route self-crossings,
   // external crossings and spacing. Ring stations remain fixed; shell targets remain soft constraints.
-  const positions = style !== 'geographic'
+  const simplified = style !== 'geographic'
     ? collapseRouteZigzagsSafely(graph, spaced, {
         fixedNodes,
         angleStep: style === 'hex' ? 60 : style === 'moscow' || style === 'concentric' ? 15 : 45,
@@ -283,6 +283,13 @@ export function finalizeLayoutPositions(
         structuralMaxShift: 20,
       })
     : spaced;
+  const relaxed = style === 'london' || style === 'hex'
+    ? relaxPathKinksSafely(graph, simplified, { passes: 18, thresholdDegrees: 55,
+        minimumNodeDistance: 50, maxShift: 180, structuralMaxShift: 80 }) : simplified;
+  const angularPositions = style === 'london' || style === 'hex'
+    ? repairIntroducedPathSelfCrossings(graph, relaxed, simplified, 50) : relaxed;
+  const positions = style === 'moscow'
+    ? repairGeographicOrderSafely(graph, angularPositions, geographic, fixedNodes) : angularPositions;
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {

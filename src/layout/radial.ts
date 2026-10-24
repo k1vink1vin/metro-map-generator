@@ -1042,6 +1042,7 @@ export function layoutMoscow(
   graph: GraphModel,
   geographic: Record<string, Point>,
   definedRings: ValidatedMoscowRing[] = [],
+  significantGeographicGap = 45,
 ): {
   positions: Record<string, Point>;
   moscowRings: ValidatedMoscowRing[];
@@ -1114,8 +1115,52 @@ export function layoutMoscow(
       geoCenter,
       geoRadius,
       targetRadius,
+      phase: 0,
+      angles: ring.map((_, index) => -Math.PI / 2 + slot * index),
     };
   });
+
+  // Fit ring rotation against significant pairwise geographic order. Equal
+  // slots alone can place genuinely east/west stations on the same meridian.
+  const setRing = (info: typeof ringInfos[number], phase: number) => {
+    info.phase = phase;
+    info.definition.nodes.forEach((id, index) => {
+      const angle = -Math.PI / 2 + Math.PI * 2 * index / info.definition.nodes.length + phase;
+      info.angles[index] = angle;
+      positions[id] = { x: info.geoCenter.x + Math.cos(angle) * info.targetRadius,
+        y: info.geoCenter.y + Math.sin(angle) * info.targetRadius };
+    });
+  };
+  const ringOrderCost = () => {
+    const ids = [...ringNodeSet]; let cost = 0;
+    for (let i=0;i<ids.length;i++) for(let j=i+1;j<ids.length;j++) for(const axis of ['x','y'] as const) {
+      const delta=geographic[ids[j]][axis]-geographic[ids[i]][axis];
+      if(Math.abs(delta)>=significantGeographicGap && delta*(positions[ids[j]][axis]-positions[ids[i]][axis])<=1e-7) cost+=delta*delta;
+    }
+    return cost;
+  };
+  for(let pass=0;pass<3;pass++) for(const info of ringInfos){
+    let bestPhase=info.phase, bestCost=ringOrderCost();
+    for(let degree=-25;degree<=25;degree+=0.5){
+      setRing(info,degree*Math.PI/180); const cost=ringOrderCost();
+      if(cost<bestCost){bestCost=cost;bestPhase=info.phase;}
+    }
+    setRing(info,bestPhase);
+  }
+
+  for(let pass=0;pass<4;pass++) for(const info of ringInfos){
+    const slot=Math.PI*2/info.definition.nodes.length;
+    info.definition.nodes.forEach((id,index)=>{
+      const original=info.angles[index]; let best=original,bestCost=ringOrderCost();
+      const put=(angle:number)=>{positions[id]={x:info.geoCenter.x+Math.cos(angle)*info.targetRadius,y:info.geoCenter.y+Math.sin(angle)*info.targetRadius};};
+      for(const shift of [-0.24,-0.16,-0.08,0.08,0.16,0.24]){
+        const angle=original+shift*slot; put(angle);
+        if(info.definition.nodes.some(other=>other!==id && Math.hypot(positions[other].x-positions[id].x,positions[other].y-positions[id].y)<28))continue;
+        const cost=ringOrderCost();if(cost<bestCost){best=angle;bestCost=cost;}
+      }
+      info.angles[index]=best;put(best);
+    });
+  }
 
   // Every non-ring station is handled by the nearest logical ring system.
   // This preserves the clean radial organization of the original Moscow
@@ -1193,10 +1238,8 @@ export function layoutMoscow(
 
   // Preserve exact circle nodes after corridor smoothing.
   for (const ring of ringInfos) {
-    const slot =
-      (Math.PI * 2) / ring.definition.nodes.length;
     ring.definition.nodes.forEach((id, index) => {
-      const angle = -Math.PI / 2 + slot * index;
+      const angle = ring.angles[index];
       smoothed[id] = {
         x:
           ring.geoCenter.x +

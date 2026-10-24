@@ -175,5 +175,10 @@ export function layoutLondon(
     topologyReference,
     24,
   );
-  return separateNodesSafely(graph, untangled, 24, 18);
+  const sectionRouted = routeTopologySectionsSafely(graph, topologyReference, untangled, geographic, {
+    angleStep: 45, passes: 8, equalSpacingWeight: 0.8,
+    minimumNodeDistance: 29, maximumShift: 110, minimumTurnDegrees: 20,
+    maxShapeAnchors: 2, shapeTolerance: 24,
+  });
+  return separateNodesSafely(graph, sectionRouted, 24, 18);
 }

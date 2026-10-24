@@ -64,3 +64,17 @@ Do not equate a green CI run, radius CV at stations, or a low crossing count wit
 These are station-center polyline measurements, not counts of visibly sharp corners after interpolation. Sharp turns mean heading changes above 100 degrees; zigzags require adjacent turns of opposite signs above 24 degrees. The two Moscow centers remain 1161.1 display units apart. Angular mean error remains 5.6 degrees (Taipei), 6.8 degrees (London), and 8.2 degrees (Hex); exact direction-family compliance is still incomplete.
 
 Validation: production build, geometry regression tests, layout QA, 24 rendered SVG combinations, and a targeted four-symbol Moscow re-render after adding parallel circular lanes. Browser review covered the 24-output overview, full Moscow map, style selection and generation. This is an overview and representative-detail review, not a claim that every label at every print scale has received manual approval.
+
+## Second review: sharp turns and Moscow geographic order
+
+The first release still had visibly tight London/Hex corners and actual Moscow geographic inversions. Its north/east percentage was insufficient evidence of geographic correctness.
+
+London and Hex now solve complete topology sections before a longer-range corner relaxation in final display units. Section moves protect route self-crossings and external crossings. Rendering uses longer bounded interpolation handles (0.38 rather than 0.18), retaining collision checks and straight fallbacks. Eliminating all interior shape controls was tested and rejected: it increased sharp turns and reduced London station spacing. Two major controls remain per section.
+
+Compared with `a332218`, station-center sharp-turn counts improve from 37 to 12 for London, and 35 to 10 for Hex. These are not zero; station-center polyline counters are distinct from the actual interpolated SVG curves. Do not describe this as proof that every angular or curvature constraint is met.
+
+Moscow now gives independent circles more room in the geographic frame, optimizes their rotation and individual station angles against significant geographic ordering, and pins those stations during non-ring corrections. Non-ring ordering is repaired only with station-clearance and route-crossing checks; short corridors can move atomically when an individual station cannot move safely. The passenger canvas grows to preserve readable station spacing instead of allowing the larger geographic frame to shrink all markers together.
+
+`qa:geography` compares 48,179 north/south and east/west relationships, using the existing 45-unit significance threshold in the original geographic projection. For this workbook, that is approximately 2.7945 km on either axis. The accepted result has zero inversions in those comparisons. It does NOT certify exact geographic distances, nearest-neighbor directions, or ordering of pairs below that threshold. The full report is `qa-artifacts/moscow-geography.json`, uploaded alongside SVGs by CI. Any significant inversion fails the new test.
+
+The accepted Moscow result retains independent perfect circles, zero route self-crossings, one inter-route crossing and minimum station spacing 32.2 display units. Exact rendered circular arcs remain separately regression-tested. Build, geometry tests, geographic-order test and the 24-combination render test are required before deployment. Angular layouts remain heuristic and have nonzero mean axis error.

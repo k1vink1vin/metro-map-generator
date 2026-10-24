@@ -137,7 +137,7 @@ export function stationAnchoredPath(
     }
     const length = distance(a, b);
     const ta = tangent(i), tb = tangent(i + 1);
-    const strength = layout.style === 'moscow' ? 0.28 : layout.style === 'geographic' ? 0.08 : 0.18;
+    const strength = layout.style === 'moscow' ? 0.28 : layout.style === 'geographic' ? 0.08 : layout.style === 'london' || layout.style === 'hex' ? 0.38 : 0.18;
     const previousLength = i > 0 ? distance(points[i - 1], a) : length;
     const nextLength = i + 2 < points.length ? distance(b, points[i + 2]) : length;
     const obstacles = graph.edges.filter(e => ![e.a, e.b].some(id => id === path[i] || id === path[i + 1]));

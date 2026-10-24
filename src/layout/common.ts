@@ -2386,3 +2386,67 @@ export function separateNodesSafely(
 
   return positions;
 }
+
+/** Reduce significant north/east inversions without deforming fixed rings or
+ * introducing route self-crossings. Unsolvable constraints remain visible to QA. */
+export function repairGeographicOrderSafely(
+  graph: GraphModel, input: Record<string, Point>, geographic: Record<string, Point>, fixed: ReadonlySet<string>,
+): Record<string, Point> {
+  const positions = Object.fromEntries(Object.entries(input).map(([id,p])=>[id,{...p}]));
+  const relations = new Map(graph.nodes.map(n=>[n.id, graph.nodes.filter(o=>o.id!==n.id).flatMap(o=>(['x','y'] as const).flatMap(axis=>{
+    const delta=geographic[o.id][axis]-geographic[n.id][axis];
+    return Math.abs(delta)>=45 ? [{other:o.id,axis,sign:Math.sign(delta),weight:Math.abs(delta)**2}] : [];
+  }))]));
+  const cost=(id:string)=>relations.get(id)!.reduce((sum,r)=>sum+(r.sign*(positions[r.other][r.axis]-positions[id][r.axis])<=0?r.weight:0),0);
+  for(let pass=0;pass<12;pass++) {
+    let changed=false;
+    const ranked=graph.nodes.filter(n=>!fixed.has(n.id)).map(n=>({id:n.id,cost:cost(n.id)})).filter(n=>n.cost>0).sort((a,b)=>b.cost-a.cost);
+    for(const {id} of ranked){
+      const original={...positions[id]}, before=cost(id);
+      const beforeCross=incidentCrossingCount(graph,id,positions);
+      const beforeSelf=nodePathSelfCrossingCount(graph,new Set([id]),positions);
+      let best={...original},bestCost=before;
+      for(const axis of ['x','y'] as const){
+        const values=relations.get(id)!.filter(r=>r.axis===axis).map(r=>positions[r.other][axis]-r.sign*2);
+        for(const value of values){
+          const candidate={...original,[axis]:value};
+          positions[id]=candidate;
+          const score=cost(id);
+          if(score>=bestCost || graph.nodes.some(n=>n.id!==id && distance(candidate,positions[n.id])<30))continue;
+          if(incidentCrossingCount(graph,id,positions)>beforeCross || nodePathSelfCrossingCount(graph,new Set([id]),positions)>beforeSelf)continue;
+          best={...candidate};bestCost=score;
+        }
+      }
+      positions[id]=best;
+      if(bestCost<before)changed=true;
+    }
+    if(!changed)break;
+  }
+  // When one station cannot move through its neighbors, translate a short
+  // corridor atomically instead of swapping station order or forcing a kink.
+  for(let pass=0;pass<3;pass++) for(const node of graph.nodes){
+    if(fixed.has(node.id)||cost(node.id)===0)continue;
+    for(const depth of [0,1,2,3,4]){
+      const group=new Set([node.id]);
+      for(let k=0;k<depth;k++) for(const id of [...group]) for(const other of graph.adjacency.get(id)??[]) {
+        if(!fixed.has(other) && (graph.adjacency.get(other)?.length??0)<=2)group.add(other);
+      }
+      const ids=[...group], originals=Object.fromEntries(ids.map(id=>[id,{...positions[id]}]));
+      const before=ids.reduce((sum,id)=>sum+cost(id),0);
+      const beforeCross=ids.reduce((sum,id)=>sum+incidentCrossingCount(graph,id,positions),0);
+      const beforeSelf=nodePathSelfCrossingCount(graph,group,positions);
+      const targets=relations.get(node.id)!.filter(r=>r.sign*(positions[r.other][r.axis]-positions[node.id][r.axis])<=0);
+      let accepted=false;
+      targetLoop: for(const r of targets) for(const side of [0,-40,40,-80,80,-160,160,-320,320]){
+        const shift=positions[r.other][r.axis]-r.sign*3-originals[node.id][r.axis];
+        for(const id of ids)positions[id]={...originals[id],[r.axis]:originals[id][r.axis]+shift,[r.axis==='x'?'y':'x']:originals[id][r.axis==='x'?'y':'x']+side};
+        const score=ids.reduce((sum,id)=>sum+cost(id),0);
+        const spacing=ids.every(id=>graph.nodes.every(n=>group.has(n.id)||distance(positions[id],positions[n.id])>=30));
+        if(score<before && spacing && nodePathSelfCrossingCount(graph,group,positions)<=beforeSelf && ids.reduce((sum,id)=>sum+incidentCrossingCount(graph,id,positions),0)<=beforeCross){accepted=true;break targetLoop;}
+        for(const id of ids)positions[id]={...originals[id]};
+      }
+      if(accepted)break;
+    }
+  }
+  return positions;
+}

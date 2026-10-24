@@ -37,6 +37,9 @@ jobs:
       - name: Passenger-map QA
         run: npm run qa:layouts
 
+      - name: Moscow pairwise geographic order QA
+        run: npm run qa:geography
+
       - name: Station and ring geometry regression QA
         run: npm run qa:geometry
 

@@ -27,6 +27,9 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
+      - name: Moscow pairwise geographic order QA
+        run: npm run qa:geography
+
       - name: Station and ring geometry regression QA
         run: npm run qa:geometry
 
@@ -45,5 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tpe-metro-style-qa
-          path: qa-artifacts/*.svg
+          path: |
+            qa-artifacts/*.svg
+            qa-artifacts/moscow-geography.json
           if-no-files-found: error

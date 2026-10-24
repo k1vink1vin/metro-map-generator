@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "qa:layouts": "node --import tsx scripts/qa-layouts.ts",
     "qa:render": "node --import tsx scripts/qa-render.tsx",
-    "qa:geometry": "node --import tsx scripts/qa-geometry.ts"
+    "qa:geometry": "node --import tsx scripts/qa-geometry.ts",
+    "qa:geography": "node --import tsx scripts/qa-geography.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

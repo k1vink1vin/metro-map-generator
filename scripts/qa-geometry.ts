@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildGraph } from '../src/core/graph';
-import { circleThroughStations, stationAnchoredPath } from '../src/renderer/routeGeometry';
+import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import type { LayoutResult, Point } from '../src/types';
 
 function fixture(positions: Record<string, Point>, path: string[], moscow = false, parallel = false) {
@@ -33,3 +33,7 @@ assert.equal(circleThroughStations(translated)?.center.x, 260, 'each ring has it
 const duplicates = fixture({ A: { x: 0, y: 0 }, B: { x: 0, y: 0 }, C: { x: 20, y: 20 } }, ['A', 'B', 'C']);
 assert(!/NaN|Infinity/.test(duplicates.d));
 console.log('Geometry QA passed: station interpolation, exact circular arcs, independent centers, degenerate inputs.');
+
+const acute = fixture({ A: {x:0,y:0}, B: {x:100,y:0}, C: {x:40,y:40}, D: {x:150,y:90} }, ['A','B','C','D']);
+assert.equal(acute.fallbackCount, 0, 'isolated acute turns must use interpolating curves');
+assert.equal(sampledSelfCrossings(acute.samples), 0, 'rounding acute turns must not create loops');

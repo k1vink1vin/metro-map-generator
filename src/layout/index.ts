@@ -77,10 +77,14 @@ export function computeLayout(
   }
 
   if (style === 'moscow') {
+    // Give independently circularized regional systems room in the global
+    // geographic frame instead of allowing enlarged circles to exchange sides.
+    const ringFrame = Object.fromEntries(Object.entries(geographic).map(([id,p]) => [id, {x:p.x * 2, y:p.y * 2}]));
     const result = layoutMoscow(
       graph,
-      geographic,
+      ringFrame,
       options.moscowRings ?? [],
+      90,
     );
 
     return finish(graph, style, geographic, result.positions, {
