@@ -330,12 +330,32 @@ export function regularizeRouteCorridors(
             geographicReference,
             options.equalSpacingWeight,
           );
+          const proposed = ids.slice(1, -1).map((nodeId, index) => ({
+            nodeId,
+            point: samplePolyline(corridor, fractions[index]),
+          }));
 
-          ids.slice(1, -1).forEach((nodeId, index) => {
-            predictions
-              .get(nodeId)
-              ?.push(samplePolyline(corridor, fractions[index]));
-          });
+          // Corridor simplification is never allowed to fold a route over
+          // itself. Simulate this section before it contributes predictions;
+          // if the route would gain a self-crossing, keep the previous
+          // geometry for this section and let a later/smaller corridor handle
+          // the visual cleanup.
+          const beforeSelf = pathSelfCrossings(path, positions);
+          const candidate = Object.fromEntries(
+            Object.entries(positions).map(([id, point]) => [
+              id,
+              { ...point },
+            ]),
+          );
+          for (const { nodeId, point } of proposed) {
+            candidate[nodeId] = point;
+          }
+          const afterSelf = pathSelfCrossings(path, candidate);
+          if (afterSelf > beforeSelf) continue;
+
+          for (const { nodeId, point } of proposed) {
+            predictions.get(nodeId)?.push(point);
+          }
         }
       }
     }
