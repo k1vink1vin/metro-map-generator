@@ -100,9 +100,16 @@ export function layoutTaipei(
     },
   );
 
-  return enforceCleanRouteTopology(
+  const spacingSafe = separateNodesSafely(
     graph,
     sectionRouted,
+    18.5,
+    8,
+  );
+
+  return enforceCleanRouteTopology(
+    graph,
+    spacingSafe,
     topologyReference,
   );
 }
