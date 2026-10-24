@@ -1214,19 +1214,24 @@ export function repairIntroducedPathSelfCrossings(
 
       const interiorIds = path.slice(1, -1);
       const affected = new Set(interiorIds);
-      const currentAffectedSelf = nodePathSelfCrossingCount(
-        graph,
-        affected,
-        positions,
+      const affectedPaths = graph.lines.flatMap((affectedLine) =>
+        affectedLine.paths
+          .filter((affectedPath) =>
+            affectedPath.some((nodeId) => affected.has(nodeId)),
+          )
+          .map((affectedPath) => ({
+            path: affectedPath,
+            before: pathSelfCrossings(affectedPath, positions),
+          })),
       );
 
-      let best:
-        | {
-            positions: Record<string, Point>;
-            selfCrossings: number;
-            externalCrossings: number;
-          }
-        | undefined;
+      type RepairCandidate = {
+        positions: Record<string, Point>;
+        selfCrossings: number;
+        externalCrossings: number;
+      };
+      let bestExternalSafe: RepairCandidate | undefined;
+      let bestTopologyFallback: RepairCandidate | undefined;
 
       // A full similarity restore is sometimes too aggressive: it can fix
       // the target route while creating a new crossing against another line.
@@ -1273,36 +1278,49 @@ export function repairIntroducedPathSelfCrossings(
           path,
           candidate,
         );
-        const candidateAffectedSelf = nodePathSelfCrossingCount(
-          graph,
-          affected,
-          candidate,
+        const affectedPathsSafe = affectedPaths.every(
+          ({ path: affectedPath, before }) =>
+            pathSelfCrossings(affectedPath, candidate) <= before,
         );
 
         if (
           candidateSelf >= currentSelf ||
-          candidateExternal > currentExternal ||
-          candidateAffectedSelf > currentAffectedSelf
+          !affectedPathsSafe
         ) {
           continue;
         }
 
-        if (
-          !best ||
-          candidateSelf < best.selfCrossings ||
-          (candidateSelf === best.selfCrossings &&
-            candidateExternal < best.externalCrossings)
-        ) {
-          best = {
-            positions: candidate,
-            selfCrossings: candidateSelf,
-            externalCrossings: candidateExternal,
-          };
+        const repairCandidate: RepairCandidate = {
+          positions: candidate,
+          selfCrossings: candidateSelf,
+          externalCrossings: candidateExternal,
+        };
+
+        if (candidateExternal <= currentExternal) {
+          if (
+            !bestExternalSafe ||
+            candidateSelf < bestExternalSafe.selfCrossings ||
+            (candidateSelf === bestExternalSafe.selfCrossings &&
+              candidateExternal < bestExternalSafe.externalCrossings)
+          ) {
+            bestExternalSafe = repairCandidate;
+          }
         }
 
-        if (candidateSelf === 0) break;
+        // Self-crossings are the hardest topology failure. If no candidate can
+        // also preserve the external-crossing count, retain a zero-self-cross
+        // fallback rather than leaving a route folded over itself.
+        if (candidateSelf === 0) {
+          if (
+            !bestTopologyFallback ||
+            candidateExternal < bestTopologyFallback.externalCrossings
+          ) {
+            bestTopologyFallback = repairCandidate;
+          }
+        }
       }
 
+      const best = bestExternalSafe ?? bestTopologyFallback;
       if (best) {
         for (const nodeId of interiorIds) {
           positions[nodeId] = best.positions[nodeId];
