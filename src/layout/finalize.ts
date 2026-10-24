@@ -1,5 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
+import { separateNodesSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -258,7 +259,14 @@ export function finalizeLayoutPositions(
     topologySensitiveStyle
       ? { positions: completed.positions, separatedNodePairs: 0 }
       : separateOverlappingNodes(graph, completed.positions);
-  const positions = fitToCanvas(graph, style, separated.positions);
+  const fitted = fitToCanvas(graph, style, separated.positions);
+  // Taipei's section router is solved in schematic coordinates. Do not
+  // disturb that geometry before fitting; after fitting, only the genuinely
+  // sub-28px pairs need a tiny topology-safe separation.
+  const positions =
+    style === 'taipei'
+      ? separateNodesSafely(graph, fitted, 29, 6)
+      : fitted;
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {
