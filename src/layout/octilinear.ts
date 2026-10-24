@@ -94,6 +94,7 @@ export function layoutTaipei(
       minimumNodeDistance: 29,
       maximumShift: 118,
       minimumTurnDegrees: 22,
+      diagnostics: true,
     },
   );
 
