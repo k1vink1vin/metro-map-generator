@@ -1071,6 +1071,19 @@ function pathSelfCrossings(
   return count;
 }
 
+function totalRouteSelfCrossings(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+): number {
+  let total = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      total += pathSelfCrossings(path, positions);
+    }
+  }
+  return total;
+}
+
 function pathExternalCrossings(
   graph: GraphModel,
   path: string[],
@@ -1185,16 +1198,9 @@ export function repairIntroducedPathSelfCrossings(
       }
 
       const interiorIds = path.slice(1, -1);
-      const affected = new Set(interiorIds);
-      const affectedPaths = graph.lines.flatMap((affectedLine) =>
-        affectedLine.paths
-          .filter((affectedPath) =>
-            affectedPath.some((nodeId) => affected.has(nodeId)),
-          )
-          .map((affectedPath) => ({
-            path: affectedPath,
-            before: pathSelfCrossings(affectedPath, positions),
-          })),
+      const currentGlobalSelf = totalRouteSelfCrossings(
+        graph,
+        positions,
       );
 
       type RepairCandidate = {
@@ -1229,35 +1235,20 @@ export function repairIntroducedPathSelfCrossings(
           };
         }
 
-        const candidatePoints = Object.fromEntries(
-          interiorIds.map((nodeId) => [nodeId, candidate[nodeId]]),
-        );
-        if (
-          !candidateSpacingIsSafe(
-            graph,
-            positions,
-            interiorIds,
-            candidatePoints,
-            minimumNodeDistance,
-          )
-        ) {
-          continue;
-        }
-
         const candidateSelf = pathSelfCrossings(path, candidate);
         const candidateExternal = pathExternalCrossings(
           graph,
           path,
           candidate,
         );
-        const affectedPathsSafe = affectedPaths.every(
-          ({ path: affectedPath, before }) =>
-            pathSelfCrossings(affectedPath, candidate) <= before,
+        const candidateGlobalSelf = totalRouteSelfCrossings(
+          graph,
+          candidate,
         );
 
         if (
           candidateSelf >= currentSelf ||
-          !affectedPathsSafe
+          candidateGlobalSelf >= currentGlobalSelf
         ) {
           continue;
         }
