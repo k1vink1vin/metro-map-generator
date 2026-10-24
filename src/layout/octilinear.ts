@@ -100,9 +100,16 @@ export function layoutTaipei(
     },
   );
 
-  return enforceCleanRouteTopology(
+  const separated = separateNodesSafely(
     graph,
     sectionRouted,
+    24,
+    24,
+  );
+
+  return enforceCleanRouteTopology(
+    graph,
+    separated,
     topologyReference,
   );
 }
