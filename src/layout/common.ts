@@ -991,6 +991,149 @@ export function adoptTopologySafeGeometry(
     if (!changed) break;
   }
 
+  const affectedZigzags = (
+    nodeIds: Set<string>,
+    candidatePositions: Record<string, Point>,
+  ) => {
+    let total = 0;
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (!path.some((id) => nodeIds.has(id))) continue;
+        total += pathAlternatingZigzags(path, candidatePositions);
+      }
+    }
+    return total;
+  };
+
+  const affectedCrossings = (
+    nodeIds: Set<string>,
+    candidatePositions: Record<string, Point>,
+  ) =>
+    [...nodeIds].reduce(
+      (sum, nodeId) =>
+        sum + incidentCrossingCount(graph, nodeId, candidatePositions),
+      0,
+    );
+
+  // Some S-bends cannot be improved by moving one station at a time: both
+  // sides of the dogleg must move together. Adopt short contiguous windows
+  // atomically under the same hard topology constraints.
+  for (let pass = 0; pass < 3; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (const windowSize of [3, 2]) {
+          for (
+            let start = 1;
+            start + windowSize <= path.length - 1;
+            start += 1
+          ) {
+            const movingIds = path.slice(start, start + windowSize);
+            const movingSet = new Set(movingIds);
+            if (movingSet.size !== movingIds.length) continue;
+
+            const beforeZigzags = affectedZigzags(
+              movingSet,
+              positions,
+            );
+            if (beforeZigzags === 0) continue;
+            const beforeCrossings = affectedCrossings(
+              movingSet,
+              positions,
+            );
+
+            const originals = Object.fromEntries(
+              movingIds.map((id) => [id, { ...positions[id] }]),
+            );
+
+            let accepted = false;
+            for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22, 0.12]) {
+              const candidates = Object.fromEntries(
+                movingIds.map((id) => [
+                  id,
+                  {
+                    x: originals[id].x * (1 - blend) + proposed[id].x * blend,
+                    y: originals[id].y * (1 - blend) + proposed[id].y * blend,
+                  },
+                ]),
+              );
+
+              let spacingSafe = true;
+              for (let index = 0; index < movingIds.length; index += 1) {
+                const id = movingIds[index];
+                const point = candidates[id];
+
+                for (
+                  let otherIndex = index + 1;
+                  otherIndex < movingIds.length;
+                  otherIndex += 1
+                ) {
+                  if (
+                    distance(point, candidates[movingIds[otherIndex]]) <
+                    minimumNodeDistance
+                  ) {
+                    spacingSafe = false;
+                    break;
+                  }
+                }
+                if (!spacingSafe) break;
+
+                for (const other of graph.nodes) {
+                  if (movingSet.has(other.id)) continue;
+                  if (
+                    distance(point, positions[other.id]) <
+                    minimumNodeDistance
+                  ) {
+                    spacingSafe = false;
+                    break;
+                  }
+                }
+                if (!spacingSafe) break;
+              }
+              if (!spacingSafe) continue;
+
+              for (const id of movingIds) {
+                positions[id] = candidates[id];
+              }
+
+              const topologySafe =
+                totalRouteSelfCrossings(graph, positions) === 0;
+              const afterCrossings = topologySafe
+                ? affectedCrossings(movingSet, positions)
+                : Number.POSITIVE_INFINITY;
+              const afterZigzags = topologySafe
+                ? affectedZigzags(movingSet, positions)
+                : Number.POSITIVE_INFINITY;
+
+              if (
+                topologySafe &&
+                afterCrossings <= beforeCrossings &&
+                afterZigzags < beforeZigzags
+              ) {
+                accepted = true;
+                changed = true;
+                break;
+              }
+
+              for (const id of movingIds) {
+                positions[id] = originals[id];
+              }
+            }
+
+            if (!accepted) {
+              for (const id of movingIds) {
+                positions[id] = originals[id];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
   return positions;
 }
 
