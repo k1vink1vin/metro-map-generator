@@ -973,23 +973,31 @@ export function collapseRouteZigzagsSafely(
           const fractions = cumulativeFractions(ids, positions, 0.68);
           if (fractions.length !== 2) continue;
 
-          const targets = {
+          const rawTargets = {
             [bId]: samplePolyline(corridor, fractions[0]),
             [cId]: samplePolyline(corridor, fractions[1]),
           };
 
           const movingIds = [bId, cId];
-          let withinShiftBudget = true;
+          const targets: Record<string, Point> = {};
           for (const nodeId of movingIds) {
+            const original = positions[nodeId];
+            const rawTarget = rawTargets[nodeId];
             const limit = structuralNode(graph, nodeId)
               ? options.structuralMaxShift
               : options.maxShift;
-            if (distance(positions[nodeId], targets[nodeId]) > limit) {
-              withinShiftBudget = false;
-              break;
-            }
+            const dx = rawTarget.x - original.x;
+            const dy = rawTarget.y - original.y;
+            const shift = Math.hypot(dx, dy);
+            const ratio =
+              shift <= limit || shift < 1e-9
+                ? 1
+                : limit / shift;
+            targets[nodeId] = {
+              x: original.x + dx * ratio,
+              y: original.y + dy * ratio,
+            };
           }
-          if (!withinShiftBudget) continue;
 
           if (
             !candidateSpacingIsSafe(
@@ -1043,7 +1051,7 @@ export function collapseRouteZigzagsSafely(
             angularDeviationDegrees(positions[cId], positions[dId], options.angleStep);
 
           const accepted =
-            afterPenalty <= beforePenalty * 0.72 &&
+            afterPenalty <= beforePenalty * 0.9 &&
             afterSelf <= beforeSelf &&
             afterCrossing <= beforeCrossing &&
             afterAxis <= beforeAxis + 2.5;
