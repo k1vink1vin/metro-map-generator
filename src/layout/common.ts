@@ -1366,6 +1366,67 @@ export function repairIntroducedPathSelfCrossings(
   return positions;
 }
 
+/**
+ * Final hard topology guard.
+ *
+ * If a visible route path self-crosses while the same path is clean in a
+ * trusted topology reference, restore that path's interior coordinates only
+ * when the whole-network self-crossing count decreases.  Repeating the pass
+ * lets shared interchange nodes settle without trading one broken route for
+ * another.
+ */
+export function enforceCleanRouteTopology(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  reference: Record<string, Point>,
+  passes = 8,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
+
+        const currentSelf = pathSelfCrossings(path, positions);
+        if (currentSelf === 0) continue;
+        if (pathSelfCrossings(path, reference) !== 0) continue;
+
+        const beforeGlobal = totalRouteSelfCrossings(graph, positions);
+        const candidate = Object.fromEntries(
+          Object.entries(positions).map(([id, point]) => [id, { ...point }]),
+        );
+
+        for (const nodeId of path.slice(1, -1)) {
+          candidate[nodeId] = { ...reference[nodeId] };
+        }
+
+        const afterPath = pathSelfCrossings(path, candidate);
+        const afterGlobal = totalRouteSelfCrossings(graph, candidate);
+
+        if (
+          afterPath < currentSelf &&
+          afterGlobal < beforeGlobal
+        ) {
+          for (const nodeId of path.slice(1, -1)) {
+            positions[nodeId] = candidate[nodeId];
+          }
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
 function nodePathSelfCrossingCount(
   graph: GraphModel,
   nodeIds: Set<string>,
