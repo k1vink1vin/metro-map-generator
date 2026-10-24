@@ -1423,6 +1423,37 @@ export function enforceCleanRouteTopology(
     if (!changed) break;
   }
 
+  // Shared interchange nodes can make a path-only restore transfer the same
+  // crossing to another route. If that happens, move the whole layout only
+  // as far as necessary toward the trusted clean topology scaffold. This
+  // preserves most of the visible de-zigzagging while making zero route
+  // self-crossings the hard final invariant.
+  const remaining = totalRouteSelfCrossings(graph, positions);
+  if (
+    remaining > 0 &&
+    totalRouteSelfCrossings(graph, reference) === 0
+  ) {
+    for (const blend of [0.08, 0.12, 0.18, 0.24, 0.32, 0.42, 0.55, 0.7, 0.85, 1]) {
+      const candidate = Object.fromEntries(
+        graph.nodes.map((node) => {
+          const current = positions[node.id];
+          const clean = reference[node.id];
+          return [
+            node.id,
+            {
+              x: current.x * (1 - blend) + clean.x * blend,
+              y: current.y * (1 - blend) + clean.y * blend,
+            },
+          ];
+        }),
+      );
+
+      if (totalRouteSelfCrossings(graph, candidate) < remaining) {
+        return candidate;
+      }
+    }
+  }
+
   return positions;
 }
 
