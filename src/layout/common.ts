@@ -847,6 +847,154 @@ export function relaxPathKinksSafely(
 }
 
 
+export interface TopologySafeAdoptionOptions {
+  passes?: number;
+  minimumNodeDistance?: number;
+}
+
+function nodeZigzagCount(
+  graph: GraphModel,
+  nodeId: string,
+  positions: Record<string, Point>,
+): number {
+  let total = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (!path.includes(nodeId)) continue;
+      total += pathAlternatingZigzags(path, positions);
+    }
+  }
+  return total;
+}
+
+/**
+ * Starts from a known-clean topology scaffold and adopts coordinates from a
+ * visually improved candidate one node at a time. A move is accepted only if
+ * route self-crossings remain zero, incident crossings do not increase,
+ * passenger spacing stays safe, and zig-zag quality for paths touching that
+ * station improves (or remains equal for a smaller geometric correction).
+ *
+ * This makes topology preservation constructive rather than relying on a
+ * destructive repair pass after the layout has already folded over itself.
+ */
+export function adoptTopologySafeGeometry(
+  graph: GraphModel,
+  cleanBase: Record<string, Point>,
+  proposed: Record<string, Point>,
+  options: TopologySafeAdoptionOptions = {},
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(cleanBase).map(([id, point]) => [id, { ...point }]),
+  );
+  const passes = options.passes ?? 4;
+  const minimumNodeDistance = options.minimumNodeDistance ?? 29;
+
+  if (totalRouteSelfCrossings(graph, positions) !== 0) {
+    return positions;
+  }
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    const ranked = graph.nodes
+      .map((node) => ({
+        id: node.id,
+        distance: distance(positions[node.id], proposed[node.id]),
+      }))
+      .filter((item) => item.distance > 0.25)
+      .sort((a, b) => b.distance - a.distance);
+
+    for (const item of ranked) {
+      const nodeId = item.id;
+      const original = { ...positions[nodeId] };
+      const target = proposed[nodeId];
+      if (!target) continue;
+
+      const beforeZigzags = nodeZigzagCount(graph, nodeId, positions);
+      const beforeCrossings = incidentCrossingCount(
+        graph,
+        nodeId,
+        positions,
+      );
+
+      let accepted: Point | undefined;
+      let acceptedZigzags = beforeZigzags;
+
+      for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22, 0.12]) {
+        const candidate = {
+          x: original.x * (1 - blend) + target.x * blend,
+          y: original.y * (1 - blend) + target.y * blend,
+        };
+
+        let spacingSafe = true;
+        for (const other of graph.nodes) {
+          if (other.id === nodeId) continue;
+          if (
+            distance(candidate, positions[other.id]) <
+            minimumNodeDistance
+          ) {
+            spacingSafe = false;
+            break;
+          }
+        }
+        if (!spacingSafe) continue;
+
+        positions[nodeId] = candidate;
+
+        if (totalRouteSelfCrossings(graph, positions) !== 0) {
+          positions[nodeId] = original;
+          continue;
+        }
+
+        const afterCrossings = incidentCrossingCount(
+          graph,
+          nodeId,
+          positions,
+        );
+        if (afterCrossings > beforeCrossings) {
+          positions[nodeId] = original;
+          continue;
+        }
+
+        const afterZigzags = nodeZigzagCount(
+          graph,
+          nodeId,
+          positions,
+        );
+
+        if (
+          afterZigzags < acceptedZigzags ||
+          (afterZigzags === acceptedZigzags &&
+            accepted === undefined &&
+            beforeZigzags === 0)
+        ) {
+          accepted = { ...candidate };
+          acceptedZigzags = afterZigzags;
+
+          if (afterZigzags < beforeZigzags) {
+            break;
+          }
+        }
+
+        positions[nodeId] = original;
+      }
+
+      positions[nodeId] = accepted ?? original;
+      if (
+        accepted &&
+        (accepted.x !== original.x || accepted.y !== original.y)
+      ) {
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
 export interface SafeZigzagCollapseOptions {
   angleStep: number;
   passes: number;
