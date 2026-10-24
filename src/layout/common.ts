@@ -1161,18 +1161,12 @@ export function repairIntroducedPathSelfCrossings(
       const cos = Math.cos(rotation);
       const sin = Math.sin(rotation);
 
-      const candidate = Object.fromEntries(
-        Object.entries(positions).map(([id, point]) => [
-          id,
-          { ...point },
-        ]),
-      );
-
+      const referenceTarget: Record<string, Point> = {};
       for (let index = 1; index < path.length - 1; index += 1) {
         const nodeId = path[index];
         const rx = reference[nodeId].x - referenceStart.x;
         const ry = reference[nodeId].y - referenceStart.y;
-        candidate[nodeId] = {
+        referenceTarget[nodeId] = {
           x:
             targetStart.x +
             (rx * cos - ry * sin) * scaleFactor,
@@ -1182,27 +1176,100 @@ export function repairIntroducedPathSelfCrossings(
         };
       }
 
-      // Topology is repaired before global spacing. finalizeLayout() owns
-      // the all-node minimum-distance hard pass; the final QA validates the
-      // passenger-space result after that repair.
-
-      const candidateSelf = pathSelfCrossings(path, candidate);
-      const candidateExternal = pathExternalCrossings(
+      const interiorIds = path.slice(1, -1);
+      const affected = new Set(interiorIds);
+      const currentAffectedSelf = nodePathSelfCrossingCount(
         graph,
-        path,
-        candidate,
+        affected,
+        positions,
       );
 
-      // Topology preservation is a hard constraint: a schematic transform
-      // must not introduce a self-crossing on a path that is clean in the
-      // reference layout. Inter-route crossings remain a global soft
-      // criterion and are validated by the whole-map QA afterwards.
-      if (
-        candidateSelf < currentSelf &&
-        candidateExternal <= currentExternal
-      ) {
-        for (const nodeId of path.slice(1, -1)) {
-          positions[nodeId] = candidate[nodeId];
+      let best:
+        | {
+            positions: Record<string, Point>;
+            selfCrossings: number;
+            externalCrossings: number;
+          }
+        | undefined;
+
+      // A full similarity restore is sometimes too aggressive: it can fix
+      // the target route while creating a new crossing against another line.
+      // Search progressively smaller blends toward the clean reference shape
+      // and keep the strongest move that improves the self-crossing without
+      // sacrificing any other route touching the moved stations.
+      for (const blend of [1, 0.82, 0.66, 0.5, 0.36, 0.24, 0.14]) {
+        const candidate = Object.fromEntries(
+          Object.entries(positions).map(([id, point]) => [
+            id,
+            { ...point },
+          ]),
+        );
+
+        for (const nodeId of interiorIds) {
+          candidate[nodeId] = {
+            x:
+              positions[nodeId].x * (1 - blend) +
+              referenceTarget[nodeId].x * blend,
+            y:
+              positions[nodeId].y * (1 - blend) +
+              referenceTarget[nodeId].y * blend,
+          };
+        }
+
+        const candidatePoints = Object.fromEntries(
+          interiorIds.map((nodeId) => [nodeId, candidate[nodeId]]),
+        );
+        if (
+          !candidateSpacingIsSafe(
+            graph,
+            positions,
+            interiorIds,
+            candidatePoints,
+            minimumNodeDistance,
+          )
+        ) {
+          continue;
+        }
+
+        const candidateSelf = pathSelfCrossings(path, candidate);
+        const candidateExternal = pathExternalCrossings(
+          graph,
+          path,
+          candidate,
+        );
+        const candidateAffectedSelf = nodePathSelfCrossingCount(
+          graph,
+          affected,
+          candidate,
+        );
+
+        if (
+          candidateSelf >= currentSelf ||
+          candidateExternal > currentExternal ||
+          candidateAffectedSelf > currentAffectedSelf
+        ) {
+          continue;
+        }
+
+        if (
+          !best ||
+          candidateSelf < best.selfCrossings ||
+          (candidateSelf === best.selfCrossings &&
+            candidateExternal < best.externalCrossings)
+        ) {
+          best = {
+            positions: candidate,
+            selfCrossings: candidateSelf,
+            externalCrossings: candidateExternal,
+          };
+        }
+
+        if (candidateSelf === 0) break;
+      }
+
+      if (best) {
+        for (const nodeId of interiorIds) {
+          positions[nodeId] = best.positions[nodeId];
         }
       }
     }
