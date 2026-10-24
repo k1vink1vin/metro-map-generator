@@ -42,7 +42,15 @@ export function layoutHexilinear(
     },
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+  const topologyReference = layoutTaipei(graph, geographic);
+  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+    graph,
+    corridors,
+    topologyReference,
+    24,
+  );
+
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
     angleStep: 60,
     passes: 5,
     minimumTurnDegrees: 24,
@@ -59,7 +67,6 @@ export function layoutHexilinear(
     structuralMaxShift: 16,
   });
 
-  const topologyReference = layoutTaipei(graph, geographic);
   const untangled = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
