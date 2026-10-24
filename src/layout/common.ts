@@ -1138,168 +1138,162 @@ export function repairIntroducedPathSelfCrossings(
   graph: GraphModel,
   input: Record<string, Point>,
   reference: Record<string, Point>,
-  minimumNodeDistance = 28,
+  _minimumNodeDistance = 28,
 ): Record<string, Point> {
   const positions = Object.fromEntries(
     Object.entries(input).map(([id, point]) => [id, { ...point }]),
   );
 
-  for (const line of graph.lines) {
-    for (const path of line.paths) {
-      if (path.length < 4) continue;
+  // A repair can occasionally move a crossing from the path being repaired
+  // to another path that shares one of its stations.  A single left-to-right
+  // sweep therefore is not enough. Re-scan the network a few times and only
+  // accept candidates whose *global* self-crossing count never increases.
+  // This permits a temporary 1 -> 1 transfer, but the next path scan can then
+  // resolve it; the process converges once the total reaches zero or no safe
+  // improvement exists.
+  for (let pass = 0; pass < 6; pass += 1) {
+    let changed = false;
+    const passStartTotal = totalRouteSelfCrossings(graph, positions);
+    if (passStartTotal === 0) break;
 
-      const currentSelf = pathSelfCrossings(path, positions);
-      if (currentSelf === 0) continue;
-      if (pathSelfCrossings(path, reference) !== 0) continue;
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
 
-      const currentExternal = pathExternalCrossings(
-        graph,
-        path,
-        positions,
-      );
-      const startId = path[0];
-      const endId = path[path.length - 1];
-      const referenceStart = reference[startId];
-      const referenceEnd = reference[endId];
-      const targetStart = positions[startId];
-      const targetEnd = positions[endId];
+        const currentSelf = pathSelfCrossings(path, positions);
+        if (currentSelf === 0) continue;
+        if (pathSelfCrossings(path, reference) !== 0) continue;
 
-      const referenceDx = referenceEnd.x - referenceStart.x;
-      const referenceDy = referenceEnd.y - referenceStart.y;
-      const targetDx = targetEnd.x - targetStart.x;
-      const targetDy = targetEnd.y - targetStart.y;
-      const referenceLength = Math.hypot(referenceDx, referenceDy);
-      const targetLength = Math.hypot(targetDx, targetDy);
+        const startId = path[0];
+        const endId = path[path.length - 1];
+        const referenceStart = reference[startId];
+        const referenceEnd = reference[endId];
+        const targetStart = positions[startId];
+        const targetEnd = positions[endId];
 
-      // Closed rings need their own circular solver; this repair is for open
-      // paths whose two endpoints define a stable similarity transform.
-      if (referenceLength < 1e-6 || targetLength < 1e-6) continue;
+        const referenceDx = referenceEnd.x - referenceStart.x;
+        const referenceDy = referenceEnd.y - referenceStart.y;
+        const targetDx = targetEnd.x - targetStart.x;
+        const targetDy = targetEnd.y - targetStart.y;
+        const referenceLength = Math.hypot(referenceDx, referenceDy);
+        const targetLength = Math.hypot(targetDx, targetDy);
 
-      const scaleFactor = targetLength / referenceLength;
-      const referenceAngle = Math.atan2(referenceDy, referenceDx);
-      const targetAngle = Math.atan2(targetDy, targetDx);
-      const rotation = targetAngle - referenceAngle;
-      const cos = Math.cos(rotation);
-      const sin = Math.sin(rotation);
+        // Closed rings need their own circular solver; this repair is for open
+        // paths whose two endpoints define a stable similarity transform.
+        if (referenceLength < 1e-6 || targetLength < 1e-6) continue;
 
-      const referenceTarget: Record<string, Point> = {};
-      for (let index = 1; index < path.length - 1; index += 1) {
-        const nodeId = path[index];
-        const rx = reference[nodeId].x - referenceStart.x;
-        const ry = reference[nodeId].y - referenceStart.y;
-        referenceTarget[nodeId] = {
-          x:
-            targetStart.x +
-            (rx * cos - ry * sin) * scaleFactor,
-          y:
-            targetStart.y +
-            (rx * sin + ry * cos) * scaleFactor,
-        };
-      }
+        const scaleFactor = targetLength / referenceLength;
+        const referenceAngle = Math.atan2(referenceDy, referenceDx);
+        const targetAngle = Math.atan2(targetDy, targetDx);
+        const rotation = targetAngle - referenceAngle;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
 
-      const interiorIds = path.slice(1, -1);
-      const currentGlobalSelf = totalRouteSelfCrossings(
-        graph,
-        positions,
-      );
-
-      type RepairCandidate = {
-        positions: Record<string, Point>;
-        selfCrossings: number;
-        externalCrossings: number;
-      };
-      let bestExternalSafe: RepairCandidate | undefined;
-      let bestTopologyFallback: RepairCandidate | undefined;
-
-      // A full similarity restore is sometimes too aggressive: it can fix
-      // the target route while creating a new crossing against another line.
-      // Search progressively smaller blends toward the clean reference shape
-      // and keep the strongest move that improves the self-crossing without
-      // sacrificing any other route touching the moved stations.
-      for (const blend of [1, 0.82, 0.66, 0.5, 0.36, 0.24, 0.14]) {
-        const candidate = Object.fromEntries(
-          Object.entries(positions).map(([id, point]) => [
-            id,
-            { ...point },
-          ]),
-        );
-
-        for (const nodeId of interiorIds) {
-          candidate[nodeId] = {
+        const referenceTarget: Record<string, Point> = {};
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const nodeId = path[index];
+          const rx = reference[nodeId].x - referenceStart.x;
+          const ry = reference[nodeId].y - referenceStart.y;
+          referenceTarget[nodeId] = {
             x:
-              positions[nodeId].x * (1 - blend) +
-              referenceTarget[nodeId].x * blend,
+              targetStart.x +
+              (rx * cos - ry * sin) * scaleFactor,
             y:
-              positions[nodeId].y * (1 - blend) +
-              referenceTarget[nodeId].y * blend,
+              targetStart.y +
+              (rx * sin + ry * cos) * scaleFactor,
           };
         }
 
-        const candidateSelf = pathSelfCrossings(path, candidate);
-        const candidateExternal = pathExternalCrossings(
+        const interiorIds = path.slice(1, -1);
+        const currentGlobalSelf = totalRouteSelfCrossings(
           graph,
-          path,
-          candidate,
-        );
-        const candidateGlobalSelf = totalRouteSelfCrossings(
-          graph,
-          candidate,
+          positions,
         );
 
-        if (
-          candidateSelf >= currentSelf ||
-          candidateGlobalSelf >= currentGlobalSelf
-        ) {
-          continue;
-        }
-
-        const repairCandidate: RepairCandidate = {
-          positions: candidate,
-          selfCrossings: candidateSelf,
-          externalCrossings: candidateExternal,
+        type RepairCandidate = {
+          positions: Record<string, Point>;
+          selfCrossings: number;
+          globalSelfCrossings: number;
+          externalCrossings: number;
         };
+        let best: RepairCandidate | undefined;
 
-        if (candidateExternal <= currentExternal) {
+        // Full restore is tested first, followed by progressively gentler
+        // blends.  Candidate ranking is topology-first: global self-crossings,
+        // then this path's self-crossings, then unrelated external crossings.
+        for (const blend of [1, 0.86, 0.72, 0.58, 0.44, 0.32, 0.22, 0.14]) {
+          const candidate = Object.fromEntries(
+            Object.entries(positions).map(([id, point]) => [
+              id,
+              { ...point },
+            ]),
+          );
+
+          for (const nodeId of interiorIds) {
+            candidate[nodeId] = {
+              x:
+                positions[nodeId].x * (1 - blend) +
+                referenceTarget[nodeId].x * blend,
+              y:
+                positions[nodeId].y * (1 - blend) +
+                referenceTarget[nodeId].y * blend,
+            };
+          }
+
+          const candidateSelf = pathSelfCrossings(path, candidate);
+          if (candidateSelf >= currentSelf) continue;
+
+          const candidateGlobalSelf = totalRouteSelfCrossings(
+            graph,
+            candidate,
+          );
+          if (candidateGlobalSelf > currentGlobalSelf) continue;
+
+          const candidateExternal = pathExternalCrossings(
+            graph,
+            path,
+            candidate,
+          );
+          const repairCandidate: RepairCandidate = {
+            positions: candidate,
+            selfCrossings: candidateSelf,
+            globalSelfCrossings: candidateGlobalSelf,
+            externalCrossings: candidateExternal,
+          };
+
           if (
-            !bestExternalSafe ||
-            candidateSelf < bestExternalSafe.selfCrossings ||
-            (candidateSelf === bestExternalSafe.selfCrossings &&
-              candidateExternal < bestExternalSafe.externalCrossings)
+            !best ||
+            repairCandidate.globalSelfCrossings < best.globalSelfCrossings ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings < best.selfCrossings) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.externalCrossings < best.externalCrossings)
           ) {
-            bestExternalSafe = repairCandidate;
+            best = repairCandidate;
           }
         }
 
-        // Self-crossings are the hardest topology failure. If no candidate can
-        // also preserve the external-crossing count, retain a zero-self-cross
-        // fallback rather than leaving a route folded over itself.
-        if (candidateSelf === 0) {
-          if (
-            !bestTopologyFallback ||
-            candidateExternal < bestTopologyFallback.externalCrossings
-          ) {
-            bestTopologyFallback = repairCandidate;
-          }
-        }
-      }
+        if (!best) continue;
 
-      // Route self-crossing is the hard topology failure. Prefer a candidate
-      // that fully unfolds the path; among those, the search already keeps
-      // the one with the smallest external-crossing cost. Only fall back to a
-      // partial but external-safe repair when no zero-self-cross solution is
-      // available within the bounded search.
-      const best = bestTopologyFallback ?? bestExternalSafe;
-      if (best) {
         for (const nodeId of interiorIds) {
           positions[nodeId] = best.positions[nodeId];
         }
+        changed = true;
       }
     }
+
+    const passEndTotal = totalRouteSelfCrossings(graph, positions);
+    if (passEndTotal === 0) break;
+    if (!changed) break;
+
+    // If a pass only transferred the same number of crossings, allow the next
+    // pass to resolve the new owner; bounded pass count prevents oscillation.
+    if (passEndTotal > passStartTotal) break;
   }
 
   return positions;
 }
-
 
 function nodePathSelfCrossingCount(
   graph: GraphModel,
