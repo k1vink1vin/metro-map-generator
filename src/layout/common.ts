@@ -1482,6 +1482,8 @@ export interface TopologySectionRoutingOptions {
   minimumNodeDistance?: number;
   maximumShift?: number;
   minimumTurnDegrees?: number;
+  maxShapeAnchors?: number;
+  shapeTolerance?: number;
   diagnostics?: boolean;
 }
 
@@ -1532,6 +1534,76 @@ function sectionAxisError(
   return total / Math.max(1, ids.length - 1);
 }
 
+function pointToSegmentDistance(
+  point: Point,
+  start: Point,
+  end: Point,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 1e-9) return distance(point, start);
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+        lengthSquared,
+    ),
+  );
+  return Math.hypot(
+    point.x - (start.x + dx * t),
+    point.y - (start.y + dy * t),
+  );
+}
+
+function majorShapeAnchorIndices(
+  ids: string[],
+  reference: Record<string, Point>,
+  maxAnchors: number,
+  tolerance: number,
+): number[] {
+  if (ids.length <= 2 || maxAnchors <= 0) {
+    return [0, ids.length - 1];
+  }
+
+  const anchors = [0, ids.length - 1];
+
+  for (let iteration = 0; iteration < maxAnchors; iteration += 1) {
+    anchors.sort((a, b) => a - b);
+    let bestIndex = -1;
+    let bestDeviation = tolerance;
+
+    for (let segment = 0; segment < anchors.length - 1; segment += 1) {
+      const from = anchors[segment];
+      const to = anchors[segment + 1];
+      if (to - from < 2) continue;
+
+      const start = reference[ids[from]];
+      const end = reference[ids[to]];
+
+      for (let index = from + 1; index < to; index += 1) {
+        const deviation = pointToSegmentDistance(
+          reference[ids[index]],
+          start,
+          end,
+        );
+        if (deviation > bestDeviation) {
+          bestDeviation = deviation;
+          bestIndex = index;
+        }
+      }
+    }
+
+    if (bestIndex < 0) break;
+    anchors.push(bestIndex);
+  }
+
+  return [...new Set(anchors)].sort((a, b) => a - b);
+}
+
+
 /**
  * Topology-section router for schematic maps.
  *
@@ -1572,8 +1644,11 @@ export function routeTopologySectionsSafely(
   const minimumNodeDistance = options.minimumNodeDistance ?? 29;
   const maximumShift = options.maximumShift ?? 104;
   const minimumTurnDegrees = options.minimumTurnDegrees ?? 22;
+  const maxShapeAnchors = options.maxShapeAnchors ?? 2;
+  const shapeTolerance = options.shapeTolerance ?? 46;
   const diagnostics = {
     sections: 0,
+    shapeAnchors: 0,
     accepted: 0,
     shiftRejected: 0,
     spacingRejected: 0,
@@ -1605,34 +1680,69 @@ export function routeTopologySectionsSafely(
           if (endIndex - startIndex < 2) continue;
 
           const ids = path.slice(startIndex, endIndex + 1);
-          const movingIds = ids.slice(1, -1);
-          if (!movingIds.length) continue;
           diagnostics.sections += 1;
 
-          const start = positions[ids[0]];
-          const end = positions[ids[ids.length - 1]];
-          const references = movingIds.map(
-            (id) => guide[id] ?? geographicReference[id],
-          );
-          const corridor = angularTwoSegmentPath(
-            start,
-            end,
-            options.angleStep,
-            references,
-            'anchored',
-          );
-          const fractions = cumulativeFractions(
+          // Keep at most a couple of major shape controls inside this topology
+          // section. They preserve the safe lane around dense interchanges,
+          // while all minor geographic bends remain free to collapse.
+          const localShapeAnchors = majorShapeAnchorIndices(
             ids,
-            geographicReference,
-            equalSpacingWeight,
+            positions,
+            maxShapeAnchors,
+            shapeTolerance,
+          );
+          diagnostics.shapeAnchors += Math.max(
+            0,
+            localShapeAnchors.length - 2,
           );
 
-          const targets = Object.fromEntries(
-            movingIds.map((nodeId, index) => [
-              nodeId,
-              samplePolyline(corridor, fractions[index]),
-            ]),
+          const fixedLocalIndices = new Set(localShapeAnchors);
+          const movingIds = ids.filter(
+            (_, index) =>
+              index > 0 &&
+              index < ids.length - 1 &&
+              !fixedLocalIndices.has(index),
           );
+          if (!movingIds.length) continue;
+
+          const targets: Record<string, Point> = {};
+
+          for (
+            let shape = 0;
+            shape < localShapeAnchors.length - 1;
+            shape += 1
+          ) {
+            const localStart = localShapeAnchors[shape];
+            const localEnd = localShapeAnchors[shape + 1];
+            if (localEnd - localStart < 2) continue;
+
+            const subIds = ids.slice(localStart, localEnd + 1);
+            const subMovingIds = subIds.slice(1, -1);
+            const start = positions[subIds[0]];
+            const end = positions[subIds[subIds.length - 1]];
+            const references = subMovingIds.map(
+              (id) => guide[id] ?? geographicReference[id],
+            );
+            const corridor = angularTwoSegmentPath(
+              start,
+              end,
+              options.angleStep,
+              references,
+              'anchored',
+            );
+            const fractions = cumulativeFractions(
+              subIds,
+              geographicReference,
+              equalSpacingWeight,
+            );
+
+            subMovingIds.forEach((nodeId, index) => {
+              targets[nodeId] = samplePolyline(
+                corridor,
+                fractions[index],
+              );
+            });
+          }
 
           const beforeZigzags = pathAlternatingZigzags(
             path,
