@@ -1,5 +1,6 @@
 import type { GraphModel, Point } from '../types';
 import {
+  collapseRouteZigzagsSafely,
   inflateCentralArea,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
@@ -41,7 +42,16 @@ export function layoutTaipei(
     },
   );
 
-  const relaxed = relaxPathKinksSafely(graph, corridors, {
+  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+    angleStep: 45,
+    passes: 5,
+    minimumTurnDegrees: 24,
+    minimumNodeDistance: 29,
+    maxShift: 30,
+    structuralMaxShift: 12,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 7,
     thresholdDegrees: 84,
     minimumNodeDistance: 29,
@@ -95,7 +105,16 @@ export function layoutLondon(
     },
   );
 
-  const relaxed = relaxPathKinksSafely(graph, corridors, {
+  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+    angleStep: 45,
+    passes: 6,
+    minimumTurnDegrees: 24,
+    minimumNodeDistance: 29,
+    maxShift: 36,
+    structuralMaxShift: 16,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 9,
     thresholdDegrees: 78,
     minimumNodeDistance: 29,
