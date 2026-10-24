@@ -1,12 +1,12 @@
 import type { GraphModel, Point } from '../types';
 import {
-  adoptTopologySafeGeometry,
   collapseRouteZigzagsSafely,
   enforceCleanRouteTopology,
   inflateCentralArea,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
+  routeTopologySectionsSafely,
   separateNodesSafely,
   schematizeOnAngularGrid,
 } from './common';
@@ -82,36 +82,41 @@ export function layoutTaipei(
     24,
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
-    angleStep: 45,
-    passes: 5,
-    minimumTurnDegrees: 24,
-    minimumNodeDistance: 29,
-    maxShift: 30,
-    structuralMaxShift: 12,
-  });
-
-  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
-    passes: 7,
-    thresholdDegrees: 84,
-    minimumNodeDistance: 29,
-    maxShift: 32,
-    structuralMaxShift: 18,
-  });
-
-  const topologySafe = adoptTopologySafeGeometry(
+  const sectionRouted = routeTopologySectionsSafely(
     graph,
     topologyReference,
-    relaxed,
+    corridors,
+    geographic,
     {
+      angleStep: 45,
       passes: 5,
+      equalSpacingWeight: 0.68,
       minimumNodeDistance: 29,
+      maximumShift: 118,
+      minimumTurnDegrees: 22,
     },
   );
 
+  const dezigzagged = collapseRouteZigzagsSafely(graph, sectionRouted, {
+    angleStep: 45,
+    passes: 4,
+    minimumTurnDegrees: 22,
+    minimumNodeDistance: 29,
+    maxShift: 28,
+    structuralMaxShift: 10,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
+    passes: 5,
+    thresholdDegrees: 88,
+    minimumNodeDistance: 29,
+    maxShift: 24,
+    structuralMaxShift: 10,
+  });
+
   return enforceCleanRouteTopology(
     graph,
-    topologySafe,
+    relaxed,
     topologyReference,
   );
 }
