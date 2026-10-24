@@ -91,7 +91,7 @@ export function layoutTaipei(
       angleStep: 45,
       passes: 5,
       equalSpacingWeight: 0.68,
-      minimumNodeDistance: 29,
+      minimumNodeDistance: 20,
       maximumShift: 118,
       minimumTurnDegrees: 22,
       diagnostics: true,
@@ -102,7 +102,7 @@ export function layoutTaipei(
     angleStep: 45,
     passes: 4,
     minimumTurnDegrees: 22,
-    minimumNodeDistance: 29,
+    minimumNodeDistance: 20,
     maxShift: 28,
     structuralMaxShift: 10,
   });
@@ -110,14 +110,21 @@ export function layoutTaipei(
   const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 5,
     thresholdDegrees: 88,
-    minimumNodeDistance: 29,
+    minimumNodeDistance: 20,
     maxShift: 24,
     structuralMaxShift: 10,
   });
 
-  return enforceCleanRouteTopology(
+  const separated = separateNodesSafely(
     graph,
     relaxed,
+    29,
+    20,
+  );
+
+  return enforceCleanRouteTopology(
+    graph,
+    separated,
     topologyReference,
   );
 }
