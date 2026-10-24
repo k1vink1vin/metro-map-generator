@@ -111,7 +111,7 @@ function passengerCanvasScale(
   const base = Math.max(1, Math.max(nodeFactor, edgeFactor)) * 1.18;
   const styleMultiplier: Record<StyleId, number> = {
     geographic: 1.05,
-    taipei: 1.08,
+    taipei: 2.1,
     london: 1.12,
     moscow: 1.25,
     concentric: 1.08,
