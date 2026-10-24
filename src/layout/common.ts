@@ -1211,6 +1211,44 @@ function candidateSpacingIsSafe(
   return true;
 }
 
+function minimumCandidateSpacing(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  candidateIds: string[],
+  candidates: Record<string, Point>,
+): { a: string; b: string; distance: number } {
+  const moving = new Set(candidateIds);
+  let best = {
+    a: '',
+    b: '',
+    distance: Number.POSITIVE_INFINITY,
+  };
+
+  for (let index = 0; index < candidateIds.length; index += 1) {
+    const id = candidateIds[index];
+    const point = candidates[id];
+
+    for (let otherIndex = index + 1; otherIndex < candidateIds.length; otherIndex += 1) {
+      const otherId = candidateIds[otherIndex];
+      const value = distance(point, candidates[otherId]);
+      if (value < best.distance) {
+        best = { a: id, b: otherId, distance: value };
+      }
+    }
+
+    for (const other of graph.nodes) {
+      if (moving.has(other.id)) continue;
+      const value = distance(point, positions[other.id]);
+      if (value < best.distance) {
+        best = { a: id, b: other.id, distance: value };
+      }
+    }
+  }
+
+  return best;
+}
+
+
 /**
  * Removes short alternating S-bends without changing route topology.
  *
@@ -1655,6 +1693,14 @@ export function routeTopologySectionsSafely(
     topologyRejected: 0,
     crossingRejected: 0,
     improvementRejected: 0,
+    spacingSamples: [] as Array<{
+      line: string;
+      from: string;
+      to: string;
+      a: string;
+      b: string;
+      distance: number;
+    }>,
   };
 
   for (let pass = 0; pass < passes; pass += 1) {
@@ -1807,6 +1853,28 @@ export function routeTopologySectionsSafely(
               )
             ) {
               diagnostics.spacingRejected += 1;
+              if (
+                options.diagnostics &&
+                blend === 0.22 &&
+                diagnostics.spacingSamples.length < 12
+              ) {
+                const nearest = minimumCandidateSpacing(
+                  graph,
+                  positions,
+                  movingIds,
+                  candidates,
+                );
+                diagnostics.spacingSamples.push({
+                  line: line.id,
+                  from: graph.nodeById.get(ids[0])?.name ?? ids[0],
+                  to:
+                    graph.nodeById.get(ids[ids.length - 1])?.name ??
+                    ids[ids.length - 1],
+                  a: graph.nodeById.get(nearest.a)?.name ?? nearest.a,
+                  b: graph.nodeById.get(nearest.b)?.name ?? nearest.b,
+                  distance: Number(nearest.distance.toFixed(1)),
+                });
+              }
               continue;
             }
 
