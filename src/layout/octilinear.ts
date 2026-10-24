@@ -42,7 +42,14 @@ export function layoutTaipei(
     },
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+    graph,
+    corridors,
+    geographic,
+    24,
+  );
+
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
     angleStep: 45,
     passes: 5,
     minimumTurnDegrees: 24,
@@ -105,7 +112,15 @@ export function layoutLondon(
     },
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+  const topologyReference = layoutTaipei(graph, geographic);
+  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+    graph,
+    corridors,
+    topologyReference,
+    24,
+  );
+
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
     angleStep: 45,
     passes: 6,
     minimumTurnDegrees: 24,
@@ -122,7 +137,6 @@ export function layoutLondon(
     structuralMaxShift: 22,
   });
 
-  const topologyReference = layoutTaipei(graph, geographic);
   const untangled = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
