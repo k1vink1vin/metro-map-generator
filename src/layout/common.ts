@@ -1818,7 +1818,7 @@ export function routeTopologySectionsSafely(
           );
 
           let accepted = false;
-          for (const blend of [1, 0.86, 0.72, 0.58, 0.44, 0.32, 0.22]) {
+          for (const blend of [1, 0.86, 0.72, 0.58, 0.44, 0.32, 0.22, 0.14, 0.08, 0.04, 0.02]) {
             const candidates = Object.fromEntries(
               movingIds.map((id) => [
                 id,
@@ -1855,7 +1855,7 @@ export function routeTopologySectionsSafely(
               diagnostics.spacingRejected += 1;
               if (
                 options.diagnostics &&
-                blend === 0.22 &&
+                blend === 0.04 &&
                 diagnostics.spacingSamples.length < 12
               ) {
                 const nearest = minimumCandidateSpacing(
