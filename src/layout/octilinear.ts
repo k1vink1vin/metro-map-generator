@@ -1,6 +1,7 @@
 import type { GraphModel, Point } from '../types';
 import {
   collapseRouteZigzagsSafely,
+  enforceCleanRouteTopology,
   inflateCentralArea,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
@@ -97,11 +98,17 @@ export function layoutTaipei(
     structuralMaxShift: 18,
   });
 
-  return repairIntroducedPathSelfCrossings(
+  const repaired = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
     topologyReference,
     24,
+  );
+
+  return enforceCleanRouteTopology(
+    graph,
+    repaired,
+    topologyReference,
   );
 }
 
