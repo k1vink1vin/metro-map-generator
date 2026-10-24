@@ -89,7 +89,7 @@ export function layoutTaipei(
     geographic,
     {
       angleStep: 45,
-      passes: 5,
+      passes: 8,
       equalSpacingWeight: 0.68,
       minimumNodeDistance: 29,
       maximumShift: 96,
