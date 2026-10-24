@@ -1071,6 +1071,38 @@ export function collapseRouteZigzagsSafely(
 }
 
 
+function pathAlternatingZigzags(
+  path: string[],
+  positions: Record<string, Point>,
+  minimumTurnDegrees = 24,
+): number {
+  const threshold = (minimumTurnDegrees * Math.PI) / 180;
+  const turns: number[] = [];
+  for (let index = 1; index < path.length - 1; index += 1) {
+    turns.push(
+      signedHeadingChange(
+        positions[path[index - 1]],
+        positions[path[index]],
+        positions[path[index + 1]],
+      ),
+    );
+  }
+
+  let zigzags = 0;
+  for (let index = 0; index < turns.length - 1; index += 1) {
+    const first = turns[index];
+    const second = turns[index + 1];
+    if (
+      Math.abs(first) >= threshold &&
+      Math.abs(second) >= threshold &&
+      Math.sign(first) !== Math.sign(second)
+    ) {
+      zigzags += 1;
+    }
+  }
+  return zigzags;
+}
+
 function pathSelfCrossings(
   path: string[],
   positions: Record<string, Point>,
@@ -1240,7 +1272,9 @@ export function repairIntroducedPathSelfCrossings(
           positions: Record<string, Point>;
           selfCrossings: number;
           globalSelfCrossings: number;
+          zigzags: number;
           externalCrossings: number;
+          blend: number;
         };
         let best: RepairCandidate | undefined;
 
@@ -1284,7 +1318,9 @@ export function repairIntroducedPathSelfCrossings(
             positions: candidate,
             selfCrossings: candidateSelf,
             globalSelfCrossings: candidateGlobalSelf,
+            zigzags: pathAlternatingZigzags(path, candidate),
             externalCrossings: candidateExternal,
+            blend,
           };
 
           if (
@@ -1294,6 +1330,15 @@ export function repairIntroducedPathSelfCrossings(
               repairCandidate.selfCrossings < best.selfCrossings) ||
             (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
               repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags < best.zigzags) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags === best.zigzags &&
+              repairCandidate.blend < best.blend) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags === best.zigzags &&
+              repairCandidate.blend === best.blend &&
               repairCandidate.externalCrossings < best.externalCrossings)
           ) {
             best = repairCandidate;
