@@ -1,0 +1,66 @@
+# Layout and rendering review (2026-10-24)
+
+## Design evidence
+
+- [KIT: Metro Maps](https://i11www.iti.kit.edu/en/projects/geovis/metro): input topology, minimum edge length and octolinearity are hard criteria; bends and geographical similarity are optimization objectives.
+- [Nöllenburg and Wolff, Drawing and Labeling High-Quality Metro Maps](https://i11www.iti.kit.edu/extra/publications/nw-dlhqm-10.pdf): jointly optimize geometry and labels under hard constraints. The application uses heuristics, not this paper's exact mixed-integer solver.
+- [TfL: Our brand assets](https://madeby.tfl.gov.uk/2024/06/07/our-brand-assets/): horizontal, vertical and 45-degree lines, with clear interchange points.
+- [London Museum: Harry Beck](https://www.londonmuseum.org.uk/collections/london-stories/harry-beck-revolutionised-tube-map/): schematic circuit-like geometry and tight curves, rather than literal distances.
+- [Taipei Metro official route map](https://www.metro.taipei/cp.aspx?n=73B51F32ED23C5E1): visual reference for local routes, geography and interchange presentation.
+- [Moscow Metro, July 2025 design update](https://www.mosmetro.ru/news/details/7469): smooth lines without sharp corners.
+- [Nickel and Nöllenburg: multilinear maps](https://arxiv.org/abs/1904.03039): arbitrary direction families are possible; choosing 60 degrees does not by itself guarantee fewer crossings.
+- [Batik et al.: shape-guided mixed maps](https://arxiv.org/abs/2208.14261): selected shapes and the remaining network need coordinated deformation and alignment.
+
+These are design references, not official approval of generated maps. Concentric and hexagonal layouts are composition systems, not official city signage specifications.
+
+## Style rules and current implementation
+
+| Layout | Geometry | Geographic treatment | Distinguishing constraints |
+| --- | --- | --- | --- |
+| Taipei | 45-degree corridor targets; topology sections and anchored endpoints | Strong geography tether | Preserve branch order and transfer identity; clear short zigzags after fitting |
+| London | 45-degree corridors; central inflation and near-equal spacing | Weaker geography tether | Topological scaffold, route straightness and interchange readability |
+| Moscow | Exact circular arcs on each declared ring; station-interpolating connectors | Separate circle centers and regional placement | Pin ring stations during zigzag reduction; do not force rings to be concentric |
+| Concentric | Radial shell targets, cyclic angle spacing | Blend shells with geography to avoid artificial crossings | Shared focus; outer spacing and topology take precedence over perfect shell snapping |
+| Hex | Three undirected axes: 0/60/120 degrees | Moderate geography tether | Corridor-based zigzag reduction, shared topology and station clearance |
+
+The angular solvers still have nonzero direction error: station relaxation and topology protection are soft compromises. They are not exact octilinear/hexilinear constraint solvers. Concentric is a shell-guided compromise, not a guarantee that every station lies exactly on a quantized radius. Taipei currently has no georeferenced river input or river deformation model; no invented Tamsui River is drawn. London still uses geography as an initial scaffold, not a geography-free graph embedding. These limits must not be described as fully compliant style engines.
+
+## Defects found
+
+1. The previous `roundedPath` replaced each station vertex with a quadratic corner, cutting away from the station. Completeness QA checked IDs and coordinates, not whether the rendered line actually passed through a station.
+2. Moscow stations were circular but the route and halo between stations were rounded polygon chords. Radius CV at stations alone could not detect this.
+3. Smoothing was unvalidated against neighboring topology edges and could create visual connectivity ambiguities.
+4. Short zigzags survived because optimization ran before passenger-canvas scaling. A small coordinate shift can be a large visible saw-tooth.
+5. Tokyo suffixes were rendered as small separate annotations rather than the complete lower-row code requested by the user.
+6. SVG QA files lacked the SVG namespace, so opening them directly in a browser produced an XML tree rather than the map.
+
+## Changes
+
+- Interpolate station anchors with bounded cubic controls; shorter neighboring edges limit handles. Reject sampled smoothing candidates that introduce crossings against nonincident topology edges or reduce clearance at unrelated station markers. Unsafe smoothing falls back to the original straight segment.
+- Render ring edges with SVG `A` arcs and ring halos with `circle`. Recover each circle from non-collinear station coordinates after fitting. Check all ring stations against that circle before using it; preserve separate centers.
+- Apply an additional topology-aware four-station zigzag pass in display coordinates to Taipei/London/Hex. Preserve at least 50-unit spacing for moved London/Hex stations. Clear Moscow non-ring zigzags in display coordinates with all ring stations pinned. Clear local concentric zigzags conservatively in display coordinates.
+- Cache route geometry by immutable layout identity. Zoom and station-symbol changes reuse the same route geometry.
+- Keep station code backgrounds white for Taipei/Tokyo; show complete numeric suffix on one baseline. Keep Osaka codes horizontal.
+- Add regression tests for station interpolation, exact rendered ring radius, independent centers and degenerate inputs. Render QA checks sampled route self-crossings, in addition to all 24 layout/symbol combinations.
+
+## Acceptance and limits
+
+Run `npm run build`, `npm run qa:geometry`, `npm run qa:layouts`, and `npm run qa:render`. Review full maps and crowded details separately. Rendered curves are sampled for intersection checks; this is a numerical regression test, not a mathematical proof of continuous-curve planarity. Existing inter-route crossings are not automatically transfers. Circular arcs can differ from the polygon crossings measured by layout QA. Font metrics, labels against all rendered lines, accessible contrast, print scale and operator signage rules still require a dedicated publication review.
+
+Do not equate a green CI run, radius CV at stations, or a low crossing count with passenger-ready official signage. Report actual measured improvements and remaining defects.
+
+## Measured result on repository TPE_Metro.xlsm
+
+247 topology nodes, 275 edges, 12 routes, two declared Moscow rings. Compared with checkout `f8a3eac` (before this change):
+
+| Layout | Sharp turns before → after | Zigzags before → after | Self-crossings after | Crossings after | Minimum station distance after |
+| --- | --- | --- | --- | --- | --- |
+| Taipei | 21 → 8 | 26 → 11 | 0 | 2 | 29.0 |
+| London | 55 → 37 | 94 → 48 | 0 | 9 | 50.2 |
+| Moscow | 20 → 8 | 47 → 10 | 0 | 12 | 36.4 |
+| Concentric | 55 → 47 | 61 → 38 | 0 | 19 | 52.2 |
+| Hex | 62 → 35 | 112 → 64 | 0 | 5 | 50.2 |
+
+These are station-center polyline measurements, not counts of visibly sharp corners after interpolation. Sharp turns mean heading changes above 100 degrees; zigzags require adjacent turns of opposite signs above 24 degrees. The two Moscow centers remain 1161.1 display units apart. Angular mean error remains 5.6 degrees (Taipei), 6.8 degrees (London), and 8.2 degrees (Hex); exact direction-family compliance is still incomplete.
+
+Validation: production build, geometry regression tests, layout QA, 24 rendered SVG combinations, and a targeted four-symbol Moscow re-render after adding parallel circular lanes. Browser review covered the 24-output overview, full Moscow map, style selection and generation. This is an overview and representative-detail review, not a claim that every label at every print scale has received manual approval.

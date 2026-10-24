@@ -26,6 +26,7 @@ function finish(
     style,
     proposed,
     geographic,
+    new Set(extra.moscowRings?.flatMap(ring => ring.nodes) ?? []),
   );
 
   return {

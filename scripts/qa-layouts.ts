@@ -780,19 +780,19 @@ for (const result of results) {
 
   const sharpTurnBudget: Record<StyleId, number> = {
     geographic: 100,
-    taipei: 70,
-    london: 60,
+    taipei: 20,
+    london: 45,
     moscow: 25,
     concentric: 60,
-    hex: 65,
+    hex: 45,
   };
   const zigzagBudget: Record<StyleId, number> = {
     geographic: 140,
-    taipei: 120,
-    london: 105,
+    taipei: 30,
+    london: 65,
     moscow: 55,
     concentric: 70,
-    hex: 125,
+    hex: 85,
   };
 
   if (result.sharpTurns > sharpTurnBudget[result.style]) {

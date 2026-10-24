@@ -1,3 +1,4 @@
+import { buildRenderedRoutePaths, circleThroughStations, type RenderedRoutePath } from './routeGeometry';
 import type {
   GraphModel,
   GraphNode,
@@ -6,25 +7,13 @@ import type {
   StationVisualStyle,
 } from '../types';
 import { nodeDegree } from '../core/graph';
-import {
-  buildGeometricBundleMap,
-  offsetPathForLine,
-  roundedPath,
-} from './geometry';
+
 
 interface SvgMapProps {
   graph: GraphModel;
   layout: LayoutResult;
   zoom?: number;
   stationStyle?: StationVisualStyle;
-}
-
-interface RenderedRoutePath {
-  lineId: string;
-  lineColor: string;
-  pathIndex: number;
-  points: Point[];
-  d: string;
 }
 
 interface Rect {
@@ -272,25 +261,15 @@ function renderTokyoStation(
               {code.prefix}
             </text>
             <text
-              x={x + width / 2 - (code.suffix ? 1.4 * visualScale : 0)}
+              x={x + width / 2}
               y={8.8 * visualScale}
               textAnchor="middle"
               className="station-code-number"
-              style={{ fontSize: 9.8 * visualScale }}
+              style={{ fontSize: (code.suffix ? 8.4 : 9.8) * visualScale }}
             >
-              {code.number}
+              {`${code.number}${code.suffix}`}
             </text>
-            {code.suffix ? (
-              <text
-                x={x + width - 4.2 * visualScale}
-                y={7.2 * visualScale}
-                textAnchor="middle"
-                className="station-code-suffix"
-                style={{ fontSize: 5.8 * visualScale, fontWeight: 900 }}
-              >
-                {code.suffix}
-              </text>
-            ) : null}
+
           </g>
         );
       })}
@@ -742,57 +721,7 @@ export function SvgMap({
   stationStyle = 'taipei',
 }: SvgMapProps) {
   const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
-  const geometricBundles = buildGeometricBundleMap(
-    graph,
-    layout.positions,
-  );
-
-  const routePaths: RenderedRoutePath[] = graph.lines.flatMap((line) =>
-    line.paths.map((path, pathIndex) => {
-      const points = offsetPathForLine(
-        graph,
-        path,
-        layout.positions,
-        line.id,
-        12,
-        geometricBundles,
-      );
-
-      return {
-        lineId: line.id,
-        lineColor:
-          line.pathColors?.[pathIndex] ??
-          line.color,
-        pathIndex,
-        points,
-        d: roundedPath(
-          points,
-          layout.style === 'moscow'
-            ? 48
-            : layout.style === 'hex'
-              ? 30
-              : layout.style === 'concentric'
-                ? 28
-                : layout.style === 'taipei'
-                  ? 24
-                  : layout.style === 'london'
-                    ? 20
-                    : 14,
-          layout.style === 'moscow'
-            ? 0.46
-            : layout.style === 'hex'
-              ? 0.4
-              : layout.style === 'concentric'
-                ? 0.4
-                : layout.style === 'taipei'
-                  ? 0.38
-                  : layout.style === 'london'
-                    ? 0.35
-                    : 0.32,
-        ),
-      };
-    }),
-  );
+  const routePaths = buildRenderedRoutePaths(graph, layout);
 
   const labelPlacements = buildLabelPlacements(
     graph,
@@ -852,17 +781,10 @@ export function SvgMap({
       {layout.style === 'moscow' && layout.moscowRings?.length ? (
         <g className="moscow-ring-emphasis" aria-hidden="true">
           {layout.moscowRings.map((ring) => {
-            const points = [...ring.nodes, ring.nodes[0]]
-              .map((nodeId) => layout.positions[nodeId])
-              .filter((point): point is Point => Boolean(point));
-            if (points.length < 4) return null;
-            return (
-              <path
-                key={ring.id}
-                d={roundedPath(points, 54, 0.46)}
-                className="moscow-ring-halo"
-              />
-            );
+            const circle = circleThroughStations(ring.nodes.map(id => layout.positions[id]));
+            if (!circle) return null;
+            return <circle key={ring.id} cx={circle.center.x} cy={circle.center.y}
+              r={circle.radius} className="moscow-ring-halo" />;
           })}
         </g>
       ) : null}

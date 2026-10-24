@@ -3,3 +3,5 @@ dist
 .vite
 .DS_Store
 *.local
+qa-artifacts/
+*.tsbuildinfo

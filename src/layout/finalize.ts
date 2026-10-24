@@ -1,6 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
-import { separateNodesSafely } from './common';
+import { collapseRouteZigzagsSafely, separateNodesSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -245,6 +245,7 @@ export function finalizeLayoutPositions(
   style: StyleId,
   proposed: Record<string, Point>,
   geographic: Record<string, Point>,
+  fixedNodes: ReadonlySet<string> = new Set(),
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
   // Moscow ring stations are deliberately placed on exact circles. The
@@ -263,10 +264,25 @@ export function finalizeLayoutPositions(
   // Taipei's section router is solved in schematic coordinates. Do not
   // disturb that geometry before fitting; after fitting, only the genuinely
   // sub-28px pairs need a tiny topology-safe separation.
-  const positions =
+  const spaced =
     style === 'taipei'
       ? separateNodesSafely(graph, fitted, 29, 6)
       : fitted;
+  // Work in final display units: a short saw-tooth is a visual defect even
+  // when the pre-fit coordinates made its displacement look insignificant.
+  // The corridor pass accepts only moves that preserve route self-crossings,
+  // external crossings and spacing. Ring stations remain fixed; shell targets remain soft constraints.
+  const positions = style !== 'geographic'
+    ? collapseRouteZigzagsSafely(graph, spaced, {
+        fixedNodes,
+        angleStep: style === 'hex' ? 60 : style === 'moscow' || style === 'concentric' ? 15 : 45,
+        passes: 6,
+        minimumTurnDegrees: 20,
+        minimumNodeDistance: style === 'taipei' ? 29 : style === 'moscow' ? 36 : 50,
+        maxShift: style === 'moscow' ? 120 : 80,
+        structuralMaxShift: 20,
+      })
+    : spaced;
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {

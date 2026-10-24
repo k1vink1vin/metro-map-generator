@@ -27,6 +27,9 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
+      - name: Station and ring geometry regression QA
+        run: npm run qa:geometry
+
       - name: Build
         run: npm run build
 

@@ -5,6 +5,7 @@ import { buildGraph } from '../src/core/graph.ts';
 import { validateMoscowRings } from '../src/core/moscowRings.ts';
 import { importExcelBuffer } from '../src/io/importData.ts';
 import { computeLayout } from '../src/layout/index.ts';
+import { buildRenderedRoutePaths, sampledSelfCrossings } from '../src/renderer/routeGeometry';
 import { SvgMap } from '../src/renderer/SvgMap.tsx';
 import type { StationVisualStyle, StyleId } from '../src/types.ts';
 
@@ -89,11 +90,24 @@ const normalizedSuffixCodes = suffixedStationIds.map((stationId) =>
   stationId.trim().toUpperCase(),
 );
 
+const requestedStyles = process.argv.slice(2);
+for (const name of requestedStyles) {
+  if (!styles.includes(name as StyleId)) throw new Error(`Unknown layout style: ${name}`);
+}
+const selectedStyles = requestedStyles.length ? styles.filter(style => requestedStyles.includes(style)) : styles;
 let renderCount = 0;
-for (const style of styles) {
+for (const style of selectedStyles) {
   const layout = computeLayout(graph, style, {
     moscowRings: rings,
   });
+
+  for (const route of buildRenderedRoutePaths(graph, layout)) {
+    const path = graph.lines.find(line => line.id === route.lineId)!.paths[route.pathIndex];
+    const baseline = sampledSelfCrossings(path.map(id => layout.positions[id]));
+    const rendered = sampledSelfCrossings(route.samples);
+    if (rendered > baseline) throw new Error(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
+    if (style === 'moscow' && rings.length && !buildRenderedRoutePaths(graph, layout).some(p => p.arcCount > 0)) throw new Error('Moscow has no rendered circular route arcs');
+  }
 
   for (const stationStyle of stationStyles) {
     const markup = renderToStaticMarkup(
@@ -167,7 +181,7 @@ for (const style of styles) {
 
     writeFileSync(
       `qa-artifacts/${style}--stations-${stationStyle}.svg`,
-      '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
+      '<?xml version="1.0" encoding="UTF-8"?>\n' + markup.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '),
     );
     renderCount += 1;
   }

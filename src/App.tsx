@@ -31,8 +31,8 @@ const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'geographic', label: 'Geographic', note: '真實相對位置基準 / north-up' },
   { id: 'taipei', label: 'Taipei 45°', note: '45° 折衷：地理優先、走廊整線' },
   { id: 'london', label: 'London 45°', note: '45° 拓撲：中心放大、等距與轉乘優先' },
-  { id: 'moscow', label: 'Moscow Ring', note: '獨立正圓環線 + 平滑放射 / 切向接入' },
-  { id: 'concentric', label: 'Concentric', note: '真正 radial shells：同心圓分層與角度避碰' },
+  { id: 'moscow', label: 'Moscow Ring', note: '獨立正圓環線 + 固定環站的平滑走廊' },
+  { id: 'concentric', label: 'Concentric', note: '同心圓分層引導：兼顧角度避碰與拓樸' },
   { id: 'hex', label: 'Hex 60°', note: '60° 三軸網格：路徑整線、抑制 zig-zag' },
 ];
 
@@ -483,7 +483,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>V0.17 Osaka 車站風格 + station suffix 優化 + Moscow corridor cleanup</span>
+        <span>Station-anchored curves · independent circular rings · topology QA</span>
         <span>React · TypeScript · SVG · topology first</span>
       </footer>
     </div>

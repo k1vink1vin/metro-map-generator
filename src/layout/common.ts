@@ -1139,6 +1139,7 @@ export function adoptTopologySafeGeometry(
 
 
 export interface SafeZigzagCollapseOptions {
+  fixedNodes?: ReadonlySet<string>;
   angleStep: number;
   passes: number;
   minimumTurnDegrees?: number;
@@ -1281,6 +1282,7 @@ export function collapseRouteZigzagsSafely(
           const ids = path.slice(index, index + 4);
           const [aId, bId, cId, dId] = ids;
           if (new Set(ids).size < 4) continue;
+          if (options.fixedNodes?.has(bId) || options.fixedNodes?.has(cId)) continue;
 
           const beforePenalty = fourPointZigzagPenalty(
             positions[aId],
