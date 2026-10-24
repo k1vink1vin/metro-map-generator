@@ -1,12 +1,12 @@
 import type { GraphModel, Point } from '../types';
 import {
-  adoptTopologySafeGeometry,
   collapseRouteZigzagsSafely,
   enforceCleanRouteTopology,
   inflateCentralArea,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
+  routeTopologySectionsSafely,
   separateNodesSafely,
   schematizeOnAngularGrid,
 } from './common';
@@ -82,36 +82,26 @@ export function layoutTaipei(
     24,
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
-    angleStep: 45,
-    passes: 5,
-    minimumTurnDegrees: 24,
-    minimumNodeDistance: 29,
-    maxShift: 30,
-    structuralMaxShift: 12,
-  });
-
-  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
-    passes: 7,
-    thresholdDegrees: 84,
-    minimumNodeDistance: 29,
-    maxShift: 32,
-    structuralMaxShift: 18,
-  });
-
-  const topologySafe = adoptTopologySafeGeometry(
+  const sectionRouted = routeTopologySectionsSafely(
     graph,
     topologyReference,
-    relaxed,
+    corridors,
+    geographic,
     {
-      passes: 5,
+      angleStep: 45,
+      passes: 8,
+      equalSpacingWeight: 0.68,
       minimumNodeDistance: 29,
+      maximumShift: 96,
+      minimumTurnDegrees: 22,
+      maxShapeAnchors: 4,
+      shapeTolerance: 8,
     },
   );
 
   return enforceCleanRouteTopology(
     graph,
-    topologySafe,
+    sectionRouted,
     topologyReference,
   );
 }

@@ -1,5 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
+import { separateNodesSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -111,7 +112,7 @@ function passengerCanvasScale(
   const base = Math.max(1, Math.max(nodeFactor, edgeFactor)) * 1.18;
   const styleMultiplier: Record<StyleId, number> = {
     geographic: 1.05,
-    taipei: 1.08,
+    taipei: 2.1,
     london: 1.12,
     moscow: 1.25,
     concentric: 1.08,
@@ -250,6 +251,7 @@ export function finalizeLayoutPositions(
   // generic pair-separation repair is not topology-aware and can deform
   // those circles, so Moscow relies on its own ring spacing/deformation pass.
   const topologySensitiveStyle =
+    style === 'taipei' ||
     style === 'moscow' ||
     style === 'london' ||
     style === 'hex';
@@ -257,7 +259,14 @@ export function finalizeLayoutPositions(
     topologySensitiveStyle
       ? { positions: completed.positions, separatedNodePairs: 0 }
       : separateOverlappingNodes(graph, completed.positions);
-  const positions = fitToCanvas(graph, style, separated.positions);
+  const fitted = fitToCanvas(graph, style, separated.positions);
+  // Taipei's section router is solved in schematic coordinates. Do not
+  // disturb that geometry before fitting; after fitting, only the genuinely
+  // sub-28px pairs need a tiny topology-safe separation.
+  const positions =
+    style === 'taipei'
+      ? separateNodesSafely(graph, fitted, 29, 6)
+      : fitted;
   const validated = validateEveryRouteIsDrawable(graph, positions);
 
   return {

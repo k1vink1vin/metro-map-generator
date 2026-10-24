@@ -1211,6 +1211,44 @@ function candidateSpacingIsSafe(
   return true;
 }
 
+function minimumCandidateSpacing(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  candidateIds: string[],
+  candidates: Record<string, Point>,
+): { a: string; b: string; distance: number } {
+  const moving = new Set(candidateIds);
+  let best = {
+    a: '',
+    b: '',
+    distance: Number.POSITIVE_INFINITY,
+  };
+
+  for (let index = 0; index < candidateIds.length; index += 1) {
+    const id = candidateIds[index];
+    const point = candidates[id];
+
+    for (let otherIndex = index + 1; otherIndex < candidateIds.length; otherIndex += 1) {
+      const otherId = candidateIds[otherIndex];
+      const value = distance(point, candidates[otherId]);
+      if (value < best.distance) {
+        best = { a: id, b: otherId, distance: value };
+      }
+    }
+
+    for (const other of graph.nodes) {
+      if (moving.has(other.id)) continue;
+      const value = distance(point, positions[other.id]);
+      if (value < best.distance) {
+        best = { a: id, b: other.id, distance: value };
+      }
+    }
+  }
+
+  return best;
+}
+
+
 /**
  * Removes short alternating S-bends without changing route topology.
  *
@@ -1474,6 +1512,463 @@ function pathExternalCrossings(
   }
   return count;
 }
+
+export interface TopologySectionRoutingOptions {
+  angleStep: number;
+  passes?: number;
+  equalSpacingWeight?: number;
+  minimumNodeDistance?: number;
+  maximumShift?: number;
+  minimumTurnDegrees?: number;
+  maxShapeAnchors?: number;
+  shapeTolerance?: number;
+  diagnostics?: boolean;
+}
+
+function sectionTurnCost(
+  path: string[],
+  positions: Record<string, Point>,
+  startIndex: number,
+  endIndex: number,
+  minimumTurnDegrees: number,
+): number {
+  const threshold = (minimumTurnDegrees * Math.PI) / 180;
+  let significantTurns = 0;
+  let totalTurn = 0;
+
+  const first = Math.max(1, startIndex);
+  const last = Math.min(path.length - 2, endIndex);
+
+  for (let index = first; index <= last; index += 1) {
+    const turn = Math.abs(
+      signedHeadingChange(
+        positions[path[index - 1]],
+        positions[path[index]],
+        positions[path[index + 1]],
+      ),
+    );
+    if (turn < threshold) continue;
+    significantTurns += 1;
+    totalTurn += turn;
+  }
+
+  return significantTurns * Math.PI * 2 + totalTurn;
+}
+
+function sectionAxisError(
+  ids: string[],
+  positions: Record<string, Point>,
+  angleStep: number,
+): number {
+  if (ids.length < 2) return 0;
+  let total = 0;
+  for (let index = 0; index < ids.length - 1; index += 1) {
+    total += angularDeviationDegrees(
+      positions[ids[index]],
+      positions[ids[index + 1]],
+      angleStep,
+    );
+  }
+  return total / Math.max(1, ids.length - 1);
+}
+
+function pointToSegmentDistance(
+  point: Point,
+  start: Point,
+  end: Point,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 1e-9) return distance(point, start);
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+        lengthSquared,
+    ),
+  );
+  return Math.hypot(
+    point.x - (start.x + dx * t),
+    point.y - (start.y + dy * t),
+  );
+}
+
+function majorShapeAnchorIndices(
+  ids: string[],
+  reference: Record<string, Point>,
+  maxAnchors: number,
+  tolerance: number,
+): number[] {
+  if (ids.length <= 2 || maxAnchors <= 0) {
+    return [0, ids.length - 1];
+  }
+
+  const anchors = [0, ids.length - 1];
+
+  for (let iteration = 0; iteration < maxAnchors; iteration += 1) {
+    anchors.sort((a, b) => a - b);
+    let bestIndex = -1;
+    let bestDeviation = tolerance;
+
+    for (let segment = 0; segment < anchors.length - 1; segment += 1) {
+      const from = anchors[segment];
+      const to = anchors[segment + 1];
+      if (to - from < 2) continue;
+
+      const start = reference[ids[from]];
+      const end = reference[ids[to]];
+
+      for (let index = from + 1; index < to; index += 1) {
+        const deviation = pointToSegmentDistance(
+          reference[ids[index]],
+          start,
+          end,
+        );
+        if (deviation > bestDeviation) {
+          bestDeviation = deviation;
+          bestIndex = index;
+        }
+      }
+    }
+
+    if (bestIndex < 0) break;
+    anchors.push(bestIndex);
+  }
+
+  return [...new Set(anchors)].sort((a, b) => a - b);
+}
+
+
+/**
+ * Topology-section router for schematic maps.
+ *
+ * A section is the complete run between true network anchors: line endpoints,
+ * transfer complexes and branch/junction nodes. Geographic micro-bends are
+ * deliberately NOT promoted to anchors. Ordinary stations inside a section
+ * are redistributed along one endpoint-anchored angular polyline with at most
+ * one internal bend.
+ *
+ * The section move is atomic. It is accepted only when:
+ * - the whole network remains free of route self-crossings;
+ * - crossings between this route and the rest of the network do not increase;
+ * - minimum station spacing remains safe;
+ * - the section uses fewer/significantly gentler bends, or keeps bend cost
+ *   while improving angular-grid alignment.
+ *
+ * This is intentionally different from edge-by-edge snapping: a run of ten
+ * stations is solved as one visual corridor rather than ten independent
+ * vectors, which prevents the characteristic left-right-left saw-tooth.
+ */
+export function routeTopologySectionsSafely(
+  graph: GraphModel,
+  cleanBase: Record<string, Point>,
+  guide: Record<string, Point>,
+  geographicReference: Record<string, Point>,
+  options: TopologySectionRoutingOptions,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(cleanBase).map(([id, point]) => [id, { ...point }]),
+  );
+
+  if (totalRouteSelfCrossings(graph, positions) !== 0) {
+    return positions;
+  }
+
+  const passes = options.passes ?? 4;
+  const equalSpacingWeight = options.equalSpacingWeight ?? 0.64;
+  const minimumNodeDistance = options.minimumNodeDistance ?? 29;
+  const maximumShift = options.maximumShift ?? 104;
+  const minimumTurnDegrees = options.minimumTurnDegrees ?? 22;
+  const maxShapeAnchors = options.maxShapeAnchors ?? 2;
+  const shapeTolerance = options.shapeTolerance ?? 46;
+  const diagnostics = {
+    sections: 0,
+    shapeAnchors: 0,
+    accepted: 0,
+    shiftRejected: 0,
+    spacingRejected: 0,
+    topologyRejected: 0,
+    crossingRejected: 0,
+    improvementRejected: 0,
+    spacingSamples: [] as Array<{
+      line: string;
+      from: string;
+      to: string;
+      a: string;
+      b: string;
+      distance: number;
+    }>,
+  };
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 3) continue;
+
+        // Only true topology anchors split a route section. Geographic bends
+        // are intentionally ignored here.
+        const anchorIndices = new Set<number>([0, path.length - 1]);
+        path.forEach((nodeId, index) => {
+          if (structuralNode(graph, nodeId)) {
+            anchorIndices.add(index);
+          }
+        });
+        const anchors = [...anchorIndices].sort((a, b) => a - b);
+
+        for (let anchor = 0; anchor < anchors.length - 1; anchor += 1) {
+          const startIndex = anchors[anchor];
+          const endIndex = anchors[anchor + 1];
+          if (endIndex - startIndex < 2) continue;
+
+          const ids = path.slice(startIndex, endIndex + 1);
+          diagnostics.sections += 1;
+
+          // Keep at most a couple of major shape controls inside this topology
+          // section. They preserve the safe lane around dense interchanges,
+          // while all minor geographic bends remain free to collapse.
+          const localShapeAnchors = majorShapeAnchorIndices(
+            ids,
+            positions,
+            maxShapeAnchors,
+            shapeTolerance,
+          );
+          diagnostics.shapeAnchors += Math.max(
+            0,
+            localShapeAnchors.length - 2,
+          );
+
+          const fixedLocalIndices = new Set(localShapeAnchors);
+          const movingIds = ids.filter(
+            (_, index) =>
+              index > 0 &&
+              index < ids.length - 1 &&
+              !fixedLocalIndices.has(index),
+          );
+          if (!movingIds.length) continue;
+
+          const targets: Record<string, Point> = {};
+
+          for (
+            let shape = 0;
+            shape < localShapeAnchors.length - 1;
+            shape += 1
+          ) {
+            const localStart = localShapeAnchors[shape];
+            const localEnd = localShapeAnchors[shape + 1];
+            if (localEnd - localStart < 2) continue;
+
+            const subIds = ids.slice(localStart, localEnd + 1);
+            const subMovingIds = subIds.slice(1, -1);
+            const start = positions[subIds[0]];
+            const end = positions[subIds[subIds.length - 1]];
+            const references = subMovingIds.map(
+              (id) => guide[id] ?? geographicReference[id],
+            );
+            const corridor = angularTwoSegmentPath(
+              start,
+              end,
+              options.angleStep,
+              references,
+              'anchored',
+            );
+            const fractions = cumulativeFractions(
+              subIds,
+              geographicReference,
+              equalSpacingWeight,
+            );
+
+            subMovingIds.forEach((nodeId, index) => {
+              targets[nodeId] = samplePolyline(
+                corridor,
+                fractions[index],
+              );
+            });
+          }
+
+          const beforeZigzags = pathAlternatingZigzags(
+            path,
+            positions,
+            minimumTurnDegrees,
+          );
+          const beforeTurnCost = sectionTurnCost(
+            path,
+            positions,
+            startIndex,
+            endIndex,
+            minimumTurnDegrees,
+          );
+          const beforeAxis = sectionAxisError(
+            ids,
+            positions,
+            options.angleStep,
+          );
+          const beforeExternal = pathExternalCrossings(
+            graph,
+            path,
+            positions,
+          );
+
+          const originals = Object.fromEntries(
+            movingIds.map((id) => [id, { ...positions[id] }]),
+          );
+          const baselineSpacing = minimumCandidateSpacing(
+            graph,
+            positions,
+            movingIds,
+            originals,
+          ).distance;
+          const requiredSpacing = Math.min(
+            minimumNodeDistance,
+            baselineSpacing,
+          );
+
+          let accepted = false;
+          for (const blend of [1, 0.86, 0.72, 0.58, 0.44, 0.32, 0.22, 0.14, 0.08, 0.04, 0.02]) {
+            const candidates = Object.fromEntries(
+              movingIds.map((id) => [
+                id,
+                {
+                  x:
+                    originals[id].x * (1 - blend) +
+                    targets[id].x * blend,
+                  y:
+                    originals[id].y * (1 - blend) +
+                    targets[id].y * blend,
+                },
+              ]),
+            );
+
+            const shiftSafe = movingIds.every(
+              (id) =>
+                distance(originals[id], candidates[id]) <=
+                maximumShift,
+            );
+            if (!shiftSafe) {
+              diagnostics.shiftRejected += 1;
+              continue;
+            }
+
+            const candidateSpacing = minimumCandidateSpacing(
+              graph,
+              positions,
+              movingIds,
+              candidates,
+            );
+            if (
+              candidateSpacing.distance + 0.5 <
+              requiredSpacing
+            ) {
+              diagnostics.spacingRejected += 1;
+              if (
+                options.diagnostics &&
+                blend === 0.04 &&
+                diagnostics.spacingSamples.length < 12
+              ) {
+                diagnostics.spacingSamples.push({
+                  line: line.id,
+                  from: graph.nodeById.get(ids[0])?.name ?? ids[0],
+                  to:
+                    graph.nodeById.get(ids[ids.length - 1])?.name ??
+                    ids[ids.length - 1],
+                  a:
+                    graph.nodeById.get(candidateSpacing.a)?.name ??
+                    candidateSpacing.a,
+                  b:
+                    graph.nodeById.get(candidateSpacing.b)?.name ??
+                    candidateSpacing.b,
+                  distance: Number(
+                    candidateSpacing.distance.toFixed(1),
+                  ),
+                });
+              }
+              continue;
+            }
+
+            for (const id of movingIds) {
+              positions[id] = candidates[id];
+            }
+
+            const topologySafe =
+              totalRouteSelfCrossings(graph, positions) === 0;
+            const afterExternal = topologySafe
+              ? pathExternalCrossings(graph, path, positions)
+              : Number.POSITIVE_INFINITY;
+            const afterZigzags = topologySafe
+              ? pathAlternatingZigzags(
+                  path,
+                  positions,
+                  minimumTurnDegrees,
+                )
+              : Number.POSITIVE_INFINITY;
+            const afterTurnCost = topologySafe
+              ? sectionTurnCost(
+                  path,
+                  positions,
+                  startIndex,
+                  endIndex,
+                  minimumTurnDegrees,
+                )
+              : Number.POSITIVE_INFINITY;
+            const afterAxis = topologySafe
+              ? sectionAxisError(ids, positions, options.angleStep)
+              : Number.POSITIVE_INFINITY;
+
+            const bendsImproved =
+              afterZigzags < beforeZigzags ||
+              afterTurnCost < beforeTurnCost - 0.08;
+            const gridImprovedWithoutBendRegression =
+              afterZigzags === beforeZigzags &&
+              afterTurnCost <= beforeTurnCost + 1e-6 &&
+              afterAxis + 0.75 < beforeAxis;
+
+            if (
+              topologySafe &&
+              afterExternal <= beforeExternal &&
+              (bendsImproved || gridImprovedWithoutBendRegression)
+            ) {
+              accepted = true;
+              changed = true;
+              diagnostics.accepted += 1;
+              break;
+            }
+
+            if (!topologySafe) {
+              diagnostics.topologyRejected += 1;
+            } else if (afterExternal > beforeExternal) {
+              diagnostics.crossingRejected += 1;
+            } else {
+              diagnostics.improvementRejected += 1;
+            }
+
+            for (const id of movingIds) {
+              positions[id] = originals[id];
+            }
+          }
+
+          if (!accepted) {
+            for (const id of movingIds) {
+              positions[id] = originals[id];
+            }
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  if (options.diagnostics) {
+    console.log('[section-router]', diagnostics);
+  }
+
+  return positions;
+}
+
 
 /**
  * Repairs route self-crossings introduced by a schematic transform.
