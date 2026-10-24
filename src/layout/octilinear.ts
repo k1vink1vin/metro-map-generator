@@ -100,26 +100,9 @@ export function layoutTaipei(
     },
   );
 
-  const dezigzagged = collapseRouteZigzagsSafely(graph, sectionRouted, {
-    angleStep: 45,
-    passes: 4,
-    minimumTurnDegrees: 22,
-    minimumNodeDistance: 29,
-    maxShift: 28,
-    structuralMaxShift: 10,
-  });
-
-  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
-    passes: 5,
-    thresholdDegrees: 88,
-    minimumNodeDistance: 29,
-    maxShift: 24,
-    structuralMaxShift: 10,
-  });
-
   return enforceCleanRouteTopology(
     graph,
-    relaxed,
+    sectionRouted,
     topologyReference,
   );
 }
