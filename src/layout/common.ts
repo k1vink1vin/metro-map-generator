@@ -1482,6 +1482,7 @@ export interface TopologySectionRoutingOptions {
   minimumNodeDistance?: number;
   maximumShift?: number;
   minimumTurnDegrees?: number;
+  diagnostics?: boolean;
 }
 
 function sectionTurnCost(
@@ -1571,6 +1572,15 @@ export function routeTopologySectionsSafely(
   const minimumNodeDistance = options.minimumNodeDistance ?? 29;
   const maximumShift = options.maximumShift ?? 104;
   const minimumTurnDegrees = options.minimumTurnDegrees ?? 22;
+  const diagnostics = {
+    sections: 0,
+    accepted: 0,
+    shiftRejected: 0,
+    spacingRejected: 0,
+    topologyRejected: 0,
+    crossingRejected: 0,
+    improvementRejected: 0,
+  };
 
   for (let pass = 0; pass < passes; pass += 1) {
     let changed = false;
@@ -1597,6 +1607,7 @@ export function routeTopologySectionsSafely(
           const ids = path.slice(startIndex, endIndex + 1);
           const movingIds = ids.slice(1, -1);
           if (!movingIds.length) continue;
+          diagnostics.sections += 1;
 
           const start = positions[ids[0]];
           const end = positions[ids[ids.length - 1]];
@@ -1671,7 +1682,10 @@ export function routeTopologySectionsSafely(
                 distance(originals[id], candidates[id]) <=
                 maximumShift,
             );
-            if (!shiftSafe) continue;
+            if (!shiftSafe) {
+              diagnostics.shiftRejected += 1;
+              continue;
+            }
 
             if (
               !candidateSpacingIsSafe(
@@ -1682,6 +1696,7 @@ export function routeTopologySectionsSafely(
                 minimumNodeDistance,
               )
             ) {
+              diagnostics.spacingRejected += 1;
               continue;
             }
 
@@ -1729,7 +1744,16 @@ export function routeTopologySectionsSafely(
             ) {
               accepted = true;
               changed = true;
+              diagnostics.accepted += 1;
               break;
+            }
+
+            if (!topologySafe) {
+              diagnostics.topologyRejected += 1;
+            } else if (afterExternal > beforeExternal) {
+              diagnostics.crossingRejected += 1;
+            } else {
+              diagnostics.improvementRejected += 1;
             }
 
             for (const id of movingIds) {
@@ -1747,6 +1771,10 @@ export function routeTopologySectionsSafely(
     }
 
     if (!changed) break;
+  }
+
+  if (options.diagnostics) {
+    console.log('[section-router]', diagnostics);
   }
 
   return positions;
