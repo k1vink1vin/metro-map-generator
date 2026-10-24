@@ -36,11 +36,11 @@ export function layoutTaipei(
     geographic,
     {
       angleStep: 45,
-      passes: 4,
-      runBlend: 0.46,
-      geographyTether: 0.22,
-      equalSpacingWeight: 0.46,
-      bendAnchorDegrees: 38,
+      passes: 5,
+      runBlend: 0.64,
+      geographyTether: 0.12,
+      equalSpacingWeight: 0.58,
+      bendAnchorDegrees: 58,
     },
   );
 
