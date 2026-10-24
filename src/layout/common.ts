@@ -821,6 +821,222 @@ export function relaxPathKinksSafely(
 }
 
 
+export interface SafeZigzagCollapseOptions {
+  angleStep: number;
+  passes: number;
+  minimumTurnDegrees?: number;
+  minimumNodeDistance: number;
+  maxShift: number;
+  structuralMaxShift: number;
+}
+
+function angularDeviationDegrees(
+  a: Point,
+  b: Point,
+  angleStep: number,
+): number {
+  const step = (angleStep * Math.PI) / 180;
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const snapped = Math.round(angle / step) * step;
+  let diff = Math.abs(angle - snapped);
+  while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+  return (diff * 180) / Math.PI;
+}
+
+function fourPointZigzagPenalty(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+  minimumTurn: number,
+): number {
+  const first = signedHeadingChange(a, b, c);
+  const second = signedHeadingChange(b, c, d);
+  if (
+    Math.abs(first) < minimumTurn ||
+    Math.abs(second) < minimumTurn ||
+    Math.sign(first) === Math.sign(second)
+  ) {
+    return 0;
+  }
+
+  return Math.abs(first) + Math.abs(second);
+}
+
+function candidateSpacingIsSafe(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  candidateIds: string[],
+  candidates: Record<string, Point>,
+  minimumDistance: number,
+): boolean {
+  const moving = new Set(candidateIds);
+
+  for (let index = 0; index < candidateIds.length; index += 1) {
+    const id = candidateIds[index];
+    const point = candidates[id];
+
+    for (let otherIndex = index + 1; otherIndex < candidateIds.length; otherIndex += 1) {
+      const otherId = candidateIds[otherIndex];
+      if (distance(point, candidates[otherId]) < minimumDistance) {
+        return false;
+      }
+    }
+
+    for (const other of graph.nodes) {
+      if (moving.has(other.id)) continue;
+      if (distance(point, positions[other.id]) < minimumDistance) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Removes short alternating S-bends without changing route topology.
+ *
+ * The old solver only attacked very sharp single corners (> ~80°), so a
+ * sequence of +45° / -45° bends could survive all the way to rendering and
+ * appear as a saw-tooth. This pass works on four-station windows, replaces
+ * the two middle points with one angular-grid corridor, and accepts the move
+ * only when the zig-zag penalty falls while spacing, self-crossings and
+ * external crossings do not regress.
+ */
+export function collapseRouteZigzagsSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  options: SafeZigzagCollapseOptions,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const minimumTurn =
+    ((options.minimumTurnDegrees ?? 24) * Math.PI) / 180;
+
+  for (let pass = 0; pass < options.passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
+
+        for (let index = 0; index < path.length - 3; index += 1) {
+          const ids = path.slice(index, index + 4);
+          const [aId, bId, cId, dId] = ids;
+          if (new Set(ids).size < 4) continue;
+
+          const beforePenalty = fourPointZigzagPenalty(
+            positions[aId],
+            positions[bId],
+            positions[cId],
+            positions[dId],
+            minimumTurn,
+          );
+          if (beforePenalty <= 1e-9) continue;
+
+          const corridor = angularTwoSegmentPath(
+            positions[aId],
+            positions[dId],
+            options.angleStep,
+            [positions[bId], positions[cId]],
+          );
+          const fractions = cumulativeFractions(ids, positions, 0.68);
+          if (fractions.length !== 2) continue;
+
+          const targets = {
+            [bId]: samplePolyline(corridor, fractions[0]),
+            [cId]: samplePolyline(corridor, fractions[1]),
+          };
+
+          const movingIds = [bId, cId];
+          let withinShiftBudget = true;
+          for (const nodeId of movingIds) {
+            const limit = structuralNode(graph, nodeId)
+              ? options.structuralMaxShift
+              : options.maxShift;
+            if (distance(positions[nodeId], targets[nodeId]) > limit) {
+              withinShiftBudget = false;
+              break;
+            }
+          }
+          if (!withinShiftBudget) continue;
+
+          if (
+            !candidateSpacingIsSafe(
+              graph,
+              positions,
+              movingIds,
+              targets,
+              options.minimumNodeDistance,
+            )
+          ) {
+            continue;
+          }
+
+          const affected = new Set(movingIds);
+          const beforeSelf = nodePathSelfCrossingCount(
+            graph,
+            affected,
+            positions,
+          );
+          const beforeCrossing =
+            incidentCrossingCount(graph, bId, positions) +
+            incidentCrossingCount(graph, cId, positions);
+          const beforeAxis =
+            angularDeviationDegrees(positions[aId], positions[bId], options.angleStep) +
+            angularDeviationDegrees(positions[bId], positions[cId], options.angleStep) +
+            angularDeviationDegrees(positions[cId], positions[dId], options.angleStep);
+
+          const oldB = positions[bId];
+          const oldC = positions[cId];
+          positions[bId] = targets[bId];
+          positions[cId] = targets[cId];
+
+          const afterPenalty = fourPointZigzagPenalty(
+            positions[aId],
+            positions[bId],
+            positions[cId],
+            positions[dId],
+            minimumTurn,
+          );
+          const afterSelf = nodePathSelfCrossingCount(
+            graph,
+            affected,
+            positions,
+          );
+          const afterCrossing =
+            incidentCrossingCount(graph, bId, positions) +
+            incidentCrossingCount(graph, cId, positions);
+          const afterAxis =
+            angularDeviationDegrees(positions[aId], positions[bId], options.angleStep) +
+            angularDeviationDegrees(positions[bId], positions[cId], options.angleStep) +
+            angularDeviationDegrees(positions[cId], positions[dId], options.angleStep);
+
+          const accepted =
+            afterPenalty <= beforePenalty * 0.72 &&
+            afterSelf <= beforeSelf &&
+            afterCrossing <= beforeCrossing &&
+            afterAxis <= beforeAxis + 2.5;
+
+          if (accepted) {
+            changed = true;
+          } else {
+            positions[bId] = oldB;
+            positions[cId] = oldC;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
 function pathSelfCrossings(
   path: string[],
   positions: Record<string, Point>,
