@@ -1,5 +1,8 @@
 import type { GraphModel, Point } from '../types';
 import {
+  adoptTopologySafeGeometry,
+  collapseRouteZigzagsSafely,
+  enforceCleanRouteTopology,
   inflateCentralArea,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
@@ -33,15 +36,62 @@ export function layoutTaipei(
     geographic,
     {
       angleStep: 45,
+      passes: 5,
+      runBlend: 0.64,
+      geographyTether: 0.12,
+      equalSpacingWeight: 0.58,
+      bendAnchorDegrees: 58,
+    },
+  );
+
+  // Geographic input is not guaranteed to be topologically drawable:
+  // real-world polylines can fold over themselves after transfer grouping.
+  // The previous corridor fallback happened to provide a clean topological
+  // scaffold, even though it produced visible endpoint hooks. Rebuild that
+  // scaffold only as an invisible reference; final coordinates continue to
+  // use the endpoint-anchored corridor above.
+  const legacyTopologyCorridors = regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 45,
       passes: 4,
       runBlend: 0.46,
       geographyTether: 0.22,
       equalSpacingWeight: 0.46,
       bendAnchorDegrees: 38,
+      endpointFallback: 'legacy',
     },
   );
+  const legacyTopologyRelaxed = relaxPathKinksSafely(
+    graph,
+    legacyTopologyCorridors,
+    {
+      passes: 7,
+      thresholdDegrees: 84,
+      minimumNodeDistance: 29,
+      maxShift: 32,
+      structuralMaxShift: 18,
+    },
+  );
+  const topologyReference = repairIntroducedPathSelfCrossings(
+    graph,
+    legacyTopologyRelaxed,
+    geographic,
+    24,
+  );
 
-  const relaxed = relaxPathKinksSafely(graph, corridors, {
+  const dezigzagged = collapseRouteZigzagsSafely(graph, corridors, {
+    angleStep: 45,
+    passes: 5,
+    minimumTurnDegrees: 24,
+    minimumNodeDistance: 29,
+    maxShift: 30,
+    structuralMaxShift: 12,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 7,
     thresholdDegrees: 84,
     minimumNodeDistance: 29,
@@ -49,11 +99,20 @@ export function layoutTaipei(
     structuralMaxShift: 18,
   });
 
-  return repairIntroducedPathSelfCrossings(
+  const topologySafe = adoptTopologySafeGeometry(
     graph,
+    topologyReference,
     relaxed,
-    geographic,
-    24,
+    {
+      passes: 5,
+      minimumNodeDistance: 29,
+    },
+  );
+
+  return enforceCleanRouteTopology(
+    graph,
+    topologySafe,
+    topologyReference,
   );
 }
 
@@ -95,7 +154,24 @@ export function layoutLondon(
     },
   );
 
-  const relaxed = relaxPathKinksSafely(graph, corridors, {
+  const topologyReference = layoutTaipei(graph, geographic);
+  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+    graph,
+    corridors,
+    topologyReference,
+    24,
+  );
+
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
+    angleStep: 45,
+    passes: 6,
+    minimumTurnDegrees: 24,
+    minimumNodeDistance: 29,
+    maxShift: 36,
+    structuralMaxShift: 16,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 9,
     thresholdDegrees: 78,
     minimumNodeDistance: 29,
@@ -103,7 +179,6 @@ export function layoutLondon(
     structuralMaxShift: 22,
   });
 
-  const topologyReference = layoutTaipei(graph, geographic);
   const untangled = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,

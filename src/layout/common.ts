@@ -100,6 +100,7 @@ export interface RouteAwareOptions {
   geographyTether: number;
   equalSpacingWeight: number;
   bendAnchorDegrees?: number;
+  endpointFallback?: 'anchored' | 'legacy';
 }
 
 function cross(a: Point, b: Point): number {
@@ -159,6 +160,7 @@ function angularTwoSegmentPath(
   end: Point,
   angleStep: number,
   references: Point[],
+  endpointFallback: 'anchored' | 'legacy' = 'anchored',
 ): Point[] {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -184,16 +186,26 @@ function angularTwoSegmentPath(
   const upperLength = cross(lower, delta) / determinant;
 
   if (lowerLength < -1e-6 || upperLength < -1e-6) {
-    const snapped = snappedVector(start, end, angleStep, length);
-    return [start, add(start, snapped)];
+    if (endpointFallback === 'legacy') {
+      const snapped = snappedVector(start, end, angleStep, length);
+      return [start, add(start, snapped)];
+    }
+    // Never return a visible corridor that misses its real endpoint.
+    return [start, end];
   }
 
   if (
     lowerLength < length * 0.08 ||
     upperLength < length * 0.08
   ) {
-    const snapped = snappedVector(start, end, angleStep, length);
-    return [start, add(start, snapped)];
+    if (endpointFallback === 'legacy') {
+      const snapped = snappedVector(start, end, angleStep, length);
+      return [start, add(start, snapped)];
+    }
+    // When one component is tiny the direct segment is already close to an
+    // allowed axis. Using the true endpoint distributes that small correction
+    // instead of concentrating it into a terminal hook.
+    return [start, end];
   }
 
   const bendA = add(start, scale(lower, lowerLength));
@@ -317,18 +329,39 @@ export function regularizeRouteCorridors(
             end,
             options.angleStep,
             references,
+            options.endpointFallback ?? 'anchored',
           );
           const fractions = cumulativeFractions(
             ids,
             geographicReference,
             options.equalSpacingWeight,
           );
+          const proposed = ids.slice(1, -1).map((nodeId, index) => ({
+            nodeId,
+            point: samplePolyline(corridor, fractions[index]),
+          }));
 
-          ids.slice(1, -1).forEach((nodeId, index) => {
-            predictions
-              .get(nodeId)
-              ?.push(samplePolyline(corridor, fractions[index]));
-          });
+          // Corridor simplification is never allowed to fold a route over
+          // itself. Simulate this section before it contributes predictions;
+          // if the route would gain a self-crossing, keep the previous
+          // geometry for this section and let a later/smaller corridor handle
+          // the visual cleanup.
+          const beforeSelf = pathSelfCrossings(path, positions);
+          const candidate = Object.fromEntries(
+            Object.entries(positions).map(([id, point]) => [
+              id,
+              { ...point },
+            ]),
+          );
+          for (const { nodeId, point } of proposed) {
+            candidate[nodeId] = point;
+          }
+          const afterSelf = pathSelfCrossings(path, candidate);
+          if (afterSelf > beforeSelf) continue;
+
+          for (const { nodeId, point } of proposed) {
+            predictions.get(nodeId)?.push(point);
+          }
         }
       }
     }
@@ -814,6 +847,553 @@ export function relaxPathKinksSafely(
 }
 
 
+export interface TopologySafeAdoptionOptions {
+  passes?: number;
+  minimumNodeDistance?: number;
+}
+
+function nodeZigzagCount(
+  graph: GraphModel,
+  nodeId: string,
+  positions: Record<string, Point>,
+): number {
+  let total = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (!path.includes(nodeId)) continue;
+      total += pathAlternatingZigzags(path, positions);
+    }
+  }
+  return total;
+}
+
+/**
+ * Starts from a known-clean topology scaffold and adopts coordinates from a
+ * visually improved candidate one node at a time. A move is accepted only if
+ * route self-crossings remain zero, incident crossings do not increase,
+ * passenger spacing stays safe, and zig-zag quality for paths touching that
+ * station improves (or remains equal for a smaller geometric correction).
+ *
+ * This makes topology preservation constructive rather than relying on a
+ * destructive repair pass after the layout has already folded over itself.
+ */
+export function adoptTopologySafeGeometry(
+  graph: GraphModel,
+  cleanBase: Record<string, Point>,
+  proposed: Record<string, Point>,
+  options: TopologySafeAdoptionOptions = {},
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(cleanBase).map(([id, point]) => [id, { ...point }]),
+  );
+  const passes = options.passes ?? 4;
+  const minimumNodeDistance = options.minimumNodeDistance ?? 29;
+
+  if (totalRouteSelfCrossings(graph, positions) !== 0) {
+    return positions;
+  }
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    const ranked = graph.nodes
+      .map((node) => ({
+        id: node.id,
+        distance: distance(positions[node.id], proposed[node.id]),
+      }))
+      .filter((item) => item.distance > 0.25)
+      .sort((a, b) => b.distance - a.distance);
+
+    for (const item of ranked) {
+      const nodeId = item.id;
+      const original = { ...positions[nodeId] };
+      const target = proposed[nodeId];
+      if (!target) continue;
+
+      const beforeZigzags = nodeZigzagCount(graph, nodeId, positions);
+      const beforeCrossings = incidentCrossingCount(
+        graph,
+        nodeId,
+        positions,
+      );
+
+      let accepted: Point | undefined;
+      let acceptedZigzags = beforeZigzags;
+
+      for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22, 0.12]) {
+        const candidate = {
+          x: original.x * (1 - blend) + target.x * blend,
+          y: original.y * (1 - blend) + target.y * blend,
+        };
+
+        let spacingSafe = true;
+        for (const other of graph.nodes) {
+          if (other.id === nodeId) continue;
+          if (
+            distance(candidate, positions[other.id]) <
+            minimumNodeDistance
+          ) {
+            spacingSafe = false;
+            break;
+          }
+        }
+        if (!spacingSafe) continue;
+
+        positions[nodeId] = candidate;
+
+        if (totalRouteSelfCrossings(graph, positions) !== 0) {
+          positions[nodeId] = original;
+          continue;
+        }
+
+        const afterCrossings = incidentCrossingCount(
+          graph,
+          nodeId,
+          positions,
+        );
+        if (afterCrossings > beforeCrossings) {
+          positions[nodeId] = original;
+          continue;
+        }
+
+        const afterZigzags = nodeZigzagCount(
+          graph,
+          nodeId,
+          positions,
+        );
+
+        if (
+          afterZigzags < acceptedZigzags ||
+          (afterZigzags === acceptedZigzags &&
+            accepted === undefined &&
+            beforeZigzags === 0)
+        ) {
+          accepted = { ...candidate };
+          acceptedZigzags = afterZigzags;
+
+          if (afterZigzags < beforeZigzags) {
+            break;
+          }
+        }
+
+        positions[nodeId] = original;
+      }
+
+      positions[nodeId] = accepted ?? original;
+      if (
+        accepted &&
+        (accepted.x !== original.x || accepted.y !== original.y)
+      ) {
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  const affectedZigzags = (
+    nodeIds: Set<string>,
+    candidatePositions: Record<string, Point>,
+  ) => {
+    let total = 0;
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (!path.some((id) => nodeIds.has(id))) continue;
+        total += pathAlternatingZigzags(path, candidatePositions);
+      }
+    }
+    return total;
+  };
+
+  const affectedCrossings = (
+    nodeIds: Set<string>,
+    candidatePositions: Record<string, Point>,
+  ) =>
+    [...nodeIds].reduce(
+      (sum, nodeId) =>
+        sum + incidentCrossingCount(graph, nodeId, candidatePositions),
+      0,
+    );
+
+  // Some S-bends cannot be improved by moving one station at a time: both
+  // sides of the dogleg must move together. Adopt short contiguous windows
+  // atomically under the same hard topology constraints.
+  for (let pass = 0; pass < 3; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (const windowSize of [3, 2]) {
+          for (
+            let start = 1;
+            start + windowSize <= path.length - 1;
+            start += 1
+          ) {
+            const movingIds = path.slice(start, start + windowSize);
+            const movingSet = new Set(movingIds);
+            if (movingSet.size !== movingIds.length) continue;
+
+            const beforeZigzags = affectedZigzags(
+              movingSet,
+              positions,
+            );
+            if (beforeZigzags === 0) continue;
+            const beforeCrossings = affectedCrossings(
+              movingSet,
+              positions,
+            );
+
+            const originals = Object.fromEntries(
+              movingIds.map((id) => [id, { ...positions[id] }]),
+            );
+
+            let accepted = false;
+            for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22, 0.12]) {
+              const candidates = Object.fromEntries(
+                movingIds.map((id) => [
+                  id,
+                  {
+                    x: originals[id].x * (1 - blend) + proposed[id].x * blend,
+                    y: originals[id].y * (1 - blend) + proposed[id].y * blend,
+                  },
+                ]),
+              );
+
+              let spacingSafe = true;
+              for (let index = 0; index < movingIds.length; index += 1) {
+                const id = movingIds[index];
+                const point = candidates[id];
+
+                for (
+                  let otherIndex = index + 1;
+                  otherIndex < movingIds.length;
+                  otherIndex += 1
+                ) {
+                  if (
+                    distance(point, candidates[movingIds[otherIndex]]) <
+                    minimumNodeDistance
+                  ) {
+                    spacingSafe = false;
+                    break;
+                  }
+                }
+                if (!spacingSafe) break;
+
+                for (const other of graph.nodes) {
+                  if (movingSet.has(other.id)) continue;
+                  if (
+                    distance(point, positions[other.id]) <
+                    minimumNodeDistance
+                  ) {
+                    spacingSafe = false;
+                    break;
+                  }
+                }
+                if (!spacingSafe) break;
+              }
+              if (!spacingSafe) continue;
+
+              for (const id of movingIds) {
+                positions[id] = candidates[id];
+              }
+
+              const topologySafe =
+                totalRouteSelfCrossings(graph, positions) === 0;
+              const afterCrossings = topologySafe
+                ? affectedCrossings(movingSet, positions)
+                : Number.POSITIVE_INFINITY;
+              const afterZigzags = topologySafe
+                ? affectedZigzags(movingSet, positions)
+                : Number.POSITIVE_INFINITY;
+
+              if (
+                topologySafe &&
+                afterCrossings <= beforeCrossings &&
+                afterZigzags < beforeZigzags
+              ) {
+                accepted = true;
+                changed = true;
+                break;
+              }
+
+              for (const id of movingIds) {
+                positions[id] = originals[id];
+              }
+            }
+
+            if (!accepted) {
+              for (const id of movingIds) {
+                positions[id] = originals[id];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
+export interface SafeZigzagCollapseOptions {
+  angleStep: number;
+  passes: number;
+  minimumTurnDegrees?: number;
+  minimumNodeDistance: number;
+  maxShift: number;
+  structuralMaxShift: number;
+}
+
+function angularDeviationDegrees(
+  a: Point,
+  b: Point,
+  angleStep: number,
+): number {
+  const step = (angleStep * Math.PI) / 180;
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const snapped = Math.round(angle / step) * step;
+  let diff = Math.abs(angle - snapped);
+  while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+  return (diff * 180) / Math.PI;
+}
+
+function fourPointZigzagPenalty(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+  minimumTurn: number,
+): number {
+  const first = signedHeadingChange(a, b, c);
+  const second = signedHeadingChange(b, c, d);
+  if (
+    Math.abs(first) < minimumTurn ||
+    Math.abs(second) < minimumTurn ||
+    Math.sign(first) === Math.sign(second)
+  ) {
+    return 0;
+  }
+
+  return Math.abs(first) + Math.abs(second);
+}
+
+function candidateSpacingIsSafe(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  candidateIds: string[],
+  candidates: Record<string, Point>,
+  minimumDistance: number,
+): boolean {
+  const moving = new Set(candidateIds);
+
+  for (let index = 0; index < candidateIds.length; index += 1) {
+    const id = candidateIds[index];
+    const point = candidates[id];
+
+    for (let otherIndex = index + 1; otherIndex < candidateIds.length; otherIndex += 1) {
+      const otherId = candidateIds[otherIndex];
+      if (distance(point, candidates[otherId]) < minimumDistance) {
+        return false;
+      }
+    }
+
+    for (const other of graph.nodes) {
+      if (moving.has(other.id)) continue;
+      if (distance(point, positions[other.id]) < minimumDistance) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Removes short alternating S-bends without changing route topology.
+ *
+ * The old solver only attacked very sharp single corners (> ~80°), so a
+ * sequence of +45° / -45° bends could survive all the way to rendering and
+ * appear as a saw-tooth. This pass works on four-station windows, replaces
+ * the two middle points with one angular-grid corridor, and accepts the move
+ * only when the zig-zag penalty falls while spacing, self-crossings and
+ * external crossings do not regress.
+ */
+export function collapseRouteZigzagsSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  options: SafeZigzagCollapseOptions,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const minimumTurn =
+    ((options.minimumTurnDegrees ?? 24) * Math.PI) / 180;
+
+  for (let pass = 0; pass < options.passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
+
+        for (let index = 0; index < path.length - 3; index += 1) {
+          const ids = path.slice(index, index + 4);
+          const [aId, bId, cId, dId] = ids;
+          if (new Set(ids).size < 4) continue;
+
+          const beforePenalty = fourPointZigzagPenalty(
+            positions[aId],
+            positions[bId],
+            positions[cId],
+            positions[dId],
+            minimumTurn,
+          );
+          if (beforePenalty <= 1e-9) continue;
+
+          const corridor = angularTwoSegmentPath(
+            positions[aId],
+            positions[dId],
+            options.angleStep,
+            [positions[bId], positions[cId]],
+          );
+          const fractions = cumulativeFractions(ids, positions, 0.68);
+          if (fractions.length !== 2) continue;
+
+          const rawTargets = {
+            [bId]: samplePolyline(corridor, fractions[0]),
+            [cId]: samplePolyline(corridor, fractions[1]),
+          };
+
+          const movingIds = [bId, cId];
+          const targets: Record<string, Point> = {};
+          for (const nodeId of movingIds) {
+            const original = positions[nodeId];
+            const rawTarget = rawTargets[nodeId];
+            const limit = structuralNode(graph, nodeId)
+              ? options.structuralMaxShift
+              : options.maxShift;
+            const dx = rawTarget.x - original.x;
+            const dy = rawTarget.y - original.y;
+            const shift = Math.hypot(dx, dy);
+            const ratio =
+              shift <= limit || shift < 1e-9
+                ? 1
+                : limit / shift;
+            targets[nodeId] = {
+              x: original.x + dx * ratio,
+              y: original.y + dy * ratio,
+            };
+          }
+
+          if (
+            !candidateSpacingIsSafe(
+              graph,
+              positions,
+              movingIds,
+              targets,
+              options.minimumNodeDistance,
+            )
+          ) {
+            continue;
+          }
+
+          const affected = new Set(movingIds);
+          const beforeSelf = nodePathSelfCrossingCount(
+            graph,
+            affected,
+            positions,
+          );
+          const beforeCrossing =
+            incidentCrossingCount(graph, bId, positions) +
+            incidentCrossingCount(graph, cId, positions);
+          const beforeAxis =
+            angularDeviationDegrees(positions[aId], positions[bId], options.angleStep) +
+            angularDeviationDegrees(positions[bId], positions[cId], options.angleStep) +
+            angularDeviationDegrees(positions[cId], positions[dId], options.angleStep);
+
+          const oldB = positions[bId];
+          const oldC = positions[cId];
+          positions[bId] = targets[bId];
+          positions[cId] = targets[cId];
+
+          const afterPenalty = fourPointZigzagPenalty(
+            positions[aId],
+            positions[bId],
+            positions[cId],
+            positions[dId],
+            minimumTurn,
+          );
+          const afterSelf = nodePathSelfCrossingCount(
+            graph,
+            affected,
+            positions,
+          );
+          const afterCrossing =
+            incidentCrossingCount(graph, bId, positions) +
+            incidentCrossingCount(graph, cId, positions);
+          const afterAxis =
+            angularDeviationDegrees(positions[aId], positions[bId], options.angleStep) +
+            angularDeviationDegrees(positions[bId], positions[cId], options.angleStep) +
+            angularDeviationDegrees(positions[cId], positions[dId], options.angleStep);
+
+          const accepted =
+            afterPenalty <= beforePenalty * 0.9 &&
+            afterSelf <= beforeSelf &&
+            afterCrossing <= beforeCrossing &&
+            afterAxis <= beforeAxis + 2.5;
+
+          if (accepted) {
+            changed = true;
+          } else {
+            positions[bId] = oldB;
+            positions[cId] = oldC;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
+function pathAlternatingZigzags(
+  path: string[],
+  positions: Record<string, Point>,
+  minimumTurnDegrees = 24,
+): number {
+  const threshold = (minimumTurnDegrees * Math.PI) / 180;
+  const turns: number[] = [];
+  for (let index = 1; index < path.length - 1; index += 1) {
+    turns.push(
+      signedHeadingChange(
+        positions[path[index - 1]],
+        positions[path[index]],
+        positions[path[index + 1]],
+      ),
+    );
+  }
+
+  let zigzags = 0;
+  for (let index = 0; index < turns.length - 1; index += 1) {
+    const first = turns[index];
+    const second = turns[index + 1];
+    if (
+      Math.abs(first) >= threshold &&
+      Math.abs(second) >= threshold &&
+      Math.sign(first) !== Math.sign(second)
+    ) {
+      zigzags += 1;
+    }
+  }
+  return zigzags;
+}
+
 function pathSelfCrossings(
   path: string[],
   positions: Record<string, Point>,
@@ -838,6 +1418,19 @@ function pathSelfCrossings(
     }
   }
   return count;
+}
+
+function totalRouteSelfCrossings(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+): number {
+  let total = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      total += pathSelfCrossings(path, positions);
+    }
+  }
+  return total;
 }
 
 function pathExternalCrossings(
@@ -894,90 +1487,260 @@ export function repairIntroducedPathSelfCrossings(
   graph: GraphModel,
   input: Record<string, Point>,
   reference: Record<string, Point>,
-  minimumNodeDistance = 28,
+  _minimumNodeDistance = 28,
 ): Record<string, Point> {
   const positions = Object.fromEntries(
     Object.entries(input).map(([id, point]) => [id, { ...point }]),
   );
 
-  for (const line of graph.lines) {
-    for (const path of line.paths) {
-      if (path.length < 4) continue;
+  // A repair can occasionally move a crossing from the path being repaired
+  // to another path that shares one of its stations.  A single left-to-right
+  // sweep therefore is not enough. Re-scan the network a few times and only
+  // accept candidates whose *global* self-crossing count never increases.
+  // This permits a temporary 1 -> 1 transfer, but the next path scan can then
+  // resolve it; the process converges once the total reaches zero or no safe
+  // improvement exists.
+  for (let pass = 0; pass < 6; pass += 1) {
+    let changed = false;
+    const passStartTotal = totalRouteSelfCrossings(graph, positions);
+    if (passStartTotal === 0) break;
 
-      const currentSelf = pathSelfCrossings(path, positions);
-      if (currentSelf === 0) continue;
-      if (pathSelfCrossings(path, reference) !== 0) continue;
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
 
-      const currentExternal = pathExternalCrossings(
-        graph,
-        path,
-        positions,
-      );
-      const startId = path[0];
-      const endId = path[path.length - 1];
-      const referenceStart = reference[startId];
-      const referenceEnd = reference[endId];
-      const targetStart = positions[startId];
-      const targetEnd = positions[endId];
+        const currentSelf = pathSelfCrossings(path, positions);
+        if (currentSelf === 0) continue;
+        if (pathSelfCrossings(path, reference) !== 0) continue;
 
-      const referenceDx = referenceEnd.x - referenceStart.x;
-      const referenceDy = referenceEnd.y - referenceStart.y;
-      const targetDx = targetEnd.x - targetStart.x;
-      const targetDy = targetEnd.y - targetStart.y;
-      const referenceLength = Math.hypot(referenceDx, referenceDy);
-      const targetLength = Math.hypot(targetDx, targetDy);
+        const startId = path[0];
+        const endId = path[path.length - 1];
+        const referenceStart = reference[startId];
+        const referenceEnd = reference[endId];
+        const targetStart = positions[startId];
+        const targetEnd = positions[endId];
 
-      // Closed rings need their own circular solver; this repair is for open
-      // paths whose two endpoints define a stable similarity transform.
-      if (referenceLength < 1e-6 || targetLength < 1e-6) continue;
+        const referenceDx = referenceEnd.x - referenceStart.x;
+        const referenceDy = referenceEnd.y - referenceStart.y;
+        const targetDx = targetEnd.x - targetStart.x;
+        const targetDy = targetEnd.y - targetStart.y;
+        const referenceLength = Math.hypot(referenceDx, referenceDy);
+        const targetLength = Math.hypot(targetDx, targetDy);
 
-      const scaleFactor = targetLength / referenceLength;
-      const referenceAngle = Math.atan2(referenceDy, referenceDx);
-      const targetAngle = Math.atan2(targetDy, targetDx);
-      const rotation = targetAngle - referenceAngle;
-      const cos = Math.cos(rotation);
-      const sin = Math.sin(rotation);
+        // Closed rings need their own circular solver; this repair is for open
+        // paths whose two endpoints define a stable similarity transform.
+        if (referenceLength < 1e-6 || targetLength < 1e-6) continue;
 
-      const candidate = Object.fromEntries(
-        Object.entries(positions).map(([id, point]) => [
-          id,
-          { ...point },
-        ]),
-      );
+        const scaleFactor = targetLength / referenceLength;
+        const referenceAngle = Math.atan2(referenceDy, referenceDx);
+        const targetAngle = Math.atan2(targetDy, targetDx);
+        const rotation = targetAngle - referenceAngle;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
 
-      for (let index = 1; index < path.length - 1; index += 1) {
-        const nodeId = path[index];
-        const rx = reference[nodeId].x - referenceStart.x;
-        const ry = reference[nodeId].y - referenceStart.y;
-        candidate[nodeId] = {
-          x:
-            targetStart.x +
-            (rx * cos - ry * sin) * scaleFactor,
-          y:
-            targetStart.y +
-            (rx * sin + ry * cos) * scaleFactor,
-        };
-      }
-
-      // Topology is repaired before global spacing. finalizeLayout() owns
-      // the all-node minimum-distance hard pass; the final QA validates the
-      // passenger-space result after that repair.
-
-      const candidateSelf = pathSelfCrossings(path, candidate);
-      const candidateExternal = pathExternalCrossings(
-        graph,
-        path,
-        candidate,
-      );
-
-      // Topology preservation is a hard constraint: a schematic transform
-      // must not introduce a self-crossing on a path that is clean in the
-      // reference layout. Inter-route crossings remain a global soft
-      // criterion and are validated by the whole-map QA afterwards.
-      if (candidateSelf < currentSelf) {
-        for (const nodeId of path.slice(1, -1)) {
-          positions[nodeId] = candidate[nodeId];
+        const referenceTarget: Record<string, Point> = {};
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const nodeId = path[index];
+          const rx = reference[nodeId].x - referenceStart.x;
+          const ry = reference[nodeId].y - referenceStart.y;
+          referenceTarget[nodeId] = {
+            x:
+              targetStart.x +
+              (rx * cos - ry * sin) * scaleFactor,
+            y:
+              targetStart.y +
+              (rx * sin + ry * cos) * scaleFactor,
+          };
         }
+
+        const interiorIds = path.slice(1, -1);
+        const currentGlobalSelf = totalRouteSelfCrossings(
+          graph,
+          positions,
+        );
+
+        type RepairCandidate = {
+          positions: Record<string, Point>;
+          selfCrossings: number;
+          globalSelfCrossings: number;
+          zigzags: number;
+          externalCrossings: number;
+          blend: number;
+        };
+        let best: RepairCandidate | undefined;
+
+        // Full restore is tested first, followed by progressively gentler
+        // blends.  Candidate ranking is topology-first: global self-crossings,
+        // then this path's self-crossings, then unrelated external crossings.
+        for (const blend of [1, 0.86, 0.72, 0.58, 0.44, 0.32, 0.22, 0.14]) {
+          const candidate = Object.fromEntries(
+            Object.entries(positions).map(([id, point]) => [
+              id,
+              { ...point },
+            ]),
+          );
+
+          for (const nodeId of interiorIds) {
+            candidate[nodeId] = {
+              x:
+                positions[nodeId].x * (1 - blend) +
+                referenceTarget[nodeId].x * blend,
+              y:
+                positions[nodeId].y * (1 - blend) +
+                referenceTarget[nodeId].y * blend,
+            };
+          }
+
+          const candidateSelf = pathSelfCrossings(path, candidate);
+          if (candidateSelf >= currentSelf) continue;
+
+          const candidateGlobalSelf = totalRouteSelfCrossings(
+            graph,
+            candidate,
+          );
+          if (candidateGlobalSelf > currentGlobalSelf) continue;
+
+          const candidateExternal = pathExternalCrossings(
+            graph,
+            path,
+            candidate,
+          );
+          const repairCandidate: RepairCandidate = {
+            positions: candidate,
+            selfCrossings: candidateSelf,
+            globalSelfCrossings: candidateGlobalSelf,
+            zigzags: pathAlternatingZigzags(path, candidate),
+            externalCrossings: candidateExternal,
+            blend,
+          };
+
+          if (
+            !best ||
+            repairCandidate.globalSelfCrossings < best.globalSelfCrossings ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings < best.selfCrossings) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags < best.zigzags) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags === best.zigzags &&
+              repairCandidate.blend < best.blend) ||
+            (repairCandidate.globalSelfCrossings === best.globalSelfCrossings &&
+              repairCandidate.selfCrossings === best.selfCrossings &&
+              repairCandidate.zigzags === best.zigzags &&
+              repairCandidate.blend === best.blend &&
+              repairCandidate.externalCrossings < best.externalCrossings)
+          ) {
+            best = repairCandidate;
+          }
+        }
+
+        if (!best) continue;
+
+        for (const nodeId of interiorIds) {
+          positions[nodeId] = best.positions[nodeId];
+        }
+        changed = true;
+      }
+    }
+
+    const passEndTotal = totalRouteSelfCrossings(graph, positions);
+    if (passEndTotal === 0) break;
+    if (!changed) break;
+
+    // If a pass only transferred the same number of crossings, allow the next
+    // pass to resolve the new owner; bounded pass count prevents oscillation.
+    if (passEndTotal > passStartTotal) break;
+  }
+
+  return positions;
+}
+
+/**
+ * Final hard topology guard.
+ *
+ * If a visible route path self-crosses while the same path is clean in a
+ * trusted topology reference, restore that path's interior coordinates only
+ * when the whole-network self-crossing count decreases.  Repeating the pass
+ * lets shared interchange nodes settle without trading one broken route for
+ * another.
+ */
+export function enforceCleanRouteTopology(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  reference: Record<string, Point>,
+  passes = 8,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 4) continue;
+
+        const currentSelf = pathSelfCrossings(path, positions);
+        if (currentSelf === 0) continue;
+        if (pathSelfCrossings(path, reference) !== 0) continue;
+
+        const beforeGlobal = totalRouteSelfCrossings(graph, positions);
+        const candidate = Object.fromEntries(
+          Object.entries(positions).map(([id, point]) => [id, { ...point }]),
+        );
+
+        for (const nodeId of path.slice(1, -1)) {
+          candidate[nodeId] = { ...reference[nodeId] };
+        }
+
+        const afterPath = pathSelfCrossings(path, candidate);
+        const afterGlobal = totalRouteSelfCrossings(graph, candidate);
+
+        if (
+          afterPath < currentSelf &&
+          afterGlobal < beforeGlobal
+        ) {
+          for (const nodeId of path.slice(1, -1)) {
+            positions[nodeId] = candidate[nodeId];
+          }
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  // Shared interchange nodes can make a path-only restore transfer the same
+  // crossing to another route. If that happens, move the whole layout only
+  // as far as necessary toward the trusted clean topology scaffold. This
+  // preserves most of the visible de-zigzagging while making zero route
+  // self-crossings the hard final invariant.
+  const remaining = totalRouteSelfCrossings(graph, positions);
+  if (
+    remaining > 0 &&
+    totalRouteSelfCrossings(graph, reference) === 0
+  ) {
+    for (const blend of [0.08, 0.12, 0.18, 0.24, 0.32, 0.42, 0.55, 0.7, 0.85, 1]) {
+      const candidate = Object.fromEntries(
+        graph.nodes.map((node) => {
+          const current = positions[node.id];
+          const clean = reference[node.id];
+          return [
+            node.id,
+            {
+              x: current.x * (1 - blend) + clean.x * blend,
+              y: current.y * (1 - blend) + clean.y * blend,
+            },
+          ];
+        }),
+      );
+
+      if (totalRouteSelfCrossings(graph, candidate) < remaining) {
+        return candidate;
       }
     }
   }

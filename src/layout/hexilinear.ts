@@ -1,6 +1,7 @@
 import type { GraphModel, Point } from '../types';
 import { layoutTaipei } from './octilinear';
 import {
+  collapseRouteZigzagsSafely,
   regularizeRouteCorridors,
   relaxPathKinksSafely,
   repairIntroducedPathSelfCrossings,
@@ -41,7 +42,24 @@ export function layoutHexilinear(
     },
   );
 
-  const relaxed = relaxPathKinksSafely(graph, corridors, {
+  const topologyReference = layoutTaipei(graph, geographic);
+  const topologySafeCorridors = repairIntroducedPathSelfCrossings(
+    graph,
+    corridors,
+    topologyReference,
+    24,
+  );
+
+  const dezigzagged = collapseRouteZigzagsSafely(graph, topologySafeCorridors, {
+    angleStep: 60,
+    passes: 5,
+    minimumTurnDegrees: 24,
+    minimumNodeDistance: 29,
+    maxShift: 28,
+    structuralMaxShift: 12,
+  });
+
+  const relaxed = relaxPathKinksSafely(graph, dezigzagged, {
     passes: 7,
     thresholdDegrees: 90,
     minimumNodeDistance: 29,
@@ -49,7 +67,6 @@ export function layoutHexilinear(
     structuralMaxShift: 16,
   });
 
-  const topologyReference = layoutTaipei(graph, geographic);
   const untangled = repairIntroducedPathSelfCrossings(
     graph,
     relaxed,
