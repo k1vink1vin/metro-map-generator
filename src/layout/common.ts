@@ -1292,7 +1292,12 @@ export function repairIntroducedPathSelfCrossings(
         }
       }
 
-      const best = bestExternalSafe ?? bestTopologyFallback;
+      // Route self-crossing is the hard topology failure. Prefer a candidate
+      // that fully unfolds the path; among those, the search already keeps
+      // the one with the smallest external-crossing cost. Only fall back to a
+      // partial but external-safe repair when no zero-self-cross solution is
+      // available within the bounded search.
+      const best = bestTopologyFallback ?? bestExternalSafe;
       if (best) {
         for (const nodeId of interiorIds) {
           positions[nodeId] = best.positions[nodeId];
