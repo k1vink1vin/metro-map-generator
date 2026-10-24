@@ -44,18 +44,38 @@ export function layoutTaipei(
 
   // Geographic input is not guaranteed to be topologically drawable:
   // real-world polylines can fold over themselves after transfer grouping.
-  // Build a clean 45° schematic reference first, then use that as the hard
-  // topology frame for the more aggressive S-bend cleanup.
-  const baselineRelaxed = relaxPathKinksSafely(graph, corridors, {
-    passes: 7,
-    thresholdDegrees: 84,
-    minimumNodeDistance: 29,
-    maxShift: 32,
-    structuralMaxShift: 18,
-  });
+  // The previous corridor fallback happened to provide a clean topological
+  // scaffold, even though it produced visible endpoint hooks. Rebuild that
+  // scaffold only as an invisible reference; final coordinates continue to
+  // use the endpoint-anchored corridor above.
+  const legacyTopologyCorridors = regularizeRouteCorridors(
+    graph,
+    snapped,
+    geographic,
+    {
+      angleStep: 45,
+      passes: 4,
+      runBlend: 0.46,
+      geographyTether: 0.22,
+      equalSpacingWeight: 0.46,
+      bendAnchorDegrees: 38,
+      endpointFallback: 'legacy',
+    },
+  );
+  const legacyTopologyRelaxed = relaxPathKinksSafely(
+    graph,
+    legacyTopologyCorridors,
+    {
+      passes: 7,
+      thresholdDegrees: 84,
+      minimumNodeDistance: 29,
+      maxShift: 32,
+      structuralMaxShift: 18,
+    },
+  );
   const topologyReference = repairIntroducedPathSelfCrossings(
     graph,
-    baselineRelaxed,
+    legacyTopologyRelaxed,
     geographic,
     24,
   );
