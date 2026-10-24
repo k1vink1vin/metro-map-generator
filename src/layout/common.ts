@@ -295,14 +295,42 @@ export function regularizeRouteCorridors(
           }
           if (index <= 0 || index >= path.length - 1) return;
 
-          const geoTurn = Math.abs(
-            signedHeadingChange(
-              geographicReference[path[index - 1]],
-              geographicReference[nodeId],
-              geographicReference[path[index + 1]],
-            ),
+          const signedGeoTurn = signedHeadingChange(
+            geographicReference[path[index - 1]],
+            geographicReference[nodeId],
+            geographicReference[path[index + 1]],
           );
-          if (geoTurn >= bendThreshold) {
+          const geoTurn = Math.abs(signedGeoTurn);
+
+          const alternatingWith = (neighborIndex: number) => {
+            if (
+              neighborIndex <= 0 ||
+              neighborIndex >= path.length - 1
+            ) {
+              return false;
+            }
+
+            const neighborTurn = signedHeadingChange(
+              geographicReference[path[neighborIndex - 1]],
+              geographicReference[path[neighborIndex]],
+              geographicReference[path[neighborIndex + 1]],
+            );
+
+            return (
+              Math.abs(neighborTurn) >= bendThreshold * 0.72 &&
+              Math.sign(neighborTurn) !== Math.sign(signedGeoTurn)
+            );
+          };
+
+          // Do not freeze a short +turn/-turn (or -turn/+turn) geographic
+          // wobble into two schematic corners. Those alternating anchors are
+          // the main source of the visible saw-tooth pattern. Genuine isolated
+          // bends and same-direction curvature remain anchors.
+          const localZigzag =
+            alternatingWith(index - 1) ||
+            alternatingWith(index + 1);
+
+          if (geoTurn >= bendThreshold && !localZigzag) {
             anchorIndices.add(index);
           }
         });
