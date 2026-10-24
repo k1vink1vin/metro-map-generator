@@ -250,6 +250,7 @@ export function finalizeLayoutPositions(
   // generic pair-separation repair is not topology-aware and can deform
   // those circles, so Moscow relies on its own ring spacing/deformation pass.
   const topologySensitiveStyle =
+    style === 'taipei' ||
     style === 'moscow' ||
     style === 'london' ||
     style === 'hex';
