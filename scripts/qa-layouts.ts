@@ -684,7 +684,7 @@ for (const result of results) {
 
 
 for (const result of results) {
-  if (result.score >= 90 && result.style !== 'taipei') continue;
+  if (result.score >= 90) continue;
   console.log(`\n[${result.style}] QA diagnostics`);
   if (result.crossingList.length) {
     console.log('crossings:', result.crossingList.slice(0, 12));
