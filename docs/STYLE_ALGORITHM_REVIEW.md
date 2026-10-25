@@ -95,3 +95,47 @@ The specifically requested Huilong/Taoyuan check is now independent of the 45-un
 | 桃園車站 (GR07) | 24.9887887 | 121.3136967 | 1628.6149 | 2774.6531 |
 
 Huilong is northeast of Taoyuan Station in both the workbook and the actual exported SVG (SVG y increases downward). This pair was already correctly ordered in `826d80ed`; no station coordinates were changed merely to agree with the reported suspicion. `qa:geography` now explicitly asserts both axes for this pair. Render QA also writes `moscow--huilong-taoyuan-detail.svg`, a crop of the full map with the two actual station anchors highlighted. Schematic distances and bearings are not exact survey geometry.
+
+## Passenger route review: excessive bending after acute-angle repair
+
+The previous zero >100-degree-turn result was insufficient. London still had
+35 alternating bends and Hex 42. This is not equivalent to passenger-signage
+quality. London Museum describes Beck's diagram as straight horizontal,
+vertical and 45-degree lines joined by local curves:
+https://www.londonmuseum.org.uk/collections/london-stories/harry-beck-revolutionised-tube-map/
+
+Changes in this review:
+- Refine all route bends, not only acute vertices. Score the affected route
+  neighborhood, penalise total turning and squared turn magnitude, retain
+  angular attraction, and bound station displacement to 120 display units.
+- Each accepted move retains station clearance and does not increase incident
+  edge crossings or route self-crossings. Graph identities, paths, station
+  sequence and interchange grouping are unchanged.
+- London/Hex SVG corridors now have straight portions and short, tangent
+  continuous cubic transitions through station anchors. Moscow circle arcs
+  are unchanged. Smoothing still undergoes obstacle and sampled crossing tests.
+- Add near-marker label positions, include the station's own marker in
+  obstacle tests, and revisit initial greedy choices against the complete
+  label set. Keep names near stations rather than pushing them far away.
+
+Canonical TPE_Metro.xlsm measurements (heading changes between station anchors):
+
+| Metric | London before | London after | Hex before | Hex after |
+| --- | ---: | ---: | ---: | ---: |
+| Maximum turn | 99.1° | 55.7° | 99.5° | 59.8° |
+| Turns >70° | 19 | 0 | 29 | 0 |
+| Alternating adjacent turns, both >24° | 35 | 1 | 42 | 2 |
+| Sum of absolute turns | 7674° | 2642° | 8344° | 2846° |
+| Route self-crossings | 0 | 0 | 0 | 0 |
+
+Remaining alternating bends: Danhai's 新市一路–淡水行政中心–濱海濱海義山–濱海沙崙
+in both styles; 古亭–中正紀念堂–小南門–西門 in Hex. The duplicated character
+sequence in 濱海濱海義山 is from the workbook, not silently renamed here.
+
+Regression gates now require no >70° turns and total turning <=3000° in these
+canonical London/Hex outputs, and at most 1/2 alternating bends respectively.
+These are project regression thresholds, not a transit operator's specification.
+Angular attraction remains heuristic (mean axis errors 9.9°/12.4°); exact
+45°/60° grids, uniformly spaced stations, globally collision-free labels and
+operator-approved signage are NOT certified by these tests. The geographic,
+Taipei, Moscow and concentric geometry have not been redesigned in this pass.

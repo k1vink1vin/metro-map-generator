@@ -561,6 +561,7 @@ function buildLabelPlacements(
 
   const placements: LabelPlacement[] = [];
   const occupied: Rect[] = [];
+  const alternatives = new Map<string, Array<{placement: LabelPlacement; penalty: number}>>();
 
   for (const node of orderedNodes) {
     const point = layout.positions[node.id];
@@ -578,6 +579,8 @@ function buildLabelPlacements(
       anchor: LabelPlacement['textAnchor'];
       distancePenalty: number;
     }> = [
+      { x: point.x + near, y: point.y + 4 * s, anchor: 'start', distancePenalty: 4 },
+      { x: point.x - near, y: point.y + 4 * s, anchor: 'end', distancePenalty: 4 },
       { x: point.x + near, y: point.y - 8 * s, anchor: 'start', distancePenalty: 0 },
       { x: point.x + near, y: point.y + 18 * s, anchor: 'start', distancePenalty: 1 },
       { x: point.x - near, y: point.y - 8 * s, anchor: 'end', distancePenalty: 1 },
@@ -614,7 +617,7 @@ function buildLabelPlacements(
 
       let stationOverlap = 0;
       for (const obstacle of nodeObstacles) {
-        if (obstacle.nodeId === node.id) continue;
+
         stationOverlap += overlapArea(
           paddedRect,
           padded(obstacle.rect, 2 * visualScale),
@@ -623,7 +626,7 @@ function buildLabelPlacements(
 
       const score =
         labelOverlap * 20 +
-        stationOverlap * 8 +
+        stationOverlap * 1000 +
         candidate.distancePenalty * 12;
 
       const placement: LabelPlacement = {
@@ -635,13 +638,14 @@ function buildLabelPlacements(
         rect,
       };
 
+      const list = alternatives.get(node.id) ?? [];
+      list.push({placement, penalty: candidate.distancePenalty * 12});
+      alternatives.set(node.id, list);
       if (!best || score < best.score) {
         best = { placement, score };
       }
 
-      if (score === candidate.distancePenalty * 12) {
-        break;
-      }
+
     }
 
     if (!best) continue;
@@ -651,6 +655,28 @@ function buildLabelPlacements(
     );
   }
 
+  // Revisit early choices after the full label set is known. A greedy first
+  // placement must not force a later station name over another badge.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (let i = 0; i < placements.length; i++) {
+      const options = alternatives.get(placements[i].nodeId)!;
+      const score = (entry: typeof options[number]) => {
+        const rect = padded(entry.placement.rect, 3 * visualScale);
+        return entry.penalty + placements.reduce((sum, other, j) => sum + (i === j ? 0 :
+          overlapArea(rect, padded(other.rect, 3 * visualScale)) * 1000), 0) +
+          nodeObstacles.reduce((sum, obstacle) => sum + overlapArea(rect,padded(obstacle.rect,2*visualScale))*1000,0);
+      };
+      const current = options.find(o => o.placement === placements[i])!;
+      let best = current, bestScore = score(current);
+      for (const candidate of options) {
+        const value = score(candidate);
+        if (value < bestScore - 0.01) {best=candidate; bestScore=value;}
+      }
+      if(best.placement!==placements[i]) {placements[i]=best.placement;changed=true;}
+    }
+    if(!changed)break;
+  }
   return placements;
 }
 

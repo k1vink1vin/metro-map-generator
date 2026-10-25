@@ -307,6 +307,9 @@ function routeBendQuality(
   positions: Record<string, Point>,
 ) {
   let sharpTurns = 0;
+  let strongTurns = 0;
+  let totalTurningDegrees = 0;
+  let maximumTurnDegrees = 0;
   let zigzags = 0;
   let selfCrossings = 0;
   const sharpDetails: Array<{
@@ -327,6 +330,9 @@ function routeBendQuality(
         );
         turns.push(turn);
         const degrees = Math.abs((turn * 180) / Math.PI);
+        totalTurningDegrees += degrees;
+        maximumTurnDegrees = Math.max(maximumTurnDegrees, degrees);
+        if (degrees > 70) strongTurns++;
         if (degrees > 100) {
           sharpTurns += 1;
           sharpDetails.push({
@@ -369,6 +375,7 @@ function routeBendQuality(
 
   return {
     sharpTurns,
+    strongTurns, totalTurningDegrees, maximumTurnDegrees,
     zigzags,
     selfCrossings,
     sharpDetails: sharpDetails
@@ -615,6 +622,9 @@ function metrics(
     crossings,
     angleError,
     sharpTurns: bendQuality.sharpTurns,
+    strongTurns: bendQuality.strongTurns,
+    totalTurningDegrees: bendQuality.totalTurningDegrees,
+    maximumTurnDegrees: bendQuality.maximumTurnDegrees,
     zigzags: bendQuality.zigzags,
     selfCrossings: bendQuality.selfCrossings,
     sharpDetails: bendQuality.sharpDetails,
@@ -662,6 +672,9 @@ console.table(
     crossings: result.crossings,
     angleError: result.angleError.toFixed(1),
     sharpTurns: result.sharpTurns,
+    strongTurns: result.strongTurns,
+    maxTurn: result.maximumTurnDegrees.toFixed(1),
+    totalTurn: result.totalTurningDegrees.toFixed(0),
     zigzags: result.zigzags,
     selfX: result.selfCrossings,
     doglegs: result.doglegs,
@@ -789,12 +802,17 @@ for (const result of results) {
   const zigzagBudget: Record<StyleId, number> = {
     geographic: 140,
     taipei: 30,
-    london: 65,
+    london: 1,
     moscow: 55,
     concentric: 70,
-    hex: 85,
+    hex: 2,
   };
 
+  // Canonical passenger fixture: evaluate all bends, not only the old >100° cutoff.
+  if ((result.style === 'london' || result.style === 'hex') &&
+      (result.strongTurns > 0 || result.totalTurningDegrees > 3000)) {
+    failures.push(`${result.style}: excessive bending: ${result.strongTurns} turns >70°, total ${result.totalTurningDegrees.toFixed(0)}° >3000° budget`);
+  }
   if (result.sharpTurns > sharpTurnBudget[result.style]) {
     failures.push(
       `${result.style}: ${result.sharpTurns} sharp turns > style budget ${sharpTurnBudget[result.style]}`,

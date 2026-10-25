@@ -147,7 +147,21 @@ export function stationAnchoredPath(
       const h2 = Math.min(length, nextLength) * strength * factor;
       const c1 = { x: a.x + ta.x * h1, y: a.y + ta.y * h1 };
       const c2 = { x: b.x - tb.x * h2, y: b.y - tb.y * h2 };
-      const curve = Array.from({ length: 25 }, (_, step) => cubic(a, c1, c2, b, step / 24));
+      const schematic = layout.style === 'london' || layout.style === 'hex';
+      const direction = unit(a, b);
+      const startRadius = Math.min(length * 0.16, previousLength * 0.16, 18) * factor;
+      const endRadius = Math.min(length * 0.16, nextLength * 0.16, 18) * factor;
+      const along = (p: Point, amount: number): Point => ({x:p.x+direction.x*amount,y:p.y+direction.y*amount});
+      const startEnd = along(a, 3 * startRadius), endStart = along(b, -3 * endRadius);
+      const startControl = {x:a.x+ta.x*startRadius,y:a.y+ta.y*startRadius};
+      const endControl = {x:b.x-tb.x*endRadius,y:b.y-tb.y*endRadius};
+      // Straight station corridors, with short tangent-continuous transitions
+      // at their ends. Do not turn the entire edge into a flowing spline.
+      const curve = schematic ? [
+        ...Array.from({length:13},(_,s)=>cubic(a,startControl,along(startEnd,-startRadius),startEnd,s/12)),
+        endStart,
+        ...Array.from({length:12},(_,s)=>cubic(endStart,along(endStart,endRadius),endControl,b,(s+1)/12)),
+      ] : Array.from({ length: 25 }, (_, step) => cubic(a, c1, c2, b, step / 24));
       const safe = !curve.slice(1).some((p, j) =>
         samples.slice(1, -1).some((q, k) => intersects(curve[j], p, samples[k], q)),
       ) && obstacles.every(e => {
@@ -161,7 +175,10 @@ export function stationAnchoredPath(
         return curve.every(q => distance(p, q) >= clearance - 0.1);
       });
       if (!safe) continue;
-      commands.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`);
+      if (schematic) {
+        const sc = along(startEnd,-startRadius), ec = along(endStart,endRadius);
+        commands.push(`C ${startControl.x} ${startControl.y} ${sc.x} ${sc.y} ${startEnd.x} ${startEnd.y} L ${endStart.x} ${endStart.y} C ${ec.x} ${ec.y} ${endControl.x} ${endControl.y} ${b.x} ${b.y}`);
+      } else commands.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`);
       samples.push(...curve.slice(1));
       accepted = true;
       break;

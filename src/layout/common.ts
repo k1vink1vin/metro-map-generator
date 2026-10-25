@@ -663,6 +663,55 @@ export function eliminateAcuteRouteTurnsSafely(
   return positions;
 }
 
+/** Minimise bending throughout each route, including sub-threshold S bends.
+ * Unlike the acute repair this is a bounded refinement: no station can drift
+ * more than 120 display units, and every accepted move preserves crossings,
+ * station clearance and the existing zero-acute-turn invariant. */
+export function simplifyPassengerRoutesSafely(
+  graph: GraphModel, input: Record<string, Point>, angleStep: number,
+): Record<string, Point> {
+  const positions = Object.fromEntries(Object.entries(input).map(([id, p]) => [id, { ...p }]));
+  const occurrences = new Map(graph.nodes.map(n => [n.id, localPathOccurrences(graph, n.id)]));
+  const cost = (id: string) => occurrences.get(id)!.reduce((sum, o) => {
+    const turn = Math.abs(signedHeadingChange(positions[o.previous], positions[id], positions[o.next]));
+    return sum + (turn > 100 * Math.PI / 180 ? 1e6 : 0) + 8 * turn * turn + 2 * turn;
+  }, 0);
+  for (let pass = 0; pass < 32; pass++) {
+    let changed = false;
+    for (const node of [...graph.nodes].sort((a,b) => cost(b.id) - cost(a.id))) {
+      const id = node.id, original = positions[id];
+      const neighbors = graph.adjacency.get(id) ?? [];
+      const affected = [...new Set([id, ...neighbors])];
+      const score = () => affected.reduce((s, key) => s + cost(key), 0) + neighbors.reduce((s, key) => {
+        const a = positions[id], b = positions[key];
+        const angle = Math.atan2(b.y-a.y,b.x-a.x), step = angleStep*Math.PI/180;
+        return s + 0.002 * distance(a,b) + 3 * (angle-Math.round(angle/step)*step)**2;
+      },0);
+      const beforeCross = incidentCrossingCount(graph,id,positions);
+      const beforeSelf = nodePathSelfCrossingCount(graph,new Set([id]),positions);
+      let best = original, bestScore = score();
+      const candidates: Point[] = [];
+      for (const o of occurrences.get(id)!) for (const blend of [0.25, 0.5, 1]) {
+        candidates.push({x:original.x + ((positions[o.previous].x+positions[o.next].x)/2-original.x)*blend,
+          y:original.y + ((positions[o.previous].y+positions[o.next].y)/2-original.y)*blend});
+      }
+      for (const radius of [2, 6, 18, 40]) for (let k=0;k<16;k++) candidates.push({
+        x:original.x+radius*Math.cos(k*Math.PI/8),y:original.y+radius*Math.sin(k*Math.PI/8)});
+      for (const candidate of candidates) {
+        if (distance(candidate,input[id])>120 || graph.nodes.some(n=>n.id!==id && distance(candidate,positions[n.id])<42)) continue;
+        positions[id]=candidate;
+        const nextScore=score();
+        if(nextScore<bestScore-0.0001 && incidentCrossingCount(graph,id,positions)<=beforeCross &&
+          nodePathSelfCrossingCount(graph,new Set([id]),positions)<=beforeSelf) { best=candidate; bestScore=nextScore; }
+      }
+      positions[id]=best;
+      changed ||= distance(original,best)>0.001;
+    }
+    if(!changed)break;
+  }
+  return positions;
+}
+
 function properSegmentIntersection(
   a: Point,
   b: Point,

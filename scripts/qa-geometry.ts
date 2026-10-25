@@ -3,11 +3,11 @@ import { buildGraph } from '../src/core/graph';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import type { LayoutResult, Point } from '../src/types';
 
-function fixture(positions: Record<string, Point>, path: string[], moscow = false, parallel = false) {
+function fixture(positions: Record<string, Point>, path: string[], moscow = false, parallel = false, schematic: 'london' | 'hex' | undefined = undefined) {
   const graph = buildGraph({ stations: Object.keys(positions).map((id, i) => ({ id, lat: i, lon: i })),
     lines: [{ id: 'test', color: '#123456', paths: [path] },
       ...(parallel ? [{ id: 'z-other', color: '#987654', paths: [[...path].reverse()] }] : [])] });
-  const layout: LayoutResult = { style: moscow ? 'moscow' : 'taipei', positions,
+  const layout: LayoutResult = { style: schematic ?? (moscow ? 'moscow' : 'taipei'), positions,
     geographicPositions: positions, integrity: { routeCount: 1, pathCount: 1, segmentCount: path.length - 1, repairedNodeCount: 0, separatedNodePairs: 0, valid: true },
     moscowRings: moscow ? [{ id: 'ring', stationIds: path.slice(0, -1), nodes: path.slice(0, -1) }] : [] };
   return stationAnchoredPath(graph, layout, path, path.map(id => positions[id]), parallel ? 'test' : undefined);
@@ -37,3 +37,13 @@ console.log('Geometry QA passed: station interpolation, exact circular arcs, ind
 const acute = fixture({ A: {x:0,y:0}, B: {x:100,y:0}, C: {x:40,y:40}, D: {x:150,y:90} }, ['A','B','C','D']);
 assert.equal(acute.fallbackCount, 0, 'isolated acute turns must use interpolating curves');
 assert.equal(sampledSelfCrossings(acute.samples), 0, 'rounding acute turns must not create loops');
+
+for (const style of ['london', 'hex'] as const) {
+  const schematic = fixture(corners, ['A', 'B', 'C', 'D'], false, false, style);
+  assert.equal(sampledSelfCrossings(schematic.samples), 0);
+  assert.equal(schematic.fallbackCount, 0);
+  assert.equal((schematic.d.match(/ L /g) ?? []).length, 3,
+    'each station corridor must retain a straight section between local transitions');
+  for (const point of Object.values(corners)) assert(schematic.samples.some(p =>
+    Math.hypot(p.x-point.x,p.y-point.y)<1e-8), 'local rounding must retain every station anchor');
+}
