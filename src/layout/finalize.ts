@@ -1,6 +1,6 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, LayoutIntegrity, Point, StyleId } from '../types';
-import { simplifyPassengerRoutesSafely, eliminateAcuteRouteTurnsSafely, repairGeographicOrderSafely, collapseRouteZigzagsSafely, relaxPathKinksSafely, repairIntroducedPathSelfCrossings, separateNodesSafely } from './common';
+import { simplifyPassengerRoutesSafely, eliminateAcuteRouteTurnsSafely, repairGeographicOrderSafely, collapseRouteZigzagsSafely, relaxPathKinksSafely, repairIntroducedPathSelfCrossings, separateNodesSafely, equalizeAngularRouteRunsSafely } from './common';
 
 function isFinitePoint(point?: Point): point is Point {
   return Boolean(
@@ -372,10 +372,32 @@ export function finalizeLayoutPositions(
     ? repairGeographicOrderSafely(graph, angularPositions, geographic, fixedNodes)
     : style === 'london' || style === 'hex'
       ? simplifyPassengerRoutesSafely(graph, eliminateAcuteRouteTurnsSafely(graph, angularPositions), style === 'hex' ? 60 : 45) : angularPositions;
-  const validated = validateEveryRouteIsDrawable(graph, positions);
+
+  // Final schematic invariant: ordinary stations between true topology
+  // anchors are redistributed at equal arc-length intervals. This pass runs
+  // after all de-zigzag / crossing repair so later styling cannot reintroduce
+  // uneven station rhythm.
+  const equidistantPositions =
+    style === 'concentric'
+      ? positions
+      : equalizeAngularRouteRunsSafely(
+          graph,
+          positions,
+          style === 'hex' ? 60 : 45,
+          {
+            fixedNodes,
+            minimumNodeDistance:
+              style === 'moscow' ? 30 : style === 'taipei' ? 28 : 30,
+            passes: 4,
+          },
+        );
+  const validated = validateEveryRouteIsDrawable(
+    graph,
+    equidistantPositions,
+  );
 
   return {
-    positions,
+    positions: equidistantPositions,
     integrity: {
       ...validated,
       repairedNodeCount: completed.repairedNodeCount,
