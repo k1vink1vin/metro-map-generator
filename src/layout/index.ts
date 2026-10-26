@@ -81,7 +81,13 @@ function finish(
     radialCenter,
   };
 
-  return equalizeRenderedStationRhythm(graph, result);
+  let rhythm = result;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = equalizeRenderedStationRhythm(graph, rhythm);
+    if (next === rhythm) break;
+    rhythm = next;
+  }
+  return rhythm;
 }
 
 export function computeLayout(
