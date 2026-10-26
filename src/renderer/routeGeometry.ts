@@ -1244,6 +1244,147 @@ function orthoradialEscapePath(
   };
 }
 
+function orthoradialTopologyFallbackPath(
+  points: Point[],
+  center: Point,
+  sectionBreaks: ReadonlySet<number>,
+): RouteGeometry {
+  type State = {
+    commands: string[];
+    samples: Point[];
+    arcCount: number;
+    length: number;
+    crossings: number;
+    lastEdgeLength?: number;
+    rhythmPenalty: number;
+    detourPenalty: number;
+  };
+
+  const stationRadii = points.map((point) =>
+    Math.hypot(point.x - center.x, point.y - center.y),
+  );
+  const outerBase = Math.max(1, ...stationRadii);
+
+  let states: State[] = [{
+    commands: [`M ${points[0].x} ${points[0].y}`],
+    samples: [points[0]],
+    arcCount: 0,
+    length: 0,
+    crossings: 0,
+    lastEdgeLength: undefined,
+    rhythmPenalty: 0,
+    detourPenalty: 0,
+  }];
+
+  // This expensive search is invoked only after the compact beam has proven
+  // that its best complete route self-crosses. Retain enough whole-line
+  // alternatives to let an early outer-shell detour prevent a later crossing.
+  const beamWidth = 256;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const compact = orthoradialEdgeCandidates(
+      points[index],
+      points[index + 1],
+      center,
+    );
+    const escape = orthoradialEscapeCandidates(
+      points[index],
+      points[index + 1],
+      center,
+      outerBase,
+    );
+    const candidates = [...compact, ...escape];
+    const shortest = Math.max(
+      1e-9,
+      Math.min(...compact.map((candidate) => candidate.length)),
+    );
+    const resetRhythm = sectionBreaks.has(index);
+    const next: State[] = [];
+
+    for (const state of states) {
+      for (const candidate of candidates) {
+        const samples = [
+          ...state.samples,
+          ...candidate.samples.slice(1),
+        ];
+        const addedCrossings =
+          extensionCrossings(
+            state.samples,
+            candidate.samples,
+          ) +
+          sampledSelfCrossings(candidate.samples);
+        const previousLength =
+          resetRhythm ? undefined : state.lastEdgeLength;
+        const relativeDifference =
+          previousLength === undefined
+            ? 0
+            : Math.abs(candidate.length - previousLength) /
+              Math.max(
+                1,
+                (candidate.length + previousLength) / 2,
+              );
+        const detourRatio =
+          Math.max(0, candidate.length / shortest - 1);
+
+        next.push({
+          commands: [...state.commands, ...candidate.commands],
+          samples,
+          arcCount: state.arcCount + candidate.arcCount,
+          length: state.length + candidate.length,
+          crossings: state.crossings + addedCrossings,
+          lastEdgeLength: candidate.length,
+          rhythmPenalty:
+            state.rhythmPenalty +
+            relativeDifference * relativeDifference,
+          detourPenalty:
+            state.detourPenalty +
+            detourRatio * detourRatio,
+        });
+      }
+    }
+
+    next.sort(
+      (a, b) =>
+        a.crossings - b.crossings ||
+        (
+          a.rhythmPenalty * 8 +
+          a.detourPenalty * 1.5
+        ) -
+          (
+            b.rhythmPenalty * 8 +
+            b.detourPenalty * 1.5
+          ) ||
+        a.detourPenalty - b.detourPenalty ||
+        a.length - b.length,
+    );
+    states = next.slice(0, beamWidth);
+  }
+
+  states.sort(
+    (a, b) =>
+      sampledSelfCrossings(a.samples) -
+        sampledSelfCrossings(b.samples) ||
+      (
+        a.rhythmPenalty * 8 +
+        a.detourPenalty * 1.5
+      ) -
+        (
+          b.rhythmPenalty * 8 +
+          b.detourPenalty * 1.5
+        ) ||
+      a.detourPenalty - b.detourPenalty ||
+      a.length - b.length,
+  );
+
+  const best = states[0];
+  return {
+    d: best.commands.join(' '),
+    samples: best.samples,
+    arcCount: best.arcCount,
+    fallbackCount: 1,
+  };
+}
+
 function orthoradialPath(
   points: Point[],
   center: Point,
@@ -1393,6 +1534,18 @@ function orthoradialPath(
 
   const compactCrossings = sampledSelfCrossings(compact.samples);
   if (compactCrossings > allowedCrossings) {
+    const globalFallback = orthoradialTopologyFallbackPath(
+      points,
+      center,
+      sectionBreaks,
+    );
+    const globalCrossings = sampledSelfCrossings(
+      globalFallback.samples,
+    );
+    if (globalCrossings < compactCrossings) {
+      return globalFallback;
+    }
+
     const escaped = orthoradialEscapePath(
       points,
       center,
