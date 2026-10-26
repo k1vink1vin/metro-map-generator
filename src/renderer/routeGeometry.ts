@@ -1289,7 +1289,10 @@ function orthoradialPath(
   // rhythm. The layout already places them at equal orthoradial distances;
   // this beam objective prevents the renderer from defeating that by choosing
   // a different long-way arc independently for one edge.
-  const beamWidth = 36;
+  // Keep a wider frontier than the angular styles. A polar path can look
+  // locally equivalent for many stations and only reveal a self-crossing much
+  // later around the centre; topology-safe alternatives must survive that far.
+  const beamWidth = 128;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const candidates = orthoradialEdgeCandidates(
