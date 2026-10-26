@@ -1,0 +1,365 @@
+import { readFileSync } from 'node:fs';
+import { renderToStaticMarkup } from 'react-dom/server';
+import React from 'react';
+import { buildGraph } from '../src/core/graph.ts';
+import { validateMoscowRings } from '../src/core/moscowRings.ts';
+import { importExcelBuffer } from '../src/io/importData.ts';
+import { computeLayout } from '../src/layout/index.ts';
+import {
+  buildRenderedRoutePaths,
+  sampledSelfCrossings,
+  stationAnchoredPath,
+} from '../src/renderer/routeGeometry.ts';
+import {
+  buildGeometricBundleMap,
+  offsetPathForLine,
+} from '../src/renderer/geometry.ts';
+import { SvgMap } from '../src/renderer/SvgMap.tsx';
+import type { GraphModel, LayoutResult, Point, StyleId } from '../src/types.ts';
+
+const data = new Uint8Array(
+  readFileSync(new URL('../TPE_Metro.xlsm', import.meta.url)),
+);
+const input = await importExcelBuffer(data);
+const graph = buildGraph(input);
+const rings = validateMoscowRings(graph, input.moscowRings ?? []);
+const styles: StyleId[] = ['taipei', 'london', 'moscow', 'concentric', 'hex'];
+
+const distance = (a: Point, b: Point) =>
+  Math.hypot(b.x - a.x, b.y - a.y);
+
+function structuralNode(graph: GraphModel, nodeId: string): boolean {
+  const node = graph.nodeById.get(nodeId);
+  if (!node) return true;
+  if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return true;
+  if (node.stationIds.length > 1) return true;
+  let incidentLines = 0;
+  for (const line of graph.lines) {
+    if (line.paths.some((path) => path.includes(nodeId))) {
+      incidentLines += 1;
+      if (incidentLines > 1) return true;
+    }
+  }
+  return false;
+}
+
+function coefficientOfVariation(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (mean < 1e-9) return 0;
+  const variance =
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    values.length;
+  return Math.sqrt(variance) / mean;
+}
+
+function angleErrorDegrees(a: Point, b: Point, stepDegrees: number): number {
+  if (distance(a, b) < 1e-8) return 0;
+  const step = (stepDegrees * Math.PI) / 180;
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const snapped = Math.round(angle / step) * step;
+  let diff = Math.abs(angle - snapped);
+  while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+  return (diff * 180) / Math.PI;
+}
+
+function parseCommands(d: string): Array<{
+  command: string;
+  from?: Point;
+  to: Point;
+}> {
+  const result: Array<{ command: string; from?: Point; to: Point }> = [];
+  const regex = /([MLA])\s*([^MLA]*)/g;
+  let match: RegExpExecArray | null;
+  let current: Point | undefined;
+  while ((match = regex.exec(d))) {
+    const command = match[1];
+    const numbers = (match[2].match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi) ?? [])
+      .map(Number);
+    let to: Point | undefined;
+    if ((command === 'M' || command === 'L') && numbers.length >= 2) {
+      to = { x: numbers[0], y: numbers[1] };
+    } else if (command === 'A' && numbers.length >= 7) {
+      to = {
+        x: numbers[numbers.length - 2],
+        y: numbers[numbers.length - 1],
+      };
+    }
+    if (!to) continue;
+    result.push({ command, from: current, to });
+    current = to;
+  }
+  return result;
+}
+
+function renderedAngleAudit(layout: LayoutResult) {
+  let worst = 0;
+  let checked = 0;
+  let illegalCurveCommands = 0;
+
+  for (const route of buildRenderedRoutePaths(graph, layout)) {
+    const commands = parseCommands(route.d);
+    for (const item of commands) {
+      if (!item.from) continue;
+      if (layout.style === 'concentric') {
+        if (item.command === 'L') {
+          const center = layout.radialCenter!;
+          const vx = item.to.x - item.from.x;
+          const vy = item.to.y - item.from.y;
+          const rx = item.from.x - center.x;
+          const ry = item.from.y - center.y;
+          const cross = Math.abs(vx * ry - vy * rx);
+          const scale = Math.max(1, Math.hypot(vx, vy) * Math.hypot(rx, ry));
+          worst = Math.max(worst, (cross / scale) * 180 / Math.PI);
+          checked += 1;
+        } else if (item.command !== 'A') {
+          illegalCurveCommands += 1;
+        }
+        continue;
+      }
+
+      if (item.command === 'A') {
+        if (layout.style !== 'moscow') illegalCurveCommands += 1;
+        continue;
+      }
+      if (item.command !== 'L') continue;
+      worst = Math.max(
+        worst,
+        angleErrorDegrees(
+          item.from,
+          item.to,
+          layout.style === 'hex' ? 60 : 45,
+        ),
+      );
+      checked += 1;
+    }
+  }
+
+  return { worstDegrees: worst, checked, illegalCurveCommands };
+}
+
+function topologyAudit(layout: LayoutResult) {
+  const expectedPaths = graph.lines.reduce(
+    (sum, line) => sum + line.paths.length,
+    0,
+  );
+  const rendered = buildRenderedRoutePaths(graph, layout);
+  let addedSelfCrossings = 0;
+  for (const route of rendered) {
+    const path = graph.lines.find((line) => line.id === route.lineId)!
+      .paths[route.pathIndex];
+    const baseline = sampledSelfCrossings(
+      path.map((nodeId) => layout.positions[nodeId]),
+    );
+    if (sampledSelfCrossings(route.samples) > baseline) {
+      addedSelfCrossings += 1;
+    }
+  }
+  return {
+    valid: layout.integrity.valid && rendered.length === expectedPaths,
+    expectedPaths,
+    renderedPaths: rendered.length,
+    addedSelfCrossings,
+  };
+}
+
+function parallelAudit(layout: LayoutResult) {
+  const bundles = buildGeometricBundleMap(graph, layout.positions);
+  let samples = 0;
+  let worstGapError = 0;
+  let worstEndpointDrift = 0;
+
+  for (const edge of graph.edges) {
+    if (edge.lineIds.length < 2) continue;
+    const a = layout.positions[edge.a];
+    const b = layout.positions[edge.b];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1e-8) continue;
+    const normal = { x: -dy / length, y: dx / length };
+
+    const lanes: Array<{ lineId: string; oa: number; ob: number }> = [];
+    for (const lineId of edge.lineIds) {
+      const line = graph.lines.find((candidate) => candidate.id === lineId);
+      if (!line) continue;
+      let found: { path: string[]; index: number } | undefined;
+      for (const path of line.paths) {
+        for (let index = 0; index < path.length - 1; index += 1) {
+          if (
+            (path[index] === edge.a && path[index + 1] === edge.b) ||
+            (path[index] === edge.b && path[index + 1] === edge.a)
+          ) {
+            found = { path, index };
+            break;
+          }
+        }
+        if (found) break;
+      }
+      if (!found) continue;
+      const shifted = offsetPathForLine(
+        graph,
+        found.path,
+        layout.positions,
+        lineId,
+        12,
+        bundles,
+      );
+      const forward = found.path[found.index] === edge.a;
+      const sa = shifted[forward ? found.index : found.index + 1];
+      const sb = shifted[forward ? found.index + 1 : found.index];
+      lanes.push({
+        lineId,
+        oa: (sa.x - a.x) * normal.x + (sa.y - a.y) * normal.y,
+        ob: (sb.x - b.x) * normal.x + (sb.y - b.y) * normal.y,
+      });
+    }
+
+    for (let i = 0; i < lanes.length; i += 1) {
+      worstEndpointDrift = Math.max(
+        worstEndpointDrift,
+        Math.abs(lanes[i].oa - lanes[i].ob),
+      );
+      for (let j = i + 1; j < lanes.length; j += 1) {
+        const gapA = Math.abs(lanes[i].oa - lanes[j].oa);
+        const gapB = Math.abs(lanes[i].ob - lanes[j].ob);
+        const expected = 12 * Math.abs(
+          edge.lineIds.indexOf(lanes[i].lineId) -
+          edge.lineIds.indexOf(lanes[j].lineId),
+        );
+        worstGapError = Math.max(
+          worstGapError,
+          Math.abs(gapA - expected),
+          Math.abs(gapB - expected),
+        );
+        samples += 2;
+      }
+    }
+  }
+
+  return { samples, worstGapError, worstEndpointDrift };
+}
+
+function renderedSegmentLengths(
+  layout: LayoutResult,
+  lineId: string,
+  path: string[],
+): number[] {
+  const bundles = buildGeometricBundleMap(graph, layout.positions);
+  const ringNodes = new Set(
+    layout.style === 'moscow'
+      ? layout.moscowRings?.flatMap((ring) => ring.nodes) ?? []
+      : [],
+  );
+  const offset = offsetPathForLine(
+    graph,
+    path,
+    layout.positions,
+    lineId,
+    12,
+    bundles,
+  ).map((point, index) =>
+    ringNodes.has(path[index]) ? layout.positions[path[index]] : point,
+  );
+
+  return path.slice(0, -1).map((nodeId, index) => {
+    const nextId = path[index + 1];
+    const geometry = stationAnchoredPath(
+      graph,
+      layout,
+      [nodeId, nextId],
+      [offset[index], offset[index + 1]],
+      lineId,
+    );
+    return geometry.samples.slice(1).reduce(
+      (sum, point, sampleIndex) =>
+        sum + distance(geometry.samples[sampleIndex], point),
+      0,
+    );
+  });
+}
+
+function equidistanceAudit(layout: LayoutResult) {
+  const runCvs: number[] = [];
+  let runs = 0;
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      const lengths = renderedSegmentLengths(layout, line.id, path);
+      const anchors = new Set<number>([0, path.length - 1]);
+      path.forEach((nodeId, index) => {
+        if (structuralNode(graph, nodeId)) anchors.add(index);
+      });
+      const sorted = [...anchors].sort((a, b) => a - b);
+      for (let index = 0; index < sorted.length - 1; index += 1) {
+        const start = sorted[index];
+        const end = sorted[index + 1];
+        if (end - start < 2) continue;
+        const run = lengths.slice(start, end);
+        if (run.length < 2) continue;
+        runCvs.push(coefficientOfVariation(run));
+        runs += 1;
+      }
+    }
+  }
+
+  const sorted = [...runCvs].sort((a, b) => a - b);
+  return {
+    runs,
+    maxCv: sorted.at(-1) ?? 0,
+    p95Cv: sorted[Math.floor(Math.max(0, sorted.length - 1) * 0.95)] ?? 0,
+    medianCv: sorted[Math.floor(sorted.length * 0.5)] ?? 0,
+  };
+}
+
+function roundedCornerAudit(layout: LayoutResult) {
+  const markup = renderToStaticMarkup(
+    React.createElement(SvgMap, {
+      graph,
+      layout,
+      zoom: 1,
+      stationStyle: 'taipei',
+    }),
+  );
+  const routeCount = buildRenderedRoutePaths(graph, layout).length;
+  const joins = (markup.match(/stroke-linejoin="round"/g) ?? []).length;
+  const caps = (markup.match(/stroke-linecap="round"/g) ?? []).length;
+  const widths = [...markup.matchAll(
+    /data-line-id="[^"]+"[^>]*stroke-width="([^"]+)"/g,
+  )].map((match) => Number(match[1]));
+
+  return {
+    routeCount,
+    rounded: joins >= routeCount && caps >= routeCount,
+    uniformStroke:
+      widths.length === routeCount &&
+      widths.every((width) => Math.abs(width - widths[0]) < 1e-9),
+    cornerRadius: widths.length ? widths[0] / 2 : 0,
+  };
+}
+
+for (const style of styles) {
+  const layout = computeLayout(graph, style, { moscowRings: rings });
+  const topology = topologyAudit(layout);
+  const angles = renderedAngleAudit(layout);
+  const rounded = roundedCornerAudit(layout);
+  const parallel = parallelAudit(layout);
+  const spacing = equidistanceAudit(layout);
+
+  console.log(
+    '[design-principles]',
+    JSON.stringify({
+      style,
+      topology,
+      angles,
+      rounded,
+      parallel,
+      spacing: {
+        runs: spacing.runs,
+        maxCvPercent: Number((spacing.maxCv * 100).toFixed(2)),
+        p95CvPercent: Number((spacing.p95Cv * 100).toFixed(2)),
+        medianCvPercent: Number((spacing.medianCv * 100).toFixed(2)),
+      },
+    }),
+  );
+}
