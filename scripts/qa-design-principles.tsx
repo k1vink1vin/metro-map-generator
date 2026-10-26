@@ -289,11 +289,18 @@ function renderedSegmentLengths(
 }
 
 function equidistanceAudit(layout: LayoutResult) {
-  const runCvs: number[] = [];
-  let runs = 0;
+  const runDetails: Array<{
+    line: string;
+    path: string;
+    from: string;
+    to: string;
+    cv: number;
+    lengths: number[];
+  }> = [];
 
   for (const line of graph.lines) {
-    for (const path of line.paths) {
+    for (let pathIndex = 0; pathIndex < line.paths.length; pathIndex += 1) {
+      const path = line.paths[pathIndex];
       const lengths = renderedSegmentLengths(layout, line.id, path);
       const anchors = new Set<number>([0, path.length - 1]);
       path.forEach((nodeId, index) => {
@@ -306,18 +313,28 @@ function equidistanceAudit(layout: LayoutResult) {
         if (end - start < 2) continue;
         const run = lengths.slice(start, end);
         if (run.length < 2) continue;
-        runCvs.push(coefficientOfVariation(run));
-        runs += 1;
+        runDetails.push({
+          line: line.id,
+          path: line.pathIds?.[pathIndex] ?? String(pathIndex),
+          from: graph.nodeById.get(path[start])?.name ?? path[start],
+          to: graph.nodeById.get(path[end])?.name ?? path[end],
+          cv: coefficientOfVariation(run),
+          lengths: run.map((value) => Number(value.toFixed(2))),
+        });
       }
     }
   }
 
-  const sorted = [...runCvs].sort((a, b) => a - b);
+  const sorted = [...runDetails].sort((a, b) => a.cv - b.cv);
   return {
-    runs,
-    maxCv: sorted.at(-1) ?? 0,
-    p95Cv: sorted[Math.floor(Math.max(0, sorted.length - 1) * 0.95)] ?? 0,
-    medianCv: sorted[Math.floor(sorted.length * 0.5)] ?? 0,
+    runs: sorted.length,
+    maxCv: sorted.at(-1)?.cv ?? 0,
+    p95Cv:
+      sorted[Math.floor(Math.max(0, sorted.length - 1) * 0.95)]?.cv ?? 0,
+    medianCv: sorted[Math.floor(sorted.length * 0.5)]?.cv ?? 0,
+    worstRuns: [...sorted]
+      .sort((a, b) => b.cv - a.cv)
+      .slice(0, 8),
   };
 }
 
@@ -412,6 +429,11 @@ for (const style of styles) {
         maxCvPercent: Number((spacing.maxCv * 100).toFixed(2)),
         p95CvPercent: Number((spacing.p95Cv * 100).toFixed(2)),
         medianCvPercent: Number((spacing.medianCv * 100).toFixed(2)),
+        worstRuns: spacing.worstRuns.map((run) => ({
+          ...run,
+          cvPercent: Number((run.cv * 100).toFixed(2)),
+          cv: undefined,
+        })),
       },
     }),
   );
