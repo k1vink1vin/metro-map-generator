@@ -518,12 +518,13 @@ function buildLabelPlacements(
   graph: GraphModel,
   layout: LayoutResult,
   stationStyle: StationVisualStyle,
-  visualScale = 1,
+  markerVisualScale = 1,
+  labelVisualScale = markerVisualScale,
 ): LabelPlacement[] {
   const nodeObstacles = graph.nodes.map((node) => {
     const point = layout.positions[node.id];
     const radius =
-      stationMarkerRadius(node, graph, stationStyle) * visualScale;
+      stationMarkerRadius(node, graph, stationStyle) * markerVisualScale;
 
     return {
       nodeId: node.id,
@@ -566,11 +567,11 @@ function buildLabelPlacements(
   for (const node of orderedNodes) {
     const point = layout.positions[node.id];
     const text = node.name || node.id;
-    const width = estimateTextWidth(text) * visualScale;
+    const width = estimateTextWidth(text) * labelVisualScale;
 
-    const s = visualScale;
+    const s = labelVisualScale;
     const markerRadius =
-      stationMarkerRadius(node, graph, stationStyle) * visualScale;
+      stationMarkerRadius(node, graph, stationStyle) * markerVisualScale;
     const near = markerRadius + 6 * s;
     const far = markerRadius + 18 * s;
     const candidates: Array<{
@@ -606,9 +607,9 @@ function buildLabelPlacements(
         candidate.y,
         width,
         candidate.anchor,
-        visualScale,
+        labelVisualScale,
       );
-      const paddedRect = padded(rect, 3 * visualScale);
+      const paddedRect = padded(rect, 3 * labelVisualScale);
 
       let labelOverlap = 0;
       for (const used of occupied) {
@@ -620,7 +621,7 @@ function buildLabelPlacements(
 
         stationOverlap += overlapArea(
           paddedRect,
-          padded(obstacle.rect, 2 * visualScale),
+          padded(obstacle.rect, 2 * labelVisualScale),
         );
       }
 
@@ -651,7 +652,7 @@ function buildLabelPlacements(
     if (!best) continue;
     placements.push(best.placement);
     occupied.push(
-      padded(best.placement.rect, 3 * visualScale),
+      padded(best.placement.rect, 3 * labelVisualScale),
     );
   }
 
@@ -662,10 +663,10 @@ function buildLabelPlacements(
     for (let i = 0; i < placements.length; i++) {
       const options = alternatives.get(placements[i].nodeId)!;
       const score = (entry: typeof options[number]) => {
-        const rect = padded(entry.placement.rect, 3 * visualScale);
+        const rect = padded(entry.placement.rect, 3 * labelVisualScale);
         return entry.penalty + placements.reduce((sum, other, j) => sum + (i === j ? 0 :
-          overlapArea(rect, padded(other.rect, 3 * visualScale)) * 1000), 0) +
-          nodeObstacles.reduce((sum, obstacle) => sum + overlapArea(rect,padded(obstacle.rect,2*visualScale))*1000,0);
+          overlapArea(rect, padded(other.rect, 3 * labelVisualScale)) * 1000), 0) +
+          nodeObstacles.reduce((sum, obstacle) => sum + overlapArea(rect,padded(obstacle.rect,2*labelVisualScale))*1000,0);
       };
       const current = options.find(o => o.placement === placements[i])!;
       let best = current, bestScore = score(current);
@@ -826,13 +827,22 @@ export function SvgMap({
   stationStyle = 'taipei',
 }: SvgMapProps) {
   const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
+  // Geographic keeps true station spacing, so a passenger-map-sized badge can
+  // cover several nearby stations. Use a much smaller symbol scale here while
+  // keeping the selected station visual style recognizable. Labels are also
+  // reduced, but less aggressively than the station badges for readability.
+  const stationVisualScale =
+    visualScale * (layout.style === 'geographic' ? 0.42 : 1);
+  const labelVisualScale =
+    visualScale * (layout.style === 'geographic' ? 0.58 : 1);
   const routePaths = buildRenderedRoutePaths(graph, layout);
 
   const labelPlacements = buildLabelPlacements(
     graph,
     layout,
     stationStyle,
-    visualScale,
+    stationVisualScale,
+    labelVisualScale,
   );
 
   const taipeiRiver =
@@ -875,6 +885,8 @@ export function SvgMap({
       data-layout-segment-count={layout.integrity.segmentCount}
       data-detail-zoom={zoom}
       data-station-style={stationStyle}
+      data-station-visual-scale={stationVisualScale}
+      data-label-visual-scale={labelVisualScale}
       role="img"
       aria-label="Generated schematic metro map"
     >
@@ -968,12 +980,12 @@ export function SvgMap({
               data-interchange={isInterchangeNode(graph, node) ? 'true' : 'false'}
             >
               {stationStyle === 'tokyo'
-                ? renderTokyoStation(graph, node, visualScale)
+                ? renderTokyoStation(graph, node, stationVisualScale)
                 : stationStyle === 'osaka'
-                  ? renderOsakaStation(graph, node, visualScale)
+                  ? renderOsakaStation(graph, node, stationVisualScale)
                   : stationStyle === 'moscow'
-                    ? renderMoscowStation(graph, node, visualScale)
-                    : renderTaipeiStation(graph, node, visualScale)}
+                    ? renderMoscowStation(graph, node, stationVisualScale)
+                    : renderTaipeiStation(graph, node, stationVisualScale)}
             </g>
           );
         })}
@@ -995,10 +1007,10 @@ export function SvgMap({
                     ? 12
                     : stationStyle === 'osaka'
                       ? 12.2
-                      : 11.5) * visualScale
+                      : 11.5) * labelVisualScale
               }px`,
               strokeWidth:
-                (stationStyle === 'moscow' ? 3 : 3.5) * visualScale,
+                (stationStyle === 'moscow' ? 3 : 3.5) * labelVisualScale,
             }}
           >
             {label.text}
