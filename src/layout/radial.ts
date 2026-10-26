@@ -641,6 +641,170 @@ function moscowSegmentsCross(
   );
 }
 
+function moscowWholeLineQuality(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  ringNodes: Set<string>,
+): {
+  doglegs: number;
+  selfCrossings: number;
+  edgeCrossings: number;
+  minNodeDistance: number;
+} {
+  const signedTurn = (p0: Point, p1: Point, p2: Point) => {
+    const first = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+    const second = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    let delta = second - first;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    return delta;
+  };
+
+  const ordinary = (nodeId: string): boolean => {
+    const node = graph.nodeById.get(nodeId);
+    if (!node || ringNodes.has(nodeId)) return false;
+    if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return false;
+    if (node.stationIds.length !== 1) return false;
+    const incidentLines = new Set<string>();
+    for (const neighbor of graph.adjacency.get(nodeId) ?? []) {
+      const edge = graph.edgeByKey.get(edgeKey(nodeId, neighbor));
+      for (const lineId of edge?.lineIds ?? []) {
+        incidentLines.add(lineId);
+      }
+    }
+    return incidentLines.size === 1;
+  };
+
+  let doglegs = 0;
+  let selfCrossings = 0;
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      for (let index = 0; index < path.length - 3; index += 1) {
+        const [aId, bId, cId, dId] = path.slice(index, index + 4);
+        if (!ordinary(bId) || !ordinary(cId)) continue;
+        const first = signedTurn(
+          positions[aId],
+          positions[bId],
+          positions[cId],
+        );
+        const second = signedTurn(
+          positions[bId],
+          positions[cId],
+          positions[dId],
+        );
+        if (
+          Math.sign(first) !== Math.sign(second) &&
+          Math.abs(first) > (24 * Math.PI) / 180 &&
+          Math.abs(second) > (24 * Math.PI) / 180
+        ) {
+          doglegs += 1;
+        }
+      }
+
+      for (let i = 0; i < path.length - 1; i += 1) {
+        for (let j = i + 2; j < path.length - 1; j += 1) {
+          if (
+            moscowSegmentsCross(
+              positions[path[i]],
+              positions[path[i + 1]],
+              positions[path[j]],
+              positions[path[j + 1]],
+            )
+          ) {
+            selfCrossings += 1;
+          }
+        }
+      }
+    }
+  }
+
+  let edgeCrossings = 0;
+  for (let i = 0; i < graph.edges.length; i += 1) {
+    const first = graph.edges[i];
+    for (let j = i + 1; j < graph.edges.length; j += 1) {
+      const second = graph.edges[j];
+      if (
+        first.a === second.a ||
+        first.a === second.b ||
+        first.b === second.a ||
+        first.b === second.b
+      ) {
+        continue;
+      }
+      if (
+        moscowSegmentsCross(
+          positions[first.a],
+          positions[first.b],
+          positions[second.a],
+          positions[second.b],
+        )
+      ) {
+        edgeCrossings += 1;
+      }
+    }
+  }
+
+  let minNodeDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < graph.nodes.length; i += 1) {
+    for (let j = i + 1; j < graph.nodes.length; j += 1) {
+      const a = positions[graph.nodes[i].id];
+      const b = positions[graph.nodes[j].id];
+      minNodeDistance = Math.min(
+        minNodeDistance,
+        Math.hypot(b.x - a.x, b.y - a.y),
+      );
+    }
+  }
+
+  return {
+    doglegs,
+    selfCrossings,
+    edgeCrossings,
+    minNodeDistance,
+  };
+}
+
+function regularizeMoscowWholeLinesSafely(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  ringNodes: Set<string>,
+): Record<string, Point> {
+  const before = moscowWholeLineQuality(
+    graph,
+    positions,
+    ringNodes,
+  );
+  const candidate = smoothMoscowCorridors(
+    graph,
+    positions,
+    ringNodes,
+  );
+  const after = moscowWholeLineQuality(
+    graph,
+    candidate,
+    ringNodes,
+  );
+
+  const spacingFloor = Math.min(
+    27,
+    before.minNodeDistance,
+  );
+
+  // This is deliberately lexicographic: topology and station clearance are
+  // hard constraints. A prettier line is accepted only when it does not add
+  // crossings and actually removes whole-route alternating doglegs.
+  if (
+    after.selfCrossings <= before.selfCrossings &&
+    after.edgeCrossings <= before.edgeCrossings &&
+    after.minNodeDistance + 1e-6 >= spacingFloor &&
+    after.doglegs < before.doglegs
+  ) {
+    return candidate;
+  }
+
+  return positions;
+}
+
 function findCrossRegionMoscowPathNodes(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -1431,9 +1595,19 @@ export function layoutMoscow(
     }
   }
 
-  // Keep the repaired connector and ring circles fixed. If another ordinary
-  // station crowds this passenger-wayfinding backbone, move only that other
-  // station. This preserves the connector's no-self-crossing geometry.
+  // Regional repair can restore geographic wiggles after the first Moscow
+  // corridor pass. Re-run the whole-line regularizer here, but accept it only
+  // when topology/spacing stay no worse and the total dogleg count falls.
+  const wholeLineRegularized =
+    regularizeMoscowWholeLinesSafely(
+      graph,
+      crossRegionRepaired,
+      ringNodeSet,
+    );
+
+  // Keep the repaired/regularized connector and ring circles fixed. If
+  // another ordinary station crowds this passenger-wayfinding backbone, move
+  // only that other station.
   const protectedAfterRepair = new Set([
     ...ringNodeSet,
     ...crossRegionPathNodes,
@@ -1444,8 +1618,8 @@ export function layoutMoscow(
       for (let j = i + 1; j < graph.nodes.length; j += 1) {
         const aId = graph.nodes[i].id;
         const bId = graph.nodes[j].id;
-        const a = crossRegionRepaired[aId];
-        const b = crossRegionRepaired[bId];
+        const a = wholeLineRegularized[aId];
+        const b = wholeLineRegularized[bId];
         let dx = b.x - a.x;
         let dy = b.y - a.y;
         let distance = Math.hypot(dx, dy);
@@ -1490,7 +1664,7 @@ export function layoutMoscow(
 
   const smoothedForDisplay = relaxPathKinksSafely(
     graph,
-    crossRegionRepaired,
+    wholeLineRegularized,
     {
       passes: 10,
       thresholdDegrees: 66,
@@ -1503,7 +1677,7 @@ export function layoutMoscow(
   // Restore the protected Moscow backbone exactly after the local smoothing.
   for (const nodeId of protectedAfterRepair) {
     smoothedForDisplay[nodeId] = {
-      ...crossRegionRepaired[nodeId],
+      ...wholeLineRegularized[nodeId],
     };
   }
 
