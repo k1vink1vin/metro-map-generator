@@ -680,7 +680,7 @@ function orthoradialEscapePath(
       );
 
     let best = compactRanked[0];
-    if (best.crossings > allowedCrossings) {
+    if (best.crossings > 0) {
       const escapeRanked = orthoradialEscapeCandidates(
         points[index],
         points[index + 1],
@@ -803,7 +803,7 @@ function orthoradialPath(
   // Beam search intentionally prefers compact geometry, but a very long line
   // can still need a wider topological corridor. Only pay that visual cost
   // when it strictly reduces self-crossings.
-  if (best.crossings > 0) {
+  if (best.crossings > allowedCrossings) {
     const escaped = orthoradialEscapePath(
       points,
       center,
