@@ -176,6 +176,53 @@ function fitToCanvas(
   );
 }
 
+function uniformlyEnforceMinimumNodeDistance(
+  graph: GraphModel,
+  positions: Record<string, Point>,
+  minimumDistance: number,
+): Record<string, Point> {
+  if (graph.nodes.length < 2) return positions;
+
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < graph.nodes.length; i += 1) {
+    for (let j = i + 1; j < graph.nodes.length; j += 1) {
+      const a = positions[graph.nodes[i].id];
+      const b = positions[graph.nodes[j].id];
+      if (!a || !b) continue;
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d > 1e-8) minimum = Math.min(minimum, d);
+    }
+  }
+
+  if (
+    !Number.isFinite(minimum) ||
+    minimum >= minimumDistance
+  ) {
+    return positions;
+  }
+
+  const entries = Object.entries(positions);
+  const center = {
+    x:
+      entries.reduce((sum, [, point]) => sum + point.x, 0) /
+      Math.max(1, entries.length),
+    y:
+      entries.reduce((sum, [, point]) => sum + point.y, 0) /
+      Math.max(1, entries.length),
+  };
+  const scale = minimumDistance / minimum;
+
+  return Object.fromEntries(
+    entries.map(([id, point]) => [
+      id,
+      {
+        x: center.x + (point.x - center.x) * scale,
+        y: center.y + (point.y - center.y) * scale,
+      },
+    ]),
+  );
+}
+
 function validateEveryRouteIsDrawable(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -262,13 +309,25 @@ export function finalizeLayoutPositions(
       ? { positions: completed.positions, separatedNodePairs: 0 }
       : separateOverlappingNodes(graph, completed.positions);
   const fitted = fitToCanvas(graph, style, separated.positions);
+  // Concentric geometry must not use pairwise repulsion because that would
+  // deform perfect shells. If fit-to-canvas made the map too dense, enlarge
+  // the complete layout uniformly instead; circles and the common centre are
+  // preserved exactly.
+  const concentricSpaced =
+    style === 'concentric'
+      ? uniformlyEnforceMinimumNodeDistance(
+          graph,
+          fitted,
+          30,
+        )
+      : fitted;
   // Taipei's section router is solved in schematic coordinates. Do not
   // disturb that geometry before fitting; after fitting, only the genuinely
   // sub-28px pairs need a tiny topology-safe separation.
   const spaced =
     style === 'taipei'
-      ? separateNodesSafely(graph, fitted, 29, 6)
-      : fitted;
+      ? separateNodesSafely(graph, concentricSpaced, 29, 6)
+      : concentricSpaced;
   // Work in final display units: a short saw-tooth is a visual defect even
   // when the pre-fit coordinates made its displacement look insignificant.
   // The corridor pass accepts only moves that preserve route self-crossings,
