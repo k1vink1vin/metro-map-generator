@@ -760,7 +760,7 @@ export function SvgMap({
     layout.style === 'concentric'
       ? (() => {
           const points = graph.nodes.map((node) => layout.positions[node.id]);
-          const center = {
+          const center = layout.radialCenter ?? {
             x: points.reduce((sum, point) => sum + point.x, 0) / Math.max(1, points.length),
             y: points.reduce((sum, point) => sum + point.y, 0) / Math.max(1, points.length),
           };
