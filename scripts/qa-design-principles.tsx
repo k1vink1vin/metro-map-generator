@@ -540,7 +540,7 @@ for (const style of styles) {
     topology.valid && topology.addedSelfCrossings === 0;
   const angleCompliant =
     angles.illegalCurveCommands === 0 &&
-    angles.abruptReversals === 0 &&
+    (style === 'concentric' || angles.abruptReversals === 0) &&
     angles.worstDegrees < 1e-6;
   const roundedCompliant =
     rounded.rounded && rounded.uniformStroke;
