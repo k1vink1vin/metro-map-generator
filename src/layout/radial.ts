@@ -999,6 +999,161 @@ function repairMoscowDoglegsSafely(
   }
 
 
+  // A sequence of ordinary stations between two structural anchors should
+  // read as one corridor, not as unrelated local elbows. Search a small family
+  // of straight / single-bow corridors and move the complete run atomically.
+  // This is especially important for long radial branches such as the Red
+  // line north of Beitou.
+  for (let pass = 0; pass < 3; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        const anchors = new Set<number>([0, path.length - 1]);
+        path.forEach((nodeId, index) => {
+          if (!ordinary(nodeId)) anchors.add(index);
+        });
+        const anchorIndices = [...anchors].sort((a, b) => a - b);
+
+        for (
+          let anchorIndex = 0;
+          anchorIndex < anchorIndices.length - 1;
+          anchorIndex += 1
+        ) {
+          const startIndex = anchorIndices[anchorIndex];
+          const endIndex = anchorIndices[anchorIndex + 1];
+          if (endIndex - startIndex < 3) continue;
+
+          const movingIds = path.slice(startIndex + 1, endIndex);
+          if (!movingIds.every(ordinary)) continue;
+          const moving = new Set(movingIds);
+          const beforeDoglegs = pathDoglegs(path);
+          if (beforeDoglegs === 0) continue;
+          const beforeSelf = pathSelfCrossings(path);
+          const beforeCrossings = affectedCrossings(moving);
+          const originals = new Map(
+            movingIds.map((nodeId) => [
+              nodeId,
+              { ...positions[nodeId] },
+            ]),
+          );
+
+          const start = positions[path[startIndex]];
+          const end = positions[path[endIndex]];
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const length = Math.max(1, Math.hypot(dx, dy));
+          const nx = -dy / length;
+          const ny = dx / length;
+
+          let best:
+            | {
+                points: Map<string, Point>;
+                doglegs: number;
+                crossings: number;
+                offset: number;
+              }
+            | undefined;
+
+          for (const offset of [
+            0,
+            28,
+            -28,
+            52,
+            -52,
+            82,
+            -82,
+            118,
+            -118,
+            160,
+            -160,
+            220,
+            -220,
+          ]) {
+            for (const blend of [1, 0.84, 0.68, 0.52]) {
+              const candidatePoints = new Map<string, Point>();
+              movingIds.forEach((nodeId, localIndex) => {
+                const index = startIndex + localIndex + 1;
+                const t =
+                  (index - startIndex) /
+                  (endIndex - startIndex);
+                const bow =
+                  Math.sin(Math.PI * t) * offset;
+                const target = {
+                  x: start.x + dx * t + nx * bow,
+                  y: start.y + dy * t + ny * bow,
+                };
+                const original = originals.get(nodeId)!;
+                const candidate = {
+                  x:
+                    original.x * (1 - blend) +
+                    target.x * blend,
+                  y:
+                    original.y * (1 - blend) +
+                    target.y * blend,
+                };
+                positions[nodeId] = candidate;
+                candidatePoints.set(nodeId, candidate);
+              });
+
+              const doglegs = pathDoglegs(path);
+              const crossings = affectedCrossings(moving);
+              const safe =
+                spacingSafe(moving) &&
+                pathSelfCrossings(path) <= beforeSelf &&
+                crossings <= beforeCrossings &&
+                doglegs < beforeDoglegs;
+
+              if (
+                safe &&
+                (
+                  !best ||
+                  doglegs < best.doglegs ||
+                  (
+                    doglegs === best.doglegs &&
+                    crossings < best.crossings
+                  ) ||
+                  (
+                    doglegs === best.doglegs &&
+                    crossings === best.crossings &&
+                    Math.abs(offset) < Math.abs(best.offset)
+                  )
+                )
+              ) {
+                best = {
+                  points: new Map(
+                    [...candidatePoints].map(([id, point]) => [
+                      id,
+                      { ...point },
+                    ]),
+                  ),
+                  doglegs,
+                  crossings,
+                  offset,
+                };
+              }
+
+              for (const nodeId of movingIds) {
+                positions[nodeId] = {
+                  ...originals.get(nodeId)!,
+                };
+              }
+            }
+          }
+
+          if (best) {
+            for (const [nodeId, point] of best.points) {
+              positions[nodeId] = point;
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
   const pathBacktracks = (path: string[]): number => {
     let count = 0;
     for (let index = 1; index < path.length - 1; index += 1) {
