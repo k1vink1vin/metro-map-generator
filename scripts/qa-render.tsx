@@ -201,6 +201,23 @@ for (const style of selectedStyles) {
       `><style>${css}</style>`,
     );
 
+    const expectedStationScale =
+      style === 'geographic' ? '0.42' : '1';
+    const expectedLabelScale =
+      style === 'geographic' ? '0.58' : '1';
+    if (
+      !markup.includes(
+        `data-station-visual-scale="${expectedStationScale}"`,
+      ) ||
+      !markup.includes(
+        `data-label-visual-scale="${expectedLabelScale}"`,
+      )
+    ) {
+      throw new Error(
+        `${style}/${stationStyle}: unexpected station/label visual scale`,
+      );
+    }
+
     for (const node of sameLineBranchJunctions) {
       const marker = `data-node-id="${node.id}" data-interchange="false"`;
       if (!markup.includes(marker)) {
