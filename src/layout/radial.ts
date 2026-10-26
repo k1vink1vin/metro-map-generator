@@ -1522,7 +1522,7 @@ export function layoutMoscow(
 export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
-): Record<string, Point> {
+): { positions: Record<string, Point>; center: Point } {
   const points = graph.nodes.map((node) => geographic[node.id]);
   const center = {
     x:
@@ -1658,33 +1658,11 @@ export function layoutConcentric(
   // radial-shell solution with the north-up geography: the centre receives
   // stronger shell structure, while outer districts retain more of their
   // natural topology.
-  const blended = Object.fromEntries(
-    graph.nodes.map((node) => {
-      const geo = geographic[node.id];
-      const shell = target[node.id] ?? geo;
-      const radialDistance = Math.hypot(
-        geo.x - center.x,
-        geo.y - center.y,
-      );
-      const normalized = radialDistance / Math.max(1, maxRadius);
-      const shellWeight =
-        0.46 - Math.min(0.16, normalized * 0.16);
+  // Orthoradial mode is intentionally strict: every station remains on one
+  // of the common-centre shells. Geographic blending here used to move
+  // stations off their circles and made the rendered style only "radial-ish".
+  // Topology protection happens in the renderer/QA instead of deforming the
+  // defining geometry of this style.
+  return { positions: target, center };
 
-      return [
-        node.id,
-        {
-          x: geo.x * (1 - shellWeight) + shell.x * shellWeight,
-          y: geo.y * (1 - shellWeight) + shell.y * shellWeight,
-        },
-      ];
-    }),
-  );
-
-  return relaxPathKinksSafely(graph, blended, {
-    passes: 5,
-    thresholdDegrees: 96,
-    minimumNodeDistance: 34,
-    maxShift: 24,
-    structuralMaxShift: 12,
-  });
 }
