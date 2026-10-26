@@ -90,7 +90,7 @@ export function layoutTaipei(
     {
       angleStep: 45,
       passes: 8,
-      equalSpacingWeight: 0.68,
+      equalSpacingWeight: 1,
       minimumNodeDistance: 29,
       maximumShift: 96,
       minimumTurnDegrees: 22,
@@ -125,7 +125,7 @@ export function layoutLondon(
     {
       angleStep: 45,
       geographyWeight: 0.22,
-      equalSpacingWeight: 0.68,
+      equalSpacingWeight: 1,
       iterations: 135,
     },
   );
@@ -176,7 +176,7 @@ export function layoutLondon(
     24,
   );
   const sectionRouted = routeTopologySectionsSafely(graph, topologyReference, untangled, geographic, {
-    angleStep: 45, passes: 8, equalSpacingWeight: 0.8,
+    angleStep: 45, passes: 8, equalSpacingWeight: 1,
     minimumNodeDistance: 29, maximumShift: 110, minimumTurnDegrees: 20,
     maxShapeAnchors: 2, shapeTolerance: 24,
   });
