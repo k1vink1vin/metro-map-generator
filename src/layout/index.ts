@@ -82,7 +82,8 @@ function finish(
   };
 
   let rhythm = result;
-  for (let pass = 0; pass < 4; pass += 1) {
+  const rhythmPasses = style === 'concentric' ? 2 : 4;
+  for (let pass = 0; pass < rhythmPasses; pass += 1) {
     const next = equalizeRenderedStationRhythm(graph, rhythm);
     if (next === rhythm) break;
     rhythm = next;
