@@ -255,6 +255,7 @@ export function finalizeLayoutPositions(
     style === 'taipei' ||
     style === 'moscow' ||
     style === 'london' ||
+    style === 'concentric' ||
     style === 'hex';
   const separated =
     topologySensitiveStyle
@@ -272,7 +273,7 @@ export function finalizeLayoutPositions(
   // when the pre-fit coordinates made its displacement look insignificant.
   // The corridor pass accepts only moves that preserve route self-crossings,
   // external crossings and spacing. Ring stations remain fixed; shell targets remain soft constraints.
-  const simplified = style !== 'geographic'
+  const simplified = style !== 'geographic' && style !== 'concentric'
     ? collapseRouteZigzagsSafely(graph, spaced, {
         fixedNodes,
         angleStep: style === 'hex' ? 60 : style === 'moscow' || style === 'concentric' ? 15 : 45,
