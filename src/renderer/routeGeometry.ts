@@ -56,21 +56,33 @@ function shortestSignedAngle(from: number, to: number): number {
  * rendering invariant: 45° styles only emit multiples of 45°, while the hex
  * style only emits multiples of 60°.
  */
-function strictAxisPolyline(
+interface AxisPolylineCandidate {
+  points: Point[];
+  length: number;
+  bends: number;
+}
+
+function strictAxisCandidates(
   a: Point,
   b: Point,
   stepDegrees: 45 | 60,
-): Point[] {
+): AxisPolylineCandidate[] {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const length = Math.hypot(dx, dy);
-  if (length < 1e-8) return [a, b];
+  const directLength = Math.hypot(dx, dy);
+  if (directLength < 1e-8) {
+    return [{ points: [a, b], length: 0, bends: 0 }];
+  }
 
   const step = (stepDegrees * Math.PI) / 180;
   const angle = normalizedAngle(Math.atan2(dy, dx));
   const nearest = Math.round(angle / step) * step;
   if (Math.abs(shortestSignedAngle(angle, nearest)) < 1e-7) {
-    return [a, b];
+    return [{
+      points: [a, b],
+      length: directLength,
+      bends: 0,
+    }];
   }
 
   const lower = Math.floor(angle / step) * step;
@@ -79,25 +91,132 @@ function strictAxisPolyline(
   const v = { x: Math.cos(upper), y: Math.sin(upper) };
   const det = u.x * v.y - u.y * v.x;
 
-  if (Math.abs(det) < 1e-9) return [a, b];
+  if (Math.abs(det) < 1e-9) {
+    return [{
+      points: [a, b],
+      length: directLength,
+      bends: 0,
+    }];
+  }
 
   const alpha = (dx * v.y - dy * v.x) / det;
   const beta = (u.x * dy - u.y * dx) / det;
-  if (alpha < -1e-6 || beta < -1e-6) return [a, b];
+  if (alpha < -1e-6 || beta < -1e-6) {
+    return [{
+      points: [a, b],
+      length: directLength,
+      bends: 0,
+    }];
+  }
 
-  // Put the small correction next to the station so long corridor segments
-  // remain visually dominant instead of becoming a saw-tooth.
-  const corner =
-    alpha <= beta
-      ? { x: a.x + u.x * alpha, y: a.y + u.y * alpha }
-      : { x: a.x + v.x * beta, y: a.y + v.y * beta };
+  const corners = [
+    { x: a.x + u.x * alpha, y: a.y + u.y * alpha },
+    { x: a.x + v.x * beta, y: a.y + v.y * beta },
+  ];
 
-  const points = [a, corner, b];
-  return points.filter(
-    (point, index) =>
-      index === 0 ||
-      distance(point, points[index - 1]) > 1e-7,
-  );
+  return corners.map((corner) => {
+    const points = [a, corner, b].filter(
+      (point, index, all) =>
+        index === 0 ||
+        distance(point, all[index - 1]) > 1e-7,
+    );
+    return {
+      points,
+      length: points
+        .slice(1)
+        .reduce(
+          (sum, point, index) =>
+            sum + distance(points[index], point),
+          0,
+        ),
+      bends: Math.max(0, points.length - 2),
+    };
+  });
+}
+
+function strictAxisPath(
+  points: Point[],
+  stepDegrees: 45 | 60,
+): RouteGeometry {
+  if (!points.length) {
+    return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
+  }
+  if (points.length === 1) {
+    return {
+      d: `M ${points[0].x} ${points[0].y}`,
+      samples: [points[0]],
+      arcCount: 0,
+      fallbackCount: 0,
+    };
+  }
+
+  type State = {
+    commands: string[];
+    samples: Point[];
+    crossings: number;
+    length: number;
+    bends: number;
+  };
+
+  let states: State[] = [{
+    commands: [`M ${points[0].x} ${points[0].y}`],
+    samples: [points[0]],
+    crossings: 0,
+    length: 0,
+    bends: 0,
+  }];
+
+  const beamWidth = 16;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const candidates = strictAxisCandidates(
+      points[index],
+      points[index + 1],
+      stepDegrees,
+    );
+    const next: State[] = [];
+
+    for (const state of states) {
+      for (const candidate of candidates) {
+        const addedCrossings = extensionCrossings(
+          state.samples,
+          candidate.points,
+        );
+        const samples = [
+          ...state.samples,
+          ...candidate.points.slice(1),
+        ];
+        next.push({
+          commands: [
+            ...state.commands,
+            ...candidate.points
+              .slice(1)
+              .map((point) => `L ${point.x} ${point.y}`),
+          ],
+          samples,
+          crossings: state.crossings + addedCrossings,
+          length: state.length + candidate.length,
+          bends: state.bends + candidate.bends,
+        });
+      }
+    }
+
+    next.sort(
+      (a, b) =>
+        a.crossings - b.crossings ||
+        a.bends - b.bends ||
+        a.length - b.length,
+    );
+    states = next.slice(0, beamWidth);
+  }
+
+  const best = states[0];
+  return {
+    d: best.commands.join(' '),
+    samples: best.samples,
+    arcCount: 0,
+    fallbackCount: 0,
+  };
 }
 
 interface OrthoradialEdgeGeometry {
@@ -430,6 +549,17 @@ export function stationAnchoredPath(
     return orthoradialPath(points, concentricCenter);
   }
 
+  if (
+    layout.style === 'taipei' ||
+    layout.style === 'london' ||
+    layout.style === 'hex'
+  ) {
+    return strictAxisPath(
+      points,
+      layout.style === 'hex' ? 60 : 45,
+    );
+  }
+
   const closed = path.length > 2 && path[0] === path[path.length - 1];
   const tangent = (i: number): Point => {
     const last = points.length - 1;
@@ -485,11 +615,11 @@ export function stationAnchoredPath(
           ? 45
           : undefined;
     if (angularStep) {
-      const polyline = strictAxisPolyline(
+      const polyline = strictAxisCandidates(
         a,
         b,
         angularStep as 45 | 60,
-      );
+      )[0].points;
       for (const point of polyline.slice(1)) {
         commands.push(`L ${point.x} ${point.y}`);
         samples.push(point);
