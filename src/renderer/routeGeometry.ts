@@ -104,6 +104,7 @@ interface OrthoradialEdgeGeometry {
   commands: string[];
   samples: Point[];
   arcCount: number;
+  length: number;
 }
 
 function circularArcSamples(
@@ -125,15 +126,38 @@ function circularArcSamples(
   });
 }
 
+function arcCommand(
+  radius: number,
+  delta: number,
+  end: Point,
+): string {
+  const largeArc = Math.abs(delta) > Math.PI + 1e-8 ? 1 : 0;
+  const sweep = delta > 0 ? 1 : 0;
+  return `A ${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`;
+}
+
+function arcDeltas(from: number, to: number): number[] {
+  const shortest = shortestSignedAngle(from, to);
+  if (Math.abs(shortest) < 1e-8) return [0];
+  const alternate =
+    shortest > 0
+      ? shortest - Math.PI * 2
+      : shortest + Math.PI * 2;
+  return [shortest, alternate];
+}
+
 /**
- * Orthoradial edge: every piece is either a circular arc around the one shared
- * centre or a straight radial segment through that centre.
+ * Enumerate legal orthoradial connections for one station pair. Every
+ * candidate consists exclusively of circular arcs around the common centre
+ * and/or radial straight segments. Path-level selection below chooses among
+ * them globally so local shortest-arc choices do not make a route fold over
+ * itself.
  */
-function orthoradialEdge(
+function orthoradialEdgeCandidates(
   a: Point,
   b: Point,
   center: Point,
-): OrthoradialEdgeGeometry {
+): OrthoradialEdgeGeometry[] {
   const ax = a.x - center.x;
   const ay = a.y - center.y;
   const bx = b.x - center.x;
@@ -142,37 +166,51 @@ function orthoradialEdge(
   const rb = Math.hypot(bx, by);
 
   if (ra < 1e-7 || rb < 1e-7) {
-    return { commands: [`L ${b.x} ${b.y}`], samples: [a, b], arcCount: 0 };
+    return [{
+      commands: [`L ${b.x} ${b.y}`],
+      samples: [a, b],
+      arcCount: 0,
+      length: distance(a, b),
+    }];
   }
 
   const aa = Math.atan2(ay, ax);
   const ab = Math.atan2(by, bx);
-  const delta = shortestSignedAngle(aa, ab);
+  const angleDelta = shortestSignedAngle(aa, ab);
 
-  if (Math.abs(delta) < 1e-7) {
-    return { commands: [`L ${b.x} ${b.y}`], samples: [a, b], arcCount: 0 };
+  if (Math.abs(angleDelta) < 1e-7) {
+    return [{
+      commands: [`L ${b.x} ${b.y}`],
+      samples: [a, b],
+      arcCount: 0,
+      length: Math.abs(rb - ra),
+    }];
   }
 
-  const sweep = delta > 0 ? 1 : 0;
+  const candidates: OrthoradialEdgeGeometry[] = [];
+  const deltas = arcDeltas(aa, ab);
 
   if (Math.abs(ra - rb) < 1e-6) {
-    return {
-      commands: [`A ${ra} ${ra} 0 0 ${sweep} ${b.x} ${b.y}`],
-      samples: [a, ...circularArcSamples(center, ra, aa, delta)],
-      arcCount: 1,
-    };
+    for (const delta of deltas) {
+      candidates.push({
+        commands: [arcCommand(ra, delta, b)],
+        samples: [a, ...circularArcSamples(center, ra, aa, delta)],
+        arcCount: 1,
+        length: Math.abs(delta) * ra,
+      });
+    }
+    return candidates;
   }
 
-  // Use the smaller radius for the circular portion. This minimizes detour
-  // while preserving the orbit/spoke grammar exactly.
-  if (ra < rb) {
+  // Option A: circular movement on the start shell, then radial movement.
+  for (const delta of deltas) {
     const corner = {
       x: center.x + Math.cos(ab) * ra,
       y: center.y + Math.sin(ab) * ra,
     };
-    return {
+    candidates.push({
       commands: [
-        `A ${ra} ${ra} 0 0 ${sweep} ${corner.x} ${corner.y}`,
+        arcCommand(ra, delta, corner),
         `L ${b.x} ${b.y}`,
       ],
       samples: [
@@ -181,24 +219,110 @@ function orthoradialEdge(
         b,
       ],
       arcCount: 1,
+      length: Math.abs(delta) * ra + Math.abs(rb - ra),
+    });
+  }
+
+  // Option B: radial movement first, then circular movement on the end shell.
+  for (const delta of deltas) {
+    const corner = {
+      x: center.x + Math.cos(aa) * rb,
+      y: center.y + Math.sin(aa) * rb,
+    };
+    candidates.push({
+      commands: [
+        `L ${corner.x} ${corner.y}`,
+        arcCommand(rb, delta, b),
+      ],
+      samples: [
+        a,
+        corner,
+        ...circularArcSamples(center, rb, aa, delta),
+      ],
+      arcCount: 1,
+      length: Math.abs(rb - ra) + Math.abs(delta) * rb,
+    });
+  }
+
+  return candidates;
+}
+
+function orthoradialPath(
+  points: Point[],
+  center: Point,
+): RouteGeometry {
+  if (!points.length) {
+    return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
+  }
+  if (points.length === 1) {
+    return {
+      d: `M ${points[0].x} ${points[0].y}`,
+      samples: [points[0]],
+      arcCount: 0,
+      fallbackCount: 0,
     };
   }
 
-  const corner = {
-    x: center.x + Math.cos(aa) * rb,
-    y: center.y + Math.sin(aa) * rb,
+  type State = {
+    commands: string[];
+    samples: Point[];
+    arcCount: number;
+    length: number;
+    crossings: number;
   };
+
+  let states: State[] = [{
+    commands: [`M ${points[0].x} ${points[0].y}`],
+    samples: [points[0]],
+    arcCount: 0,
+    length: 0,
+    crossings: 0,
+  }];
+
+  // A small beam is enough because every edge has at most four legal
+  // orthoradial forms. Ranking is lexicographic: self-crossings first,
+  // then geometric length. This preserves topology before aesthetics.
+  const beamWidth = 36;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const candidates = orthoradialEdgeCandidates(
+      points[index],
+      points[index + 1],
+      center,
+    );
+    const next: State[] = [];
+
+    for (const state of states) {
+      for (const candidate of candidates) {
+        const samples = [
+          ...state.samples,
+          ...candidate.samples.slice(1),
+        ];
+        next.push({
+          commands: [...state.commands, ...candidate.commands],
+          samples,
+          arcCount: state.arcCount + candidate.arcCount,
+          length: state.length + candidate.length,
+          crossings: sampledSelfCrossings(samples),
+        });
+      }
+    }
+
+    next.sort(
+      (a, b) =>
+        a.crossings - b.crossings ||
+        a.length - b.length ||
+        a.commands.length - b.commands.length,
+    );
+    states = next.slice(0, beamWidth);
+  }
+
+  const best = states[0];
   return {
-    commands: [
-      `L ${corner.x} ${corner.y}`,
-      `A ${rb} ${rb} 0 0 ${sweep} ${b.x} ${b.y}`,
-    ],
-    samples: [
-      a,
-      corner,
-      ...circularArcSamples(center, rb, aa, delta),
-    ],
-    arcCount: 1,
+    d: best.commands.join(' '),
+    samples: best.samples,
+    arcCount: best.arcCount,
+    fallbackCount: 0,
   };
 }
 
@@ -265,6 +389,10 @@ export function stationAnchoredPath(
           };
         })()
       : undefined;
+  if (layout.style === 'concentric' && concentricCenter) {
+    return orthoradialPath(points, concentricCenter);
+  }
+
   const closed = path.length > 2 && path[0] === path[path.length - 1];
   const tangent = (i: number): Point => {
     const last = points.length - 1;
@@ -308,14 +436,6 @@ export function stationAnchoredPath(
       }
       if (offset) { commands.push(`L ${end.x} ${end.y}`); samples.push(end); }
       arcCount++;
-      continue;
-    }
-
-    if (layout.style === 'concentric' && concentricCenter) {
-      const edge = orthoradialEdge(a, b, concentricCenter);
-      commands.push(...edge.commands);
-      samples.push(...edge.samples.slice(1));
-      arcCount += edge.arcCount;
       continue;
     }
 
