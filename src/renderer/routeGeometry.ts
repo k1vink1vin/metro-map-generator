@@ -134,6 +134,97 @@ function strictAxisCandidates(
   });
 }
 
+/**
+ * Moscow needs a route-level choice of how a line enters and leaves each
+ * station. The ordinary strict-axis candidate generator intentionally emits
+ * only the two shortest monotone elbows, which is ideal for Taipei/London but
+ * can force a 180° reversal when a station anchor sits far off the dominant
+ * corridor. Enumerate all legal two-axis decompositions of the displacement
+ * so the whole-line beam search can choose a slightly longer but coherent
+ * station approach.
+ */
+function expandedMoscowAxisCandidates(
+  a: Point,
+  b: Point,
+): AxisPolylineCandidate[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const directLength = Math.hypot(dx, dy);
+  if (directLength < 1e-8) {
+    return [{ points: [a, b], length: 0, bends: 0 }];
+  }
+
+  const base = strictAxisCandidates(a, b, 45);
+  const candidates: AxisPolylineCandidate[] = [...base];
+  const directions = Array.from({ length: 8 }, (_, index) => {
+    const angle = (index * Math.PI) / 4;
+    return {
+      x: Math.cos(angle),
+      y: Math.sin(angle),
+    };
+  });
+
+  for (let first = 0; first < directions.length; first += 1) {
+    for (let second = 0; second < directions.length; second += 1) {
+      if (first === second) continue;
+      const u = directions[first];
+      const v = directions[second];
+      const det = u.x * v.y - u.y * v.x;
+      if (Math.abs(det) < 1e-8) continue;
+
+      const alpha = (dx * v.y - dy * v.x) / det;
+      const beta = (u.x * dy - u.y * dx) / det;
+      if (alpha < -1e-6 || beta < -1e-6) continue;
+
+      const corner = {
+        x: a.x + u.x * Math.max(0, alpha),
+        y: a.y + u.y * Math.max(0, alpha),
+      };
+      const points = [a, corner, b].filter(
+        (point, index, all) =>
+          index === 0 ||
+          distance(point, all[index - 1]) > 1e-7,
+      );
+      const length = points
+        .slice(1)
+        .reduce(
+          (sum, point, index) =>
+            sum + distance(points[index], point),
+          0,
+        );
+
+      // Route coherence may justify a detour, but never an enormous loop.
+      if (length > directLength * 3.2 + 80) continue;
+
+      candidates.push({
+        points,
+        length,
+        bends: Math.max(0, points.length - 2),
+      });
+    }
+  }
+
+  const unique = new Map<string, AxisPolylineCandidate>();
+  for (const candidate of candidates) {
+    const key = candidate.points
+      .map(
+        (point) =>
+          `${Math.round(point.x * 1000)}:${Math.round(point.y * 1000)}`,
+      )
+      .join('|');
+    const existing = unique.get(key);
+    if (!existing || candidate.length < existing.length) {
+      unique.set(key, candidate);
+    }
+  }
+
+  return [...unique.values()].sort(
+    (left, right) =>
+      left.bends - right.bends ||
+      left.length - right.length,
+  );
+}
+
 function strictAxisPath(
   points: Point[],
   stepDegrees: 45 | 60,
@@ -1328,7 +1419,7 @@ function moscowEdgeCandidates(
   const circle = rings.get(edgeId);
 
   if (!circle) {
-    return strictAxisCandidates(a, b, 45).map((candidate) => ({
+    return expandedMoscowAxisCandidates(a, b).map((candidate) => ({
       commands: candidate.points
         .slice(1)
         .map((point) => `L ${point.x} ${point.y}`),
