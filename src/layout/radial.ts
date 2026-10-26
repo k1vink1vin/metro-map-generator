@@ -1522,18 +1522,30 @@ export function layoutMoscow(
 export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
+  centerNodeId?: string,
 ): { positions: Record<string, Point>; center: Point } {
+  const resolvedCenterNodeId = centerNodeId
+    ? graph.nodeById.has(centerNodeId)
+      ? centerNodeId
+      : graph.stationToNode.get(centerNodeId)
+    : undefined;
+  const centerNode = resolvedCenterNodeId
+    ? graph.nodeById.get(resolvedCenterNodeId)
+    : undefined;
   const points = graph.nodes.map((node) => geographic[node.id]);
-  const center = {
-    x:
-      points.reduce((sum, point) => sum + point.x, 0) /
-      Math.max(1, points.length),
-    y:
-      points.reduce((sum, point) => sum + point.y, 0) /
-      Math.max(1, points.length),
-  };
+  const center = centerNode
+    ? { ...geographic[centerNode.id] }
+    : {
+        x:
+          points.reduce((sum, point) => sum + point.x, 0) /
+          Math.max(1, points.length),
+        y:
+          points.reduce((sum, point) => sum + point.y, 0) /
+          Math.max(1, points.length),
+      };
 
   const polar = graph.nodes
+    .filter((node) => node.id !== centerNode?.id)
     .map((node) => {
       const point = geographic[node.id];
       const dx = point.x - center.x;
@@ -1574,6 +1586,11 @@ export function layoutConcentric(
   }
 
   const target: Record<string, Point> = {};
+  if (centerNode) {
+    // A selected centre station is a real station at radius zero, not an
+    // arbitrary reference point that later gets projected onto the first ring.
+    target[centerNode.id] = { ...center };
+  }
   const baseShellSpacing = Math.max(92, maxRadius / shellCount);
 
   // Occupancy can force an inner shell to be larger than its nominal radius.
