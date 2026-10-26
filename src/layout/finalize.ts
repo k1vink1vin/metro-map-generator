@@ -352,7 +352,7 @@ export function finalizeLayoutPositions(
   // when the pre-fit coordinates made its displacement look insignificant.
   // The corridor pass accepts only moves that preserve route self-crossings,
   // external crossings and spacing. Ring stations remain fixed; shell targets remain soft constraints.
-  const simplified = style !== 'geographic' && style !== 'concentric'
+  const simplified = style !== 'concentric'
     ? collapseRouteZigzagsSafely(graph, spaced, {
         fixedNodes,
         angleStep: style === 'hex' ? 60 : style === 'moscow' ? 15 : 45,
