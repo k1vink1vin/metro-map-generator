@@ -107,6 +107,8 @@ function renderedAngleAudit(layout: LayoutResult) {
   let illegalCurveCommands = 0;
 
   for (const route of buildRenderedRoutePaths(graph, layout)) {
+    illegalCurveCommands +=
+      (route.d.match(/[QC]/g) ?? []).length;
     const commands = parseCommands(route.d);
     for (const item of commands) {
       if (!item.from) continue;
@@ -153,22 +155,63 @@ function topologyAudit(layout: LayoutResult) {
     0,
   );
   const rendered = buildRenderedRoutePaths(graph, layout);
+  const bundles = buildGeometricBundleMap(graph, layout.positions);
+  const ringNodes = new Set(
+    layout.style === 'moscow'
+      ? layout.moscowRings?.flatMap((ring) => ring.nodes) ?? []
+      : [],
+  );
   let addedSelfCrossings = 0;
+  let stationOrderFailures = 0;
+
   for (const route of rendered) {
-    const path = graph.lines.find((line) => line.id === route.lineId)!
-      .paths[route.pathIndex];
+    const line = graph.lines.find((candidate) => candidate.id === route.lineId)!;
+    const path = line.paths[route.pathIndex];
     const baseline = sampledSelfCrossings(
       path.map((nodeId) => layout.positions[nodeId]),
     );
     if (sampledSelfCrossings(route.samples) > baseline) {
       addedSelfCrossings += 1;
     }
+
+    const anchors = offsetPathForLine(
+      graph,
+      path,
+      layout.positions,
+      line.id,
+      12,
+      bundles,
+    ).map((point, index) =>
+      ringNodes.has(path[index])
+        ? layout.positions[path[index]]
+        : point,
+    );
+
+    let cursor = 0;
+    for (const anchor of anchors) {
+      let found = -1;
+      for (let index = cursor; index < route.samples.length; index += 1) {
+        if (distance(route.samples[index], anchor) < 1e-5) {
+          found = index;
+          break;
+        }
+      }
+      if (found < 0) {
+        stationOrderFailures += 1;
+        break;
+      }
+      cursor = found;
+    }
   }
   return {
-    valid: layout.integrity.valid && rendered.length === expectedPaths,
+    valid:
+      layout.integrity.valid &&
+      rendered.length === expectedPaths &&
+      stationOrderFailures === 0,
     expectedPaths,
     renderedPaths: rendered.length,
     addedSelfCrossings,
+    stationOrderFailures,
   };
 }
 
