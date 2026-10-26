@@ -162,6 +162,12 @@ function topologyAudit(layout: LayoutResult) {
       : [],
   );
   let addedSelfCrossings = 0;
+  const selfCrossingDetails: Array<{
+    line: string;
+    path: string;
+    baseline: number;
+    rendered: number;
+  }> = [];
   let stationOrderFailures = 0;
 
   for (const route of rendered) {
@@ -170,8 +176,17 @@ function topologyAudit(layout: LayoutResult) {
     const baseline = sampledSelfCrossings(
       path.map((nodeId) => layout.positions[nodeId]),
     );
-    if (sampledSelfCrossings(route.samples) > baseline) {
+    const renderedCrossings = sampledSelfCrossings(route.samples);
+    if (renderedCrossings > baseline) {
       addedSelfCrossings += 1;
+      selfCrossingDetails.push({
+        line: route.lineId,
+        path:
+          line.pathIds?.[route.pathIndex] ??
+          String(route.pathIndex),
+        baseline,
+        rendered: renderedCrossings,
+      });
     }
 
     const anchors = offsetPathForLine(
@@ -211,6 +226,7 @@ function topologyAudit(layout: LayoutResult) {
     expectedPaths,
     renderedPaths: rendered.length,
     addedSelfCrossings,
+    selfCrossingDetails,
     stationOrderFailures,
   };
 }
