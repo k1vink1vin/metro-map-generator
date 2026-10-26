@@ -28,11 +28,11 @@ const STATION_STYLE_OPTIONS: Array<{
 ];
 
 const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
-  { id: 'geographic', label: 'Geographic', note: '真實相對位置基準 / north-up' },
+  { id: 'geographic', label: 'Geographic', note: '純經緯度等比例投影 / north-up，不做拓樸修形' },
   { id: 'taipei', label: 'Taipei 45°', note: '硬性 0/45/90/135° + 相對地理 + 台北路網淡水河地標' },
   { id: 'london', label: 'London 45°', note: '硬性 45° 拓撲：等距、轉乘與中心可讀性優先' },
   { id: 'moscow', label: 'Moscow Ring', note: '獨立多圓心正圓環線 + 非環段硬性 45° 輻射語彙' },
-  { id: 'concentric', label: 'Concentric', note: '單一圓心：路徑只允許同心圓弧或放射直線' },
+  { id: 'concentric', label: 'Concentric', note: '可指定圓心車站；路徑只允許同心圓弧或放射直線' },
   { id: 'hex', label: 'Hex 60°', note: '硬性 0/60/120° 三軸網格 + 拓樸保護' },
 ];
 
@@ -81,6 +81,7 @@ export function App() {
   const [layout, setLayout] = useState<LayoutResult>(initial.layout);
   const [moscowRingDefinitions, setMoscowRingDefinitions] = useState<MoscowRingDefinition[]>(sampleNetwork.moscowRings ?? []);
   const [validatedMoscowRings, setValidatedMoscowRings] = useState<ValidatedMoscowRing[]>(() => validateMoscowRings(initial.graph, sampleNetwork.moscowRings ?? []));
+  const [concentricCenterNodeId, setConcentricCenterNodeId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
@@ -128,8 +129,20 @@ export function App() {
   ) => {
     const nextGraph = buildGraph({ stations, lines });
     const nextRings = validateMoscowRings(nextGraph, rings);
+    const selectedConcentricCenter =
+      concentricCenterNodeId &&
+      nextGraph.nodeById.has(concentricCenterNodeId)
+        ? concentricCenterNodeId
+        : undefined;
+    if (
+      concentricCenterNodeId &&
+      !selectedConcentricCenter
+    ) {
+      setConcentricCenterNodeId('');
+    }
     const nextLayout = computeLayout(nextGraph, nextStyle, {
       moscowRings: nextRings,
+      concentricCenterNodeId: selectedConcentricCenter,
     });
     setGraph(nextGraph);
     setLayout(nextLayout);
@@ -187,12 +200,17 @@ export function App() {
     setLinesText(pretty(sampleNetwork.lines));
     setStyle('taipei');
     setStationStyle('taipei');
+    setConcentricCenterNodeId('');
     setMoscowRingDefinitions(sampleNetwork.moscowRings ?? []);
     const nextGraph = buildGraph(sampleNetwork);
     setGraph(nextGraph);
     const rings = validateMoscowRings(nextGraph, sampleNetwork.moscowRings ?? []);
     setValidatedMoscowRings(rings);
-    setLayout(computeLayout(nextGraph, 'taipei', { moscowRings: rings }));
+    setLayout(
+      computeLayout(nextGraph, 'taipei', {
+        moscowRings: rings,
+      }),
+    );
     resetMapZoom();
     setNotice('');
     setError('');
@@ -367,6 +385,38 @@ export function App() {
                 <span>莫斯科環</span>
                 <strong>{validatedMoscowRings.length}/3 個環已由 XLSM 定義並通過閉合驗證</strong>
               </div>
+            ) : null}
+
+            {style === 'concentric' ? (
+              <label className="ring-selector">
+                <span>同心圓圓心車站</span>
+                <select
+                  value={concentricCenterNodeId}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setConcentricCenterNodeId(next);
+                    setLayout(
+                      computeLayout(graph, 'concentric', {
+                        moscowRings: validatedMoscowRings,
+                        concentricCenterNodeId:
+                          next || undefined,
+                      }),
+                    );
+                    resetMapZoom();
+                  }}
+                >
+                  <option value="">自動（路網幾何中心）</option>
+                  {[...graph.nodes]
+                    .sort((a, b) =>
+                      a.name.localeCompare(b.name, 'zh-Hant'),
+                    )
+                    .map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.name} · {node.stationIds.join('/')}
+                      </option>
+                    ))}
+                </select>
+              </label>
             ) : null}
 
             <div className="style-description">
