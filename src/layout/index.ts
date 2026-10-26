@@ -7,6 +7,8 @@ import { layoutConcentric, layoutMoscow } from './radial';
 
 export interface LayoutOptions {
   moscowRings?: ValidatedMoscowRing[];
+  /** Optional graph-node or station ID that must sit at the concentric origin. */
+  concentricCenterNodeId?: string;
 }
 
 function finish(
@@ -134,7 +136,11 @@ export function computeLayout(
     });
   }
 
-  const concentric = layoutConcentric(graph, geographic);
+  const concentric = layoutConcentric(
+    graph,
+    geographic,
+    options.concentricCenterNodeId,
+  );
   return finish(
     graph,
     style,
