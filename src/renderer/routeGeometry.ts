@@ -519,6 +519,196 @@ export function sampledSelfCrossings(points: Point[]): number {
   return count;
 }
 
+interface MoscowPathCandidate {
+  commands: string[];
+  samples: Point[];
+  length: number;
+  bends: number;
+  arcCount: number;
+}
+
+function moscowEdgeCandidates(
+  graph: GraphModel,
+  layout: LayoutResult,
+  path: string[],
+  points: Point[],
+  index: number,
+  rings: Map<string, CircleGeometry>,
+  lineId?: string,
+): MoscowPathCandidate[] {
+  const a = points[index];
+  const b = points[index + 1];
+  const edgeId = edgeKey(path[index], path[index + 1]);
+  const circle = rings.get(edgeId);
+
+  if (!circle) {
+    return strictAxisCandidates(a, b, 45).map((candidate) => ({
+      commands: candidate.points
+        .slice(1)
+        .map((point) => `L ${point.x} ${point.y}`),
+      samples: candidate.points,
+      length: candidate.length,
+      bends: candidate.bends,
+      arcCount: 0,
+    }));
+  }
+
+  const start = layout.positions[path[index]];
+  const end = layout.positions[path[index + 1]];
+  const lanes = [
+    ...(graph.edgeByKey.get(edgeId)?.lineIds ?? []),
+  ].sort();
+  const laneIndex = lineId ? lanes.indexOf(lineId) : -1;
+  const offset =
+    lineId && lanes.length > 1 && laneIndex >= 0
+      ? (laneIndex - (lanes.length - 1) / 2) * 12
+      : 0;
+  const radius = Math.max(1, circle.radius + offset);
+  const onLane = (point: Point): Point => ({
+    x:
+      circle.center.x +
+      ((point.x - circle.center.x) * radius) / circle.radius,
+    y:
+      circle.center.y +
+      ((point.y - circle.center.y) * radius) / circle.radius,
+  });
+  const laneStart = onLane(start);
+  const laneEnd = onLane(end);
+  let delta =
+    Math.atan2(
+      end.y - circle.center.y,
+      end.x - circle.center.x,
+    ) -
+    Math.atan2(
+      start.y - circle.center.y,
+      start.x - circle.center.x,
+    );
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+
+  const commands: string[] = [];
+  const samples: Point[] = [a];
+  let length = 0;
+
+  if (distance(a, laneStart) > 1e-6) {
+    commands.push(`L ${laneStart.x} ${laneStart.y}`);
+    samples.push(laneStart);
+    length += distance(a, laneStart);
+  }
+
+  commands.push(
+    arcCommand(radius, delta, laneEnd),
+  );
+  const angle = Math.atan2(
+    start.y - circle.center.y,
+    start.x - circle.center.x,
+  );
+  const arcSamples = circularArcSamples(
+    circle.center,
+    radius,
+    angle,
+    delta,
+  );
+  samples.push(...arcSamples);
+  length += Math.abs(delta) * radius;
+
+  if (distance(samples[samples.length - 1], b) > 1e-6) {
+    commands.push(`L ${b.x} ${b.y}`);
+    length += distance(samples[samples.length - 1], b);
+    samples.push(b);
+  }
+
+  return [{
+    commands,
+    samples,
+    length,
+    bends: offset ? 2 : 0,
+    arcCount: 1,
+  }];
+}
+
+function moscowStrictPath(
+  graph: GraphModel,
+  layout: LayoutResult,
+  path: string[],
+  points: Point[],
+  rings: Map<string, CircleGeometry>,
+  lineId?: string,
+): RouteGeometry {
+  if (!points.length) {
+    return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
+  }
+
+  type State = {
+    commands: string[];
+    samples: Point[];
+    crossings: number;
+    length: number;
+    bends: number;
+    arcCount: number;
+  };
+
+  let states: State[] = [{
+    commands: [`M ${points[0].x} ${points[0].y}`],
+    samples: [points[0]],
+    crossings: 0,
+    length: 0,
+    bends: 0,
+    arcCount: 0,
+  }];
+
+  const beamWidth = 20;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const candidates = moscowEdgeCandidates(
+      graph,
+      layout,
+      path,
+      points,
+      index,
+      rings,
+      lineId,
+    );
+    const next: State[] = [];
+
+    for (const state of states) {
+      for (const candidate of candidates) {
+        const addedCrossings = extensionCrossings(
+          state.samples,
+          candidate.samples,
+        );
+        next.push({
+          commands: [...state.commands, ...candidate.commands],
+          samples: [
+            ...state.samples,
+            ...candidate.samples.slice(1),
+          ],
+          crossings: state.crossings + addedCrossings,
+          length: state.length + candidate.length,
+          bends: state.bends + candidate.bends,
+          arcCount: state.arcCount + candidate.arcCount,
+        });
+      }
+    }
+
+    next.sort(
+      (a, b) =>
+        a.crossings - b.crossings ||
+        a.bends - b.bends ||
+        a.length - b.length,
+    );
+    states = next.slice(0, beamWidth);
+  }
+
+  const best = states[0];
+  return {
+    d: best.commands.join(' '),
+    samples: best.samples,
+    arcCount: best.arcCount,
+    fallbackCount: 0,
+  };
+}
+
 /** Interpolate stations; never cut across an interchange to round its corner.
  * Curves are bounded by local station spacing. Reject smoothing that adds a
  * crossing against a nonincident topology edge. Ring edges use exact SVG arcs.
@@ -560,6 +750,17 @@ export function stationAnchoredPath(
     );
   }
 
+  if (layout.style === 'moscow') {
+    return moscowStrictPath(
+      graph,
+      layout,
+      path,
+      points,
+      rings,
+      lineId,
+    );
+  }
+
   const closed = path.length > 2 && path[0] === path[path.length - 1];
   const tangent = (i: number): Point => {
     const last = points.length - 1;
@@ -575,61 +776,9 @@ export function stationAnchoredPath(
   let arcCount = 0, fallbackCount = 0;
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i], b = points[i + 1];
-    const circle = rings.get(edgeKey(path[i], path[i + 1]));
-    // Ring geometry must remain exactly on its circle, including shared edges.
-    if (circle) {
-      const start = layout.positions[path[i]], end = layout.positions[path[i + 1]];
-      const lanes = [...(graph.edgeByKey.get(edgeKey(path[i], path[i + 1]))?.lineIds ?? [])].sort();
-      const offset = lineId && lanes.length > 1 ? (lanes.indexOf(lineId) - (lanes.length - 1) / 2) * 12 : 0;
-      const radius = Math.max(1, circle.radius + offset);
-      const onLane = (point: Point): Point => ({
-        x: circle.center.x + (point.x - circle.center.x) * radius / circle.radius,
-        y: circle.center.y + (point.y - circle.center.y) * radius / circle.radius,
-      });
-      const laneStart = onLane(start), laneEnd = onLane(end);
-      let delta = Math.atan2(end.y - circle.center.y, end.x - circle.center.x) - Math.atan2(start.y - circle.center.y, start.x - circle.center.x);
-      while (delta > Math.PI) delta -= 2 * Math.PI;
-      while (delta < -Math.PI) delta += 2 * Math.PI;
-      if (distance(samples[samples.length - 1], laneStart) > 1e-6) {
-        commands.push(`L ${laneStart.x} ${laneStart.y}`);
-        samples.push(laneStart);
-      }
-      commands.push(`A ${radius} ${radius} 0 0 ${delta > 0 ? 1 : 0} ${laneEnd.x} ${laneEnd.y}`);
-      const angle = Math.atan2(start.y - circle.center.y, start.x - circle.center.x);
-      const steps = Math.max(8, Math.ceil(Math.abs(delta) * radius / 3));
-      for (let step = 1; step <= steps; step++) {
-        const theta = angle + delta * step / steps;
-        samples.push({ x: circle.center.x + radius * Math.cos(theta), y: circle.center.y + radius * Math.sin(theta) });
-      }
-      if (offset) { commands.push(`L ${end.x} ${end.y}`); samples.push(end); }
-      arcCount++;
-      continue;
-    }
-
-    const angularStep =
-      layout.style === 'hex'
-        ? 60
-        : layout.style === 'taipei' ||
-            layout.style === 'london' ||
-            layout.style === 'moscow'
-          ? 45
-          : undefined;
-    if (angularStep) {
-      const polyline = strictAxisCandidates(
-        a,
-        b,
-        angularStep as 45 | 60,
-      )[0].points;
-      for (const point of polyline.slice(1)) {
-        commands.push(`L ${point.x} ${point.y}`);
-        samples.push(point);
-      }
-      continue;
-    }
-
     const length = distance(a, b);
     const ta = tangent(i), tb = tangent(i + 1);
-    const strength = layout.style === 'moscow' ? 0.28 : layout.style === 'geographic' ? 0.08 : layout.style === 'london' || layout.style === 'hex' ? 0.38 : 0.18;
+    const strength = 0.08;
     const previousLength = i > 0 ? distance(points[i - 1], a) : length;
     const nextLength = i + 2 < points.length ? distance(b, points[i + 2]) : length;
     const obstacles = graph.edges.filter(e => ![e.a, e.b].some(id => id === path[i] || id === path[i + 1]));
@@ -639,21 +788,10 @@ export function stationAnchoredPath(
       const h2 = Math.min(length, nextLength) * strength * factor;
       const c1 = { x: a.x + ta.x * h1, y: a.y + ta.y * h1 };
       const c2 = { x: b.x - tb.x * h2, y: b.y - tb.y * h2 };
-      const schematic = layout.style === 'london' || layout.style === 'hex';
-      const direction = unit(a, b);
-      const startRadius = Math.min(length * 0.16, previousLength * 0.16, 18) * factor;
-      const endRadius = Math.min(length * 0.16, nextLength * 0.16, 18) * factor;
-      const along = (p: Point, amount: number): Point => ({x:p.x+direction.x*amount,y:p.y+direction.y*amount});
-      const startEnd = along(a, 3 * startRadius), endStart = along(b, -3 * endRadius);
-      const startControl = {x:a.x+ta.x*startRadius,y:a.y+ta.y*startRadius};
-      const endControl = {x:b.x-tb.x*endRadius,y:b.y-tb.y*endRadius};
-      // Straight station corridors, with short tangent-continuous transitions
-      // at their ends. Do not turn the entire edge into a flowing spline.
-      const curve = schematic ? [
-        ...Array.from({length:13},(_,s)=>cubic(a,startControl,along(startEnd,-startRadius),startEnd,s/12)),
-        endStart,
-        ...Array.from({length:12},(_,s)=>cubic(endStart,along(endStart,endRadius),endControl,b,(s+1)/12)),
-      ] : Array.from({ length: 25 }, (_, step) => cubic(a, c1, c2, b, step / 24));
+      const curve = Array.from(
+        { length: 25 },
+        (_, step) => cubic(a, c1, c2, b, step / 24),
+      );
       const safe = !curve.slice(1).some((p, j) =>
         samples.slice(1, -1).some((q, k) => intersects(curve[j], p, samples[k], q)),
       ) && obstacles.every(e => {
@@ -667,10 +805,9 @@ export function stationAnchoredPath(
         return curve.every(q => distance(p, q) >= clearance - 0.1);
       });
       if (!safe) continue;
-      if (schematic) {
-        const sc = along(startEnd,-startRadius), ec = along(endStart,endRadius);
-        commands.push(`C ${startControl.x} ${startControl.y} ${sc.x} ${sc.y} ${startEnd.x} ${startEnd.y} L ${endStart.x} ${endStart.y} C ${ec.x} ${ec.y} ${endControl.x} ${endControl.y} ${b.x} ${b.y}`);
-      } else commands.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`);
+      commands.push(
+        `C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`,
+      );
       samples.push(...curve.slice(1));
       accepted = true;
       break;
