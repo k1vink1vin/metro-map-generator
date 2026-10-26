@@ -1248,6 +1248,7 @@ function orthoradialPath(
   points: Point[],
   center: Point,
   allowedCrossings = 0,
+  sectionBreaks: ReadonlySet<number> = new Set(),
 ): RouteGeometry {
   if (!points.length) {
     return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
@@ -1267,6 +1268,9 @@ function orthoradialPath(
     arcCount: number;
     length: number;
     crossings: number;
+    lastEdgeLength?: number;
+    rhythmPenalty: number;
+    detourPenalty: number;
   };
 
   let states: State[] = [{
@@ -1275,11 +1279,16 @@ function orthoradialPath(
     arcCount: 0,
     length: 0,
     crossings: 0,
+    lastEdgeLength: undefined,
+    rhythmPenalty: 0,
+    detourPenalty: 0,
   }];
 
-  // A small beam is enough because every edge has at most four legal
-  // orthoradial forms. Ranking is lexicographic: self-crossings first,
-  // then geometric length. This preserves topology before aesthetics.
+  // Concentric routing has a second hard visual goal beyond topology: ordinary
+  // stations inside one topology section should keep a constant route-length
+  // rhythm. The layout already places them at equal orthoradial distances;
+  // this beam objective prevents the renderer from defeating that by choosing
+  // a different long-way arc independently for one edge.
   const beamWidth = 36;
 
   for (let index = 0; index < points.length - 1; index += 1) {
@@ -1288,7 +1297,12 @@ function orthoradialPath(
       points[index + 1],
       center,
     );
+    const shortest = Math.max(
+      1e-9,
+      Math.min(...candidates.map((candidate) => candidate.length)),
+    );
     const next: State[] = [];
+    const resetRhythm = sectionBreaks.has(index);
 
     for (const state of states) {
       for (const candidate of candidates) {
@@ -1300,12 +1314,29 @@ function orthoradialPath(
           ...state.samples,
           ...candidate.samples.slice(1),
         ];
+        const previousLength =
+          resetRhythm ? undefined : state.lastEdgeLength;
+        const relativeDifference =
+          previousLength === undefined
+            ? 0
+            : Math.abs(candidate.length - previousLength) /
+              Math.max(1, (candidate.length + previousLength) / 2);
+        const detourRatio =
+          Math.max(0, candidate.length / shortest - 1);
+
         next.push({
           commands: [...state.commands, ...candidate.commands],
           samples,
           arcCount: state.arcCount + candidate.arcCount,
           length: state.length + candidate.length,
           crossings: state.crossings + addedCrossings,
+          lastEdgeLength: candidate.length,
+          rhythmPenalty:
+            state.rhythmPenalty +
+            relativeDifference * relativeDifference,
+          detourPenalty:
+            state.detourPenalty +
+            detourRatio * detourRatio,
         });
       }
     }
@@ -1313,6 +1344,15 @@ function orthoradialPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        (
+          a.rhythmPenalty * 8 +
+          a.detourPenalty * 2
+        ) -
+          (
+            b.rhythmPenalty * 8 +
+            b.detourPenalty * 2
+          ) ||
+        a.detourPenalty - b.detourPenalty ||
         a.length - b.length ||
         a.commands.length - b.commands.length,
     );
@@ -1327,9 +1367,6 @@ function orthoradialPath(
     fallbackCount: 0,
   };
 
-  // Beam search intentionally prefers compact geometry, but a very long line
-  // can still need a wider topological corridor. Only pay that visual cost
-  // when it strictly reduces self-crossings.
   if (best.crossings > allowedCrossings) {
     const escaped = orthoradialEscapePath(
       points,
@@ -1344,6 +1381,25 @@ function orthoradialPath(
   }
 
   return compact;
+}
+
+function topologyAnchorNode(
+  graph: GraphModel,
+  nodeId: string,
+): boolean {
+  const node = graph.nodeById.get(nodeId);
+  if (!node) return true;
+  if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return true;
+  if (node.stationIds.length > 1) return true;
+
+  const incidentLines = new Set<string>();
+  for (const neighbor of graph.adjacency.get(nodeId) ?? []) {
+    const edge = graph.edgeByKey.get(edgeKey(nodeId, neighbor));
+    for (const lineId of edge?.lineIds ?? []) {
+      incidentLines.add(lineId);
+    }
+  }
+  return incidentLines.size > 1;
 }
 
 export interface RouteGeometry { d: string; samples: Point[]; arcCount: number; fallbackCount: number }
@@ -1711,10 +1767,27 @@ export function stationAnchoredPath(
     const baseline = sampledSelfCrossings(
       path.map((nodeId) => layout.positions[nodeId]),
     );
+    const sectionBreaks = new Set<number>([0]);
+    path.forEach((nodeId, index) => {
+      if (
+        index > 0 &&
+        index < path.length - 1 &&
+        (
+          topologyAnchorNode(graph, nodeId) ||
+          Math.hypot(
+            layout.positions[nodeId].x - concentricCenter.x,
+            layout.positions[nodeId].y - concentricCenter.y,
+          ) < 1e-7
+        )
+      ) {
+        sectionBreaks.add(index);
+      }
+    });
     return orthoradialPath(
       points,
       concentricCenter,
       baseline,
+      sectionBreaks,
     );
   }
 
