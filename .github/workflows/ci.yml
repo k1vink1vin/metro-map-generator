@@ -43,6 +43,9 @@ jobs:
       - name: TPE Metro layout QA
         run: npm run qa:layouts
 
+      - name: Schematic design-principle audit
+        run: npm run qa:principles
+
       - name: Render TPE Metro QA SVGs
         if: always()
         run: npm run qa:render
