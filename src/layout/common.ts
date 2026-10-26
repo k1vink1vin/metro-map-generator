@@ -1667,6 +1667,26 @@ function sectionTurnCost(
   return significantTurns * Math.PI * 2 + totalTurn;
 }
 
+function sectionSpacingCv(
+  ids: string[],
+  positions: Record<string, Point>,
+): number {
+  if (ids.length < 3) return 0;
+  const lengths = ids.slice(0, -1).map((id, index) =>
+    distance(positions[id], positions[ids[index + 1]]),
+  );
+  const mean =
+    lengths.reduce((sum, value) => sum + value, 0) /
+    Math.max(1, lengths.length);
+  if (mean < 1e-9) return 0;
+  const variance =
+    lengths.reduce(
+      (sum, value) => sum + (value - mean) ** 2,
+      0,
+    ) / Math.max(1, lengths.length);
+  return Math.sqrt(variance) / mean;
+}
+
 function sectionAxisError(
   ids: string[],
   positions: Record<string, Point>,
@@ -1919,6 +1939,10 @@ export function routeTopologySectionsSafely(
             positions,
             options.angleStep,
           );
+          const beforeSpacingCv = sectionSpacingCv(
+            ids,
+            positions,
+          );
           const beforeExternal = pathExternalCrossings(
             graph,
             path,
@@ -2029,6 +2053,9 @@ export function routeTopologySectionsSafely(
             const afterAxis = topologySafe
               ? sectionAxisError(ids, positions, options.angleStep)
               : Number.POSITIVE_INFINITY;
+            const afterSpacingCv = topologySafe
+              ? sectionSpacingCv(ids, positions)
+              : Number.POSITIVE_INFINITY;
 
             const bendsImproved =
               afterZigzags < beforeZigzags ||
@@ -2037,11 +2064,20 @@ export function routeTopologySectionsSafely(
               afterZigzags === beforeZigzags &&
               afterTurnCost <= beforeTurnCost + 1e-6 &&
               afterAxis + 0.75 < beforeAxis;
+            const spacingImprovedWithoutShapeRegression =
+              afterZigzags <= beforeZigzags &&
+              afterTurnCost <= beforeTurnCost + 0.02 &&
+              afterAxis <= beforeAxis + 0.25 &&
+              afterSpacingCv + 0.01 < beforeSpacingCv;
 
             if (
               topologySafe &&
               afterExternal <= beforeExternal &&
-              (bendsImproved || gridImprovedWithoutBendRegression)
+              (
+                bendsImproved ||
+                gridImprovedWithoutBendRegression ||
+                spacingImprovedWithoutShapeRegression
+              )
             ) {
               accepted = true;
               changed = true;
