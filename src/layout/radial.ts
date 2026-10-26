@@ -783,6 +783,224 @@ function moscowWholeLineQuality(
   };
 }
 
+function repairMoscowDoglegsSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  ringNodes: Set<string>,
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [
+      id,
+      { ...point },
+    ]),
+  );
+
+  const ordinary = (nodeId: string): boolean => {
+    const node = graph.nodeById.get(nodeId);
+    if (!node || ringNodes.has(nodeId)) return false;
+    if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return false;
+    if (node.stationIds.length !== 1) return false;
+    const incidentLines = new Set<string>();
+    for (const neighbor of graph.adjacency.get(nodeId) ?? []) {
+      const edge = graph.edgeByKey.get(edgeKey(nodeId, neighbor));
+      for (const lineId of edge?.lineIds ?? []) {
+        incidentLines.add(lineId);
+      }
+    }
+    return incidentLines.size === 1;
+  };
+
+  const signedTurn = (p0: Point, p1: Point, p2: Point) => {
+    const first = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+    const second = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    let delta = second - first;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    return delta;
+  };
+
+  const pathDoglegs = (path: string[]): number => {
+    let count = 0;
+    for (let index = 0; index < path.length - 3; index += 1) {
+      const [aId, bId, cId, dId] = path.slice(index, index + 4);
+      if (!ordinary(bId) || !ordinary(cId)) continue;
+      const first = signedTurn(
+        positions[aId],
+        positions[bId],
+        positions[cId],
+      );
+      const second = signedTurn(
+        positions[bId],
+        positions[cId],
+        positions[dId],
+      );
+      if (
+        Math.sign(first) !== Math.sign(second) &&
+        Math.abs(first) > (24 * Math.PI) / 180 &&
+        Math.abs(second) > (24 * Math.PI) / 180
+      ) {
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  const pathSelfCrossings = (path: string[]): number => {
+    let count = 0;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      for (let j = i + 2; j < path.length - 1; j += 1) {
+        if (
+          moscowSegmentsCross(
+            positions[path[i]],
+            positions[path[i + 1]],
+            positions[path[j]],
+            positions[path[j + 1]],
+          )
+        ) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  const affectedCrossings = (nodeIds: Set<string>): number => {
+    const incident = graph.edges.filter(
+      (edge) => nodeIds.has(edge.a) || nodeIds.has(edge.b),
+    );
+    let count = 0;
+    const seen = new Set<string>();
+    for (const first of incident) {
+      for (const second of graph.edges) {
+        if (first === second) continue;
+        if (
+          first.a === second.a ||
+          first.a === second.b ||
+          first.b === second.a ||
+          first.b === second.b
+        ) {
+          continue;
+        }
+        const pair = [first.key, second.key].sort().join('||');
+        if (seen.has(pair)) continue;
+        seen.add(pair);
+        if (
+          moscowSegmentsCross(
+            positions[first.a],
+            positions[first.b],
+            positions[second.a],
+            positions[second.b],
+          )
+        ) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  const spacingSafe = (movingIds: Set<string>): boolean => {
+    const ids = [...movingIds];
+    for (const movingId of ids) {
+      for (const node of graph.nodes) {
+        if (node.id === movingId) continue;
+        if (
+          Math.hypot(
+            positions[movingId].x - positions[node.id].x,
+            positions[movingId].y - positions[node.id].y,
+          ) < 28
+        ) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  for (let pass = 0; pass < 6; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (let index = 0; index < path.length - 3; index += 1) {
+          const [aId, bId, cId, dId] = path.slice(index, index + 4);
+          if (!ordinary(bId) || !ordinary(cId)) continue;
+
+          const first = signedTurn(
+            positions[aId],
+            positions[bId],
+            positions[cId],
+          );
+          const second = signedTurn(
+            positions[bId],
+            positions[cId],
+            positions[dId],
+          );
+          if (
+            Math.sign(first) === Math.sign(second) ||
+            Math.abs(first) <= (24 * Math.PI) / 180 ||
+            Math.abs(second) <= (24 * Math.PI) / 180
+          ) {
+            continue;
+          }
+
+          const moving = new Set([bId, cId]);
+          const beforeDoglegs = pathDoglegs(path);
+          const beforeSelf = pathSelfCrossings(path);
+          const beforeCrossings = affectedCrossings(moving);
+          const originalB = { ...positions[bId] };
+          const originalC = { ...positions[cId] };
+          const a = positions[aId];
+          const d = positions[dId];
+          const targetB = {
+            x: a.x + (d.x - a.x) / 3,
+            y: a.y + (d.y - a.y) / 3,
+          };
+          const targetC = {
+            x: a.x + ((d.x - a.x) * 2) / 3,
+            y: a.y + ((d.y - a.y) * 2) / 3,
+          };
+
+          let accepted = false;
+          for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22]) {
+            positions[bId] = {
+              x: originalB.x * (1 - blend) + targetB.x * blend,
+              y: originalB.y * (1 - blend) + targetB.y * blend,
+            };
+            positions[cId] = {
+              x: originalC.x * (1 - blend) + targetC.x * blend,
+              y: originalC.y * (1 - blend) + targetC.y * blend,
+            };
+
+            if (
+              spacingSafe(moving) &&
+              pathSelfCrossings(path) <= beforeSelf &&
+              affectedCrossings(moving) <= beforeCrossings &&
+              pathDoglegs(path) < beforeDoglegs
+            ) {
+              accepted = true;
+              changed = true;
+              break;
+            }
+
+            positions[bId] = { ...originalB };
+            positions[cId] = { ...originalC };
+          }
+
+          if (!accepted) {
+            positions[bId] = originalB;
+            positions[cId] = originalC;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
 function regularizeMoscowWholeLinesSafely(
   graph: GraphModel,
   positions: Record<string, Point>,
@@ -813,14 +1031,19 @@ function regularizeMoscowWholeLinesSafely(
       structuralMaxShift: 58,
     },
   );
-  const candidate = adoptTopologySafeGeometry(
+  const adopted = adoptTopologySafeGeometry(
     graph,
     positions,
     kinkCandidate,
     {
       passes: 6,
-      minimumNodeDistance: 27,
+      minimumNodeDistance: 28,
     },
+  );
+  const candidate = repairMoscowDoglegsSafely(
+    graph,
+    adopted,
+    ringNodes,
   );
   const after = moscowWholeLineQuality(
     graph,
@@ -829,7 +1052,7 @@ function regularizeMoscowWholeLinesSafely(
   );
 
   const spacingFloor = Math.min(
-    27,
+    28,
     before.minNodeDistance,
   );
 
