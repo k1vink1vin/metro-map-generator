@@ -17,7 +17,7 @@ function finish(
   extra: Partial<
     Pick<
       LayoutResult,
-      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings'
+      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings' | 'radialCenter'
     >
   > = {},
 ): LayoutResult {
@@ -29,12 +29,53 @@ function finish(
     new Set(extra.moscowRings?.flatMap(ring => ring.nodes) ?? []),
   );
 
+  // Finalization performs a uniform scale + translation. Carry the exact
+  // orthoradial centre through that transform so the renderer can use the
+  // same centre for every circular arc and radial segment.
+  let radialCenter = extra.radialCenter;
+  if (radialCenter && graph.nodes.length >= 2) {
+    let first = graph.nodes[0].id;
+    let second = graph.nodes[1].id;
+    let widest = 0;
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const a = proposed[graph.nodes[i].id];
+        const b = proposed[graph.nodes[j].id];
+        if (!a || !b) continue;
+        const span = Math.hypot(b.x - a.x, b.y - a.y);
+        if (span > widest) {
+          widest = span;
+          first = graph.nodes[i].id;
+          second = graph.nodes[j].id;
+        }
+      }
+    }
+    const beforeA = proposed[first];
+    const beforeB = proposed[second];
+    const afterA = finalized.positions[first];
+    const afterB = finalized.positions[second];
+    const beforeSpan = beforeA && beforeB
+      ? Math.hypot(beforeB.x - beforeA.x, beforeB.y - beforeA.y)
+      : 0;
+    const afterSpan = afterA && afterB
+      ? Math.hypot(afterB.x - afterA.x, afterB.y - afterA.y)
+      : 0;
+    if (beforeA && afterA && beforeSpan > 1e-9 && Number.isFinite(afterSpan)) {
+      const scale = afterSpan / beforeSpan;
+      radialCenter = {
+        x: afterA.x + (radialCenter.x - beforeA.x) * scale,
+        y: afterA.y + (radialCenter.y - beforeA.y) * scale,
+      };
+    }
+  }
+
   return {
     style,
     positions: finalized.positions,
     geographicPositions: geographic,
     integrity: finalized.integrity,
     ...extra,
+    radialCenter,
   };
 }
 
@@ -93,10 +134,12 @@ export function computeLayout(
     });
   }
 
+  const concentric = layoutConcentric(graph, geographic);
   return finish(
     graph,
     style,
     geographic,
-    layoutConcentric(graph, geographic),
+    concentric.positions,
+    { radialCenter: concentric.center },
   );
 }
