@@ -37,6 +37,171 @@ function cubic(a: Point, b: Point, c: Point, d: Point, t: number): Point {
     y: u ** 3 * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t ** 3 * d.y };
 }
 
+
+function normalizedAngle(angle: number): number {
+  const tau = Math.PI * 2;
+  return ((angle % tau) + tau) % tau;
+}
+
+function shortestSignedAngle(from: number, to: number): number {
+  const tau = Math.PI * 2;
+  let delta = ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
+  if (delta <= -Math.PI) delta += tau;
+  return delta;
+}
+
+/**
+ * Return a one- or two-segment path whose visible segments lie exactly on the
+ * requested angular family. Unlike the layout relaxation this is a hard
+ * rendering invariant: 45° styles only emit multiples of 45°, while the hex
+ * style only emits multiples of 60°.
+ */
+function strictAxisPolyline(
+  a: Point,
+  b: Point,
+  stepDegrees: 45 | 60,
+): Point[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-8) return [a, b];
+
+  const step = (stepDegrees * Math.PI) / 180;
+  const angle = normalizedAngle(Math.atan2(dy, dx));
+  const nearest = Math.round(angle / step) * step;
+  if (Math.abs(shortestSignedAngle(angle, nearest)) < 1e-7) {
+    return [a, b];
+  }
+
+  const lower = Math.floor(angle / step) * step;
+  const upper = lower + step;
+  const u = { x: Math.cos(lower), y: Math.sin(lower) };
+  const v = { x: Math.cos(upper), y: Math.sin(upper) };
+  const det = u.x * v.y - u.y * v.x;
+
+  if (Math.abs(det) < 1e-9) return [a, b];
+
+  const alpha = (dx * v.y - dy * v.x) / det;
+  const beta = (u.x * dy - u.y * dx) / det;
+  if (alpha < -1e-6 || beta < -1e-6) return [a, b];
+
+  // Put the small correction next to the station so long corridor segments
+  // remain visually dominant instead of becoming a saw-tooth.
+  const corner =
+    alpha <= beta
+      ? { x: a.x + u.x * alpha, y: a.y + u.y * alpha }
+      : { x: a.x + v.x * beta, y: a.y + v.y * beta };
+
+  const points = [a, corner, b];
+  return points.filter(
+    (point, index) =>
+      index === 0 ||
+      distance(point, points[index - 1]) > 1e-7,
+  );
+}
+
+interface OrthoradialEdgeGeometry {
+  commands: string[];
+  samples: Point[];
+  arcCount: number;
+}
+
+function circularArcSamples(
+  center: Point,
+  radius: number,
+  startAngle: number,
+  delta: number,
+): Point[] {
+  const steps = Math.max(
+    4,
+    Math.ceil((Math.abs(delta) * Math.max(1, radius)) / 10),
+  );
+  return Array.from({ length: steps }, (_, index) => {
+    const angle = startAngle + (delta * (index + 1)) / steps;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
+    };
+  });
+}
+
+/**
+ * Orthoradial edge: every piece is either a circular arc around the one shared
+ * centre or a straight radial segment through that centre.
+ */
+function orthoradialEdge(
+  a: Point,
+  b: Point,
+  center: Point,
+): OrthoradialEdgeGeometry {
+  const ax = a.x - center.x;
+  const ay = a.y - center.y;
+  const bx = b.x - center.x;
+  const by = b.y - center.y;
+  const ra = Math.hypot(ax, ay);
+  const rb = Math.hypot(bx, by);
+
+  if (ra < 1e-7 || rb < 1e-7) {
+    return { commands: [`L ${b.x} ${b.y}`], samples: [a, b], arcCount: 0 };
+  }
+
+  const aa = Math.atan2(ay, ax);
+  const ab = Math.atan2(by, bx);
+  const delta = shortestSignedAngle(aa, ab);
+
+  if (Math.abs(delta) < 1e-7) {
+    return { commands: [`L ${b.x} ${b.y}`], samples: [a, b], arcCount: 0 };
+  }
+
+  const sweep = delta > 0 ? 1 : 0;
+
+  if (Math.abs(ra - rb) < 1e-6) {
+    return {
+      commands: [`A ${ra} ${ra} 0 0 ${sweep} ${b.x} ${b.y}`],
+      samples: [a, ...circularArcSamples(center, ra, aa, delta)],
+      arcCount: 1,
+    };
+  }
+
+  // Use the smaller radius for the circular portion. This minimizes detour
+  // while preserving the orbit/spoke grammar exactly.
+  if (ra < rb) {
+    const corner = {
+      x: center.x + Math.cos(ab) * ra,
+      y: center.y + Math.sin(ab) * ra,
+    };
+    return {
+      commands: [
+        `A ${ra} ${ra} 0 0 ${sweep} ${corner.x} ${corner.y}`,
+        `L ${b.x} ${b.y}`,
+      ],
+      samples: [
+        a,
+        ...circularArcSamples(center, ra, aa, delta),
+        b,
+      ],
+      arcCount: 1,
+    };
+  }
+
+  const corner = {
+    x: center.x + Math.cos(aa) * rb,
+    y: center.y + Math.sin(aa) * rb,
+  };
+  return {
+    commands: [
+      `L ${corner.x} ${corner.y}`,
+      `A ${rb} ${rb} 0 0 ${sweep} ${b.x} ${b.y}`,
+    ],
+    samples: [
+      a,
+      corner,
+      ...circularArcSamples(center, rb, aa, delta),
+    ],
+    arcCount: 1,
+  };
+}
+
 export interface RouteGeometry { d: string; samples: Point[]; arcCount: number; fallbackCount: number }
 
 export interface RenderedRoutePath extends RouteGeometry {
@@ -90,6 +255,16 @@ export function stationAnchoredPath(
       for (let i = 0; i < ring.nodes.length; i++) rings.set(edgeKey(ring.nodes[i], ring.nodes[(i + 1) % ring.nodes.length]), circle);
     }
   }
+  const concentricCenter =
+    layout.style === 'concentric'
+      ? layout.radialCenter ?? (() => {
+          const all = graph.nodes.map((node) => layout.positions[node.id]);
+          return {
+            x: all.reduce((sum, point) => sum + point.x, 0) / Math.max(1, all.length),
+            y: all.reduce((sum, point) => sum + point.y, 0) / Math.max(1, all.length),
+          };
+        })()
+      : undefined;
   const closed = path.length > 2 && path[0] === path[path.length - 1];
   const tangent = (i: number): Point => {
     const last = points.length - 1;
@@ -135,6 +310,36 @@ export function stationAnchoredPath(
       arcCount++;
       continue;
     }
+
+    if (layout.style === 'concentric' && concentricCenter) {
+      const edge = orthoradialEdge(a, b, concentricCenter);
+      commands.push(...edge.commands);
+      samples.push(...edge.samples.slice(1));
+      arcCount += edge.arcCount;
+      continue;
+    }
+
+    const angularStep =
+      layout.style === 'hex'
+        ? 60
+        : layout.style === 'taipei' ||
+            layout.style === 'london' ||
+            layout.style === 'moscow'
+          ? 45
+          : undefined;
+    if (angularStep) {
+      const polyline = strictAxisPolyline(
+        a,
+        b,
+        angularStep as 45 | 60,
+      );
+      for (const point of polyline.slice(1)) {
+        commands.push(`L ${point.x} ${point.y}`);
+        samples.push(point);
+      }
+      continue;
+    }
+
     const length = distance(a, b);
     const ta = tangent(i), tb = tangent(i + 1);
     const strength = layout.style === 'moscow' ? 0.28 : layout.style === 'geographic' ? 0.08 : layout.style === 'london' || layout.style === 'hex' ? 0.38 : 0.18;
