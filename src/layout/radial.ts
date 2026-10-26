@@ -1,7 +1,10 @@
 import { edgeKey, findSimpleCycles } from '../core/graph';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../core/projection';
 import type { GraphModel, Point, RingCandidateDiagnostic, ValidatedMoscowRing } from '../types';
-import { relaxPathKinksSafely } from './common';
+import {
+  adoptTopologySafeGeometry,
+  relaxPathKinksSafely,
+} from './common';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -647,6 +650,7 @@ function moscowWholeLineQuality(
   ringNodes: Set<string>,
 ): {
   doglegs: number;
+  backtracks: number;
   selfCrossings: number;
   edgeCrossings: number;
   minNodeDistance: number;
@@ -676,6 +680,7 @@ function moscowWholeLineQuality(
   };
 
   let doglegs = 0;
+  let backtracks = 0;
   let selfCrossings = 0;
   for (const line of graph.lines) {
     for (const path of line.paths) {
@@ -698,6 +703,19 @@ function moscowWholeLineQuality(
           Math.abs(second) > (24 * Math.PI) / 180
         ) {
           doglegs += 1;
+        }
+      }
+
+      for (let index = 1; index < path.length - 1; index += 1) {
+        const turn = Math.abs(
+          signedTurn(
+            positions[path[index - 1]],
+            positions[path[index]],
+            positions[path[index + 1]],
+          ),
+        );
+        if (turn >= (135 * Math.PI) / 180) {
+          backtracks += 1;
         }
       }
 
@@ -758,6 +776,7 @@ function moscowWholeLineQuality(
 
   return {
     doglegs,
+    backtracks,
     selfCrossings,
     edgeCrossings,
     minNodeDistance,
@@ -774,10 +793,34 @@ function regularizeMoscowWholeLinesSafely(
     positions,
     ringNodes,
   );
-  const candidate = smoothMoscowCorridors(
+  const corridorCandidate = smoothMoscowCorridors(
     graph,
     positions,
     ringNodes,
+  );
+  // Transfers and branch hubs are structural, but a severe whole-route
+  // backtrack is worse than a small shift of such a hub. Generate a second
+  // topology-aware candidate with bounded structural movement, then adopt
+  // that geometry node-by-node/windows from the known-clean repaired layout.
+  const kinkCandidate = relaxPathKinksSafely(
+    graph,
+    corridorCandidate,
+    {
+      passes: 12,
+      thresholdDegrees: 72,
+      minimumNodeDistance: 27,
+      maxShift: 120,
+      structuralMaxShift: 58,
+    },
+  );
+  const candidate = adoptTopologySafeGeometry(
+    graph,
+    positions,
+    kinkCandidate,
+    {
+      passes: 6,
+      minimumNodeDistance: 27,
+    },
   );
   const after = moscowWholeLineQuality(
     graph,
@@ -797,7 +840,10 @@ function regularizeMoscowWholeLinesSafely(
     after.selfCrossings <= before.selfCrossings &&
     after.edgeCrossings <= before.edgeCrossings &&
     after.minNodeDistance + 1e-6 >= spacingFloor &&
-    after.doglegs < before.doglegs
+    (
+      after.doglegs < before.doglegs ||
+      after.backtracks < before.backtracks
+    )
   ) {
     return candidate;
   }
