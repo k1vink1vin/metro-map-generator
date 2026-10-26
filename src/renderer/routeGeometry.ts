@@ -419,6 +419,174 @@ function orthoradialEdgeCandidates(
   return candidates;
 }
 
+function pointOnPolar(
+  center: Point,
+  radius: number,
+  angle: number,
+): Point {
+  return {
+    x: center.x + Math.cos(angle) * radius,
+    y: center.y + Math.sin(angle) * radius,
+  };
+}
+
+/**
+ * Escape candidates are used only when the compact beam solution still folds
+ * over itself. They remain 100% orthoradial, but briefly sidestep around the
+ * station angle before using a routing circle outside the station shells.
+ *
+ * This is the polar-grid equivalent of taking a free outer corridor in an
+ * orthogonal router: it preserves the arc/spoke grammar while giving a long
+ * line enough topological freedom to avoid crossing its own earlier pieces.
+ */
+function orthoradialEscapeCandidates(
+  a: Point,
+  b: Point,
+  center: Point,
+  outerBase: number,
+): OrthoradialEdgeGeometry[] {
+  const ax = a.x - center.x;
+  const ay = a.y - center.y;
+  const bx = b.x - center.x;
+  const by = b.y - center.y;
+  const ra = Math.hypot(ax, ay);
+  const rb = Math.hypot(bx, by);
+  if (ra < 1e-7 || rb < 1e-7) return [];
+
+  const aa = Math.atan2(ay, ax);
+  const ab = Math.atan2(by, bx);
+  const offsets = [0, -Math.PI / 9, Math.PI / 9];
+  const radii = [
+    outerBase + 64,
+    outerBase + 144,
+    outerBase + 256,
+  ];
+  const candidates: OrthoradialEdgeGeometry[] = [];
+
+  for (const routeRadius of radii) {
+    for (const startOffset of offsets) {
+      for (const endOffset of offsets) {
+        const alpha = aa + startOffset;
+        const beta = ab + endOffset;
+        const startDelta = shortestSignedAngle(aa, alpha);
+        const endDelta = shortestSignedAngle(beta, ab);
+
+        for (const middleDelta of arcDeltas(alpha, beta)) {
+          const startShell = pointOnPolar(center, ra, alpha);
+          const outerStart = pointOnPolar(
+            center,
+            routeRadius,
+            alpha,
+          );
+          const outerEnd = pointOnPolar(
+            center,
+            routeRadius,
+            beta,
+          );
+          const endShell = pointOnPolar(center, rb, beta);
+          const commands: string[] = [];
+          const samples: Point[] = [a];
+          let length = 0;
+          let arcCount = 0;
+
+          if (Math.abs(startDelta) > 1e-8) {
+            commands.push(
+              arcCommand(ra, startDelta, startShell),
+            );
+            samples.push(
+              ...circularArcSamples(
+                center,
+                ra,
+                aa,
+                startDelta,
+              ),
+            );
+            length += Math.abs(startDelta) * ra;
+            arcCount += 1;
+          }
+
+          if (
+            distance(samples[samples.length - 1], outerStart) >
+            1e-7
+          ) {
+            commands.push(
+              `L ${outerStart.x} ${outerStart.y}`,
+            );
+            samples.push(outerStart);
+            length += Math.abs(routeRadius - ra);
+          }
+
+          if (Math.abs(middleDelta) > 1e-8) {
+            commands.push(
+              arcCommand(
+                routeRadius,
+                middleDelta,
+                outerEnd,
+              ),
+            );
+            samples.push(
+              ...circularArcSamples(
+                center,
+                routeRadius,
+                alpha,
+                middleDelta,
+              ),
+            );
+            length +=
+              Math.abs(middleDelta) * routeRadius;
+            arcCount += 1;
+          }
+
+          if (
+            distance(samples[samples.length - 1], endShell) >
+            1e-7
+          ) {
+            commands.push(
+              `L ${endShell.x} ${endShell.y}`,
+            );
+            samples.push(endShell);
+            length += Math.abs(routeRadius - rb);
+          }
+
+          if (Math.abs(endDelta) > 1e-8) {
+            commands.push(
+              arcCommand(rb, endDelta, b),
+            );
+            samples.push(
+              ...circularArcSamples(
+                center,
+                rb,
+                beta,
+                endDelta,
+              ),
+            );
+            length += Math.abs(endDelta) * rb;
+            arcCount += 1;
+          } else if (
+            distance(samples[samples.length - 1], b) > 1e-7
+          ) {
+            commands.push(`L ${b.x} ${b.y}`);
+            samples.push(b);
+            length += distance(
+              samples[samples.length - 2],
+              b,
+            );
+          }
+
+          candidates.push({
+            commands,
+            samples,
+            arcCount,
+            length,
+          });
+        }
+      }
+    }
+  }
+
+  return candidates;
+}
+
 function extensionCrossings(
   existing: Point[],
   extension: Point[],
@@ -450,6 +618,67 @@ function extensionCrossings(
     }
   }
   return crossings;
+}
+
+function orthoradialEscapePath(
+  points: Point[],
+  center: Point,
+): RouteGeometry {
+  const outerBase = Math.max(
+    1,
+    ...points.map((point) =>
+      Math.hypot(
+        point.x - center.x,
+        point.y - center.y,
+      ),
+    ),
+  );
+
+  const commands = [
+    `M ${points[0].x} ${points[0].y}`,
+  ];
+  const samples: Point[] = [points[0]];
+  let arcCount = 0;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const compact = orthoradialEdgeCandidates(
+      points[index],
+      points[index + 1],
+      center,
+    );
+    const escapes = orthoradialEscapeCandidates(
+      points[index],
+      points[index + 1],
+      center,
+      outerBase,
+    );
+    const ranked = [...compact, ...escapes]
+      .map((candidate) => ({
+        candidate,
+        crossings:
+          extensionCrossings(samples, candidate.samples) +
+          sampledSelfCrossings(candidate.samples),
+      }))
+      .sort(
+        (a, b) =>
+          a.crossings - b.crossings ||
+          a.candidate.length - b.candidate.length ||
+          a.candidate.commands.length -
+            b.candidate.commands.length,
+      );
+
+    const best = ranked[0].candidate;
+    commands.push(...best.commands);
+    samples.push(...best.samples.slice(1));
+    arcCount += best.arcCount;
+  }
+
+  return {
+    d: commands.join(' '),
+    samples,
+    arcCount,
+    fallbackCount: 1,
+  };
 }
 
 function orthoradialPath(
@@ -527,12 +756,30 @@ function orthoradialPath(
   }
 
   const best = states[0];
-  return {
+  const compact: RouteGeometry = {
     d: best.commands.join(' '),
     samples: best.samples,
     arcCount: best.arcCount,
     fallbackCount: 0,
   };
+
+  // Beam search intentionally prefers compact geometry, but a very long line
+  // can still need a wider topological corridor. Only pay that visual cost
+  // when it strictly reduces self-crossings.
+  if (best.crossings > 0) {
+    const escaped = orthoradialEscapePath(
+      points,
+      center,
+    );
+    if (
+      sampledSelfCrossings(escaped.samples) <
+      sampledSelfCrossings(compact.samples)
+    ) {
+      return escaped;
+    }
+  }
+
+  return compact;
 }
 
 export interface RouteGeometry { d: string; samples: Point[]; arcCount: number; fallbackCount: number }
