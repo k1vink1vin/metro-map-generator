@@ -29,11 +29,11 @@ const STATION_STYLE_OPTIONS: Array<{
 
 const STYLE_OPTIONS: Array<{ id: StyleId; label: string; note: string }> = [
   { id: 'geographic', label: 'Geographic', note: '真實相對位置基準 / north-up' },
-  { id: 'taipei', label: 'Taipei 45°', note: '45° 折衷：地理優先、走廊整線' },
-  { id: 'london', label: 'London 45°', note: '45° 拓撲：中心放大、等距與轉乘優先' },
-  { id: 'moscow', label: 'Moscow Ring', note: '獨立正圓環線 + 固定環站的平滑走廊' },
-  { id: 'concentric', label: 'Concentric', note: '同心圓分層引導：兼顧角度避碰與拓樸' },
-  { id: 'hex', label: 'Hex 60°', note: '60° 三軸網格：路徑整線、抑制 zig-zag' },
+  { id: 'taipei', label: 'Taipei 45°', note: '硬性 0/45/90/135° + 相對地理 + 台北路網淡水河地標' },
+  { id: 'london', label: 'London 45°', note: '硬性 45° 拓撲：等距、轉乘與中心可讀性優先' },
+  { id: 'moscow', label: 'Moscow Ring', note: '獨立多圓心正圓環線 + 非環段硬性 45° 輻射語彙' },
+  { id: 'concentric', label: 'Concentric', note: '單一圓心：路徑只允許同心圓弧或放射直線' },
+  { id: 'hex', label: 'Hex 60°', note: '硬性 0/60/120° 三軸網格 + 拓樸保護' },
 ];
 
 const STYLE_GROUPS: Array<{
