@@ -124,5 +124,7 @@ export interface LayoutResult {
   primaryRingCandidateId?: string;
   ringCandidates?: RingCandidateDiagnostic[];
   moscowRings?: ValidatedMoscowRing[];
+  /** Exact common centre used by the orthoradial / concentric style. */
+  radialCenter?: Point;
   integrity: LayoutIntegrity;
 }
