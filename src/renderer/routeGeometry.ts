@@ -421,7 +421,7 @@ function orthoradialEdgeCandidates(
     for (const delta of deltas) {
       candidates.push({
         commands: [arcCommand(ra, delta, b)],
-        samples: [a, ...circularArcSamples(center, ra, aa, delta)],
+        samples: [a, ...circularArcTopologySamples(center, ra, aa, delta)],
         arcCount: 1,
         length: Math.abs(delta) * ra,
       });
@@ -442,7 +442,7 @@ function orthoradialEdgeCandidates(
       ],
       samples: [
         a,
-        ...circularArcSamples(center, ra, aa, delta),
+        ...circularArcTopologySamples(center, ra, aa, delta),
         b,
       ],
       arcCount: 1,
@@ -464,7 +464,7 @@ function orthoradialEdgeCandidates(
       samples: [
         a,
         corner,
-        ...circularArcSamples(center, rb, aa, delta),
+        ...circularArcTopologySamples(center, rb, aa, delta),
       ],
       arcCount: 1,
       length: Math.abs(rb - ra) + Math.abs(delta) * rb,
@@ -507,7 +507,7 @@ function orthoradialEdgeCandidates(
         samples: [
           a,
           startCorner,
-          ...circularArcSamples(
+          ...circularArcTopologySamples(
             center,
             routeRadius,
             aa,
@@ -604,7 +604,7 @@ function orthoradialEscapeCandidates(
               arcCommand(ra, startDelta, startShell),
             );
             samples.push(
-              ...circularArcSamples(
+              ...circularArcTopologySamples(
                 center,
                 ra,
                 aa,
@@ -663,7 +663,7 @@ function orthoradialEscapeCandidates(
               arcCommand(rb, endDelta, b),
             );
             samples.push(
-              ...circularArcSamples(
+              ...circularArcTopologySamples(
                 center,
                 rb,
                 beta,
