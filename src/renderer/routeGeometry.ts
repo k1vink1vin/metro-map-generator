@@ -1362,6 +1362,27 @@ function orthoradialPath(
     states = next.slice(0, beamWidth);
   }
 
+  // The incremental crossing counter is a beam heuristic only. Two arc
+  // extensions can form a crossing that is visible only after the complete
+  // route has been assembled, so choose the final survivor by the ACTUAL
+  // sampled self-crossing count before applying rhythm/length aesthetics.
+  states.sort(
+    (a, b) =>
+      sampledSelfCrossings(a.samples) -
+        sampledSelfCrossings(b.samples) ||
+      (
+        a.rhythmPenalty * 8 +
+        a.detourPenalty * 2
+      ) -
+        (
+          b.rhythmPenalty * 8 +
+          b.detourPenalty * 2
+        ) ||
+      a.detourPenalty - b.detourPenalty ||
+      a.length - b.length ||
+      a.commands.length - b.commands.length,
+  );
+
   const best = states[0];
   const compact: RouteGeometry = {
     d: best.commands.join(' '),
