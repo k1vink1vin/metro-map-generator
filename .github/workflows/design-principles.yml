@@ -11,6 +11,10 @@ concurrency:
 
 jobs:
   audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        style: [taipei, london, moscow, concentric, hex]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,5 +30,5 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
-      - name: Audit topology, angles, corners, parallel lanes and spacing
-        run: npm run qa:principles
+      - name: Audit ${{ matrix.style }}
+        run: npm run qa:principles -- ${{ matrix.style }}
