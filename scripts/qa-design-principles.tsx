@@ -106,6 +106,12 @@ function renderedAngleAudit(layout: LayoutResult) {
   let checked = 0;
   let illegalCurveCommands = 0;
   let abruptReversals = 0;
+  const reversalDetails: Array<{
+    line: string;
+    path: string;
+    sampleIndex: number;
+    degrees: number;
+  }> = [];
 
   for (const route of buildRenderedRoutePaths(graph, layout)) {
     const directions: number[] = [];
@@ -121,6 +127,17 @@ function renderedAngleAudit(layout: LayoutResult) {
       while (delta < -Math.PI) delta += Math.PI * 2;
       if (Math.abs(delta) >= (150 * Math.PI) / 180) {
         abruptReversals += 1;
+        reversalDetails.push({
+          line: route.lineId,
+          path:
+            graph.lines.find((line) => line.id === route.lineId)
+              ?.pathIds?.[route.pathIndex] ??
+            String(route.pathIndex),
+          sampleIndex: index,
+          degrees: Number(
+            (Math.abs(delta) * 180 / Math.PI).toFixed(2),
+          ),
+        });
       }
     }
 
@@ -168,6 +185,7 @@ function renderedAngleAudit(layout: LayoutResult) {
     checked,
     illegalCurveCommands,
     abruptReversals,
+    reversalDetails,
   };
 }
 
