@@ -363,6 +363,59 @@ function orthoradialEdgeCandidates(
     });
   }
 
+  // If both one-bend L-routes collide with an earlier part of the same line,
+  // allow a temporary routing shell. It is still strictly orthoradial:
+  // radial -> circular arc -> radial. These extra candidates are essential for
+  // long regional lines whose station sequence visits the same angular sector
+  // repeatedly.
+  const detourRadii = [
+    Math.max(24, Math.min(ra, rb) - 48),
+    (ra + rb) / 2,
+    Math.max(ra, rb) + 48,
+  ].filter(
+    (radius, index, all) =>
+      radius > 1 &&
+      Math.abs(radius - ra) > 1e-5 &&
+      Math.abs(radius - rb) > 1e-5 &&
+      all.findIndex((value) => Math.abs(value - radius) < 1e-5) === index,
+  );
+
+  for (const routeRadius of detourRadii) {
+    const startCorner = {
+      x: center.x + Math.cos(aa) * routeRadius,
+      y: center.y + Math.sin(aa) * routeRadius,
+    };
+    const endCorner = {
+      x: center.x + Math.cos(ab) * routeRadius,
+      y: center.y + Math.sin(ab) * routeRadius,
+    };
+    for (const delta of deltas) {
+      candidates.push({
+        commands: [
+          `L ${startCorner.x} ${startCorner.y}`,
+          arcCommand(routeRadius, delta, endCorner),
+          `L ${b.x} ${b.y}`,
+        ],
+        samples: [
+          a,
+          startCorner,
+          ...circularArcSamples(
+            center,
+            routeRadius,
+            aa,
+            delta,
+          ),
+          b,
+        ],
+        arcCount: 1,
+        length:
+          Math.abs(routeRadius - ra) +
+          Math.abs(delta) * routeRadius +
+          Math.abs(rb - routeRadius),
+      });
+    }
+  }
+
   return candidates;
 }
 
@@ -434,7 +487,7 @@ function orthoradialPath(
   // A small beam is enough because every edge has at most four legal
   // orthoradial forms. Ranking is lexicographic: self-crossings first,
   // then geometric length. This preserves topology before aesthetics.
-  const beamWidth = 12;
+  const beamWidth = 36;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const candidates = orthoradialEdgeCandidates(
