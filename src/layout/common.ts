@@ -2535,6 +2535,162 @@ export function separateNodesSafely(
 
 /** Reduce significant north/east inversions without deforming fixed rings or
  * introducing route self-crossings. Unsolvable constraints remain visible to QA. */
+export function equalizeAngularRouteRunsSafely(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  angleStep: number,
+  options: {
+    fixedNodes?: ReadonlySet<string>;
+    minimumNodeDistance?: number;
+    passes?: number;
+  } = {},
+): Record<string, Point> {
+  const positions = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const fixed = options.fixedNodes ?? new Set<string>();
+  const minimumNodeDistance = options.minimumNodeDistance ?? 28;
+  const passes = options.passes ?? 3;
+
+  const ordinary = (nodeId: string): boolean => {
+    if (fixed.has(nodeId)) return false;
+    const node = graph.nodeById.get(nodeId);
+    if (!node) return false;
+    if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return false;
+    if (node.stationIds.length !== 1) return false;
+    let incidentLines = 0;
+    for (const line of graph.lines) {
+      if (line.paths.some((path) => path.includes(nodeId))) {
+        incidentLines += 1;
+        if (incidentLines > 1) return false;
+      }
+    }
+    return true;
+  };
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        if (path.length < 3) continue;
+        const anchors = new Set<number>([0, path.length - 1]);
+        path.forEach((nodeId, index) => {
+          if (!ordinary(nodeId)) anchors.add(index);
+        });
+        const sorted = [...anchors].sort((a, b) => a - b);
+
+        for (let section = 0; section < sorted.length - 1; section += 1) {
+          const startIndex = sorted[section];
+          const endIndex = sorted[section + 1];
+          const segmentCount = endIndex - startIndex;
+          if (segmentCount < 2) continue;
+
+          const movingIds = path.slice(startIndex + 1, endIndex);
+          if (!movingIds.every(ordinary)) continue;
+
+          const start = positions[path[startIndex]];
+          const end = positions[path[endIndex]];
+          const corridor = angularTwoSegmentPath(
+            start,
+            end,
+            angleStep,
+            movingIds.map((id) => positions[id]),
+            'anchored',
+          );
+          const candidates = Object.fromEntries(
+            movingIds.map((nodeId, index) => [
+              nodeId,
+              samplePolyline(
+                corridor,
+                (index + 1) / segmentCount,
+              ),
+            ]),
+          );
+
+          const baselineSpacing = minimumCandidateSpacing(
+            graph,
+            positions,
+            movingIds,
+            Object.fromEntries(
+              movingIds.map((id) => [id, positions[id]]),
+            ),
+          ).distance;
+          const requiredSpacing = Math.min(
+            minimumNodeDistance,
+            baselineSpacing,
+          );
+          if (
+            minimumCandidateSpacing(
+              graph,
+              positions,
+              movingIds,
+              candidates,
+            ).distance + 0.5 < requiredSpacing
+          ) {
+            continue;
+          }
+
+          const movingSet = new Set(movingIds);
+          const beforeSelf = totalRouteSelfCrossings(graph, positions);
+          const beforeExternal = pathExternalCrossings(
+            graph,
+            path,
+            positions,
+          );
+          const beforeSpacing = sectionSpacingCv(
+            path.slice(startIndex, endIndex + 1),
+            positions,
+          );
+          const originals = Object.fromEntries(
+            movingIds.map((id) => [id, { ...positions[id] }]),
+          );
+
+          for (const id of movingIds) positions[id] = candidates[id];
+
+          const afterSelf = totalRouteSelfCrossings(graph, positions);
+          const afterExternal = pathExternalCrossings(
+            graph,
+            path,
+            positions,
+          );
+          const afterSpacing = sectionSpacingCv(
+            path.slice(startIndex, endIndex + 1),
+            positions,
+          );
+
+          const incidentCrossingRegression =
+            [...movingSet].some(
+              (id) =>
+                incidentCrossingCount(graph, id, positions) >
+                incidentCrossingCount(
+                  graph,
+                  id,
+                  { ...positions, ...originals },
+                ),
+            );
+
+          if (
+            afterSelf <= beforeSelf &&
+            afterExternal <= beforeExternal &&
+            !incidentCrossingRegression &&
+            afterSpacing + 1e-6 < beforeSpacing
+          ) {
+            changed = true;
+          } else {
+            for (const id of movingIds) positions[id] = originals[id];
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return positions;
+}
+
+
 export function repairGeographicOrderSafely(
   graph: GraphModel, input: Record<string, Point>, geographic: Record<string, Point>, fixed: ReadonlySet<string>,
 ): Record<string, Point> {
