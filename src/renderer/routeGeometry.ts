@@ -225,6 +225,31 @@ function expandedMoscowAxisCandidates(
   );
 }
 
+function axisRouteReversalCount(
+  samples: Point[],
+): number {
+  const directions: number[] = [];
+  for (let index = 0; index < samples.length - 1; index += 1) {
+    const a = samples[index];
+    const b = samples[index + 1];
+    if (distance(a, b) < 1e-8) continue;
+    directions.push(
+      Math.atan2(b.y - a.y, b.x - a.x),
+    );
+  }
+
+  let reversals = 0;
+  for (let index = 1; index < directions.length; index += 1) {
+    let delta = directions[index] - directions[index - 1];
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    if (Math.abs(delta) >= (150 * Math.PI) / 180) {
+      reversals += 1;
+    }
+  }
+  return reversals;
+}
+
 function strictAxisPath(
   points: Point[],
   stepDegrees: 45 | 60,
@@ -245,6 +270,7 @@ function strictAxisPath(
     commands: string[];
     samples: Point[];
     crossings: number;
+    reversals: number;
     length: number;
     bends: number;
   };
@@ -253,11 +279,15 @@ function strictAxisPath(
     commands: [`M ${points[0].x} ${points[0].y}`],
     samples: [points[0]],
     crossings: 0,
+    reversals: 0,
     length: 0,
     bends: 0,
   }];
 
-  const beamWidth = 16;
+  // A station pair often has two equally legal 45°/60° elbows. Preserve
+  // enough alternatives for a whole-line decision so a locally short elbow
+  // cannot force the next station approach into a near-180° reversal.
+  const beamWidth = 64;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const candidates = strictAxisCandidates(
@@ -286,6 +316,7 @@ function strictAxisPath(
           ],
           samples,
           crossings: state.crossings + addedCrossings,
+          reversals: axisRouteReversalCount(samples),
           length: state.length + candidate.length,
           bends: state.bends + candidate.bends,
         });
@@ -295,11 +326,21 @@ function strictAxisPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        a.reversals - b.reversals ||
         a.bends - b.bends ||
         a.length - b.length,
     );
     states = next.slice(0, beamWidth);
   }
+
+  states.sort(
+    (a, b) =>
+      sampledSelfCrossings(a.samples) -
+        sampledSelfCrossings(b.samples) ||
+      a.reversals - b.reversals ||
+      a.bends - b.bends ||
+      a.length - b.length,
+  );
 
   const best = states[0];
   return {
