@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
 import { buildGraph } from '../src/core/graph';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
-import type { LayoutResult, Point } from '../src/types';
+import type { LayoutResult, Point, StyleId } from '../src/types';
 
-function fixture(positions: Record<string, Point>, path: string[], moscow = false, parallel = false, schematic: 'london' | 'hex' | undefined = undefined) {
+function fixture(
+  positions: Record<string, Point>,
+  path: string[],
+  moscow = false,
+  parallel = false,
+  schematic: StyleId | undefined = undefined,
+  radialCenter?: Point,
+) {
   const graph = buildGraph({ stations: Object.keys(positions).map((id, i) => ({ id, lat: i, lon: i })),
     lines: [{ id: 'test', color: '#123456', paths: [path] },
       ...(parallel ? [{ id: 'z-other', color: '#987654', paths: [[...path].reverse()] }] : [])] });
-  const layout: LayoutResult = { style: schematic ?? (moscow ? 'moscow' : 'taipei'), positions,
-    geographicPositions: positions, integrity: { routeCount: 1, pathCount: 1, segmentCount: path.length - 1, repairedNodeCount: 0, separatedNodePairs: 0, valid: true },
+  const layout: LayoutResult = { style: schematic ?? (moscow ? 'moscow' : 'geographic'), positions,
+    geographicPositions: positions, radialCenter,
+    integrity: { routeCount: 1, pathCount: 1, segmentCount: path.length - 1, repairedNodeCount: 0, separatedNodePairs: 0, valid: true },
     moscowRings: moscow ? [{ id: 'ring', stationIds: path.slice(0, -1), nodes: path.slice(0, -1) }] : [] };
   return stationAnchoredPath(graph, layout, path, path.map(id => positions[id]), parallel ? 'test' : undefined);
 }
@@ -38,12 +46,42 @@ const acute = fixture({ A: {x:0,y:0}, B: {x:100,y:0}, C: {x:40,y:40}, D: {x:150,
 assert.equal(acute.fallbackCount, 0, 'isolated acute turns must use interpolating curves');
 assert.equal(sampledSelfCrossings(acute.samples), 0, 'rounding acute turns must not create loops');
 
-for (const style of ['london', 'hex'] as const) {
+function axisError(samples: Point[], stepDegrees: number): number {
+  const step = (stepDegrees * Math.PI) / 180;
+  return Math.max(
+    0,
+    ...samples.slice(1).map((point, index) => {
+      const previous = samples[index];
+      const dx = point.x - previous.x;
+      const dy = point.y - previous.y;
+      if (Math.hypot(dx, dy) < 1e-8) return 0;
+      const angle = Math.atan2(dy, dx);
+      const snapped = Math.round(angle / step) * step;
+      let error = Math.abs(angle - snapped);
+      error = Math.min(error, Math.PI * 2 - error);
+      return (error * 180) / Math.PI;
+    }),
+  );
+}
+
+for (const style of ['taipei', 'london', 'hex'] as const) {
   const schematic = fixture(corners, ['A', 'B', 'C', 'D'], false, false, style);
   assert.equal(sampledSelfCrossings(schematic.samples), 0);
   assert.equal(schematic.fallbackCount, 0);
-  assert.equal((schematic.d.match(/ L /g) ?? []).length, 3,
-    'each station corridor must retain a straight section between local transitions');
+  assert(!schematic.d.includes('C '), 'angular schematic routes must not be arbitrary splines');
+  assert(axisError(schematic.samples, style === 'hex' ? 60 : 45) < 1e-7,
+    `${style} route geometry must lie exactly on its angular family`);
   for (const point of Object.values(corners)) assert(schematic.samples.some(p =>
-    Math.hypot(p.x-point.x,p.y-point.y)<1e-8), 'local rounding must retain every station anchor');
+    Math.hypot(p.x-point.x,p.y-point.y)<1e-8), 'hard-axis geometry must retain every station anchor');
 }
+
+const orthoradial = fixture(
+  { A: { x: 100, y: 0 }, B: { x: 0, y: 160 } },
+  ['A', 'B'],
+  false,
+  false,
+  'concentric',
+  { x: 0, y: 0 },
+);
+assert(orthoradial.d.includes('A 100 100'), 'concentric routes must use common-centre circular arcs');
+assert(orthoradial.d.includes('L 0 160'), 'concentric routes must use radial straight segments between shells');
