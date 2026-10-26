@@ -90,6 +90,29 @@ const normalizedSuffixCodes = suffixedStationIds.map((stationId) =>
   stationId.trim().toUpperCase(),
 );
 
+function abruptRouteReversals(
+  points: Array<{ x: number; y: number }>,
+): number {
+  const directions: number[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const a = points[index];
+    const b = points[index + 1];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) continue;
+    directions.push(Math.atan2(b.y - a.y, b.x - a.x));
+  }
+
+  let reversals = 0;
+  for (let index = 1; index < directions.length; index += 1) {
+    let delta = directions[index] - directions[index - 1];
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    if (Math.abs(delta) >= (150 * Math.PI) / 180) {
+      reversals += 1;
+    }
+  }
+  return reversals;
+}
+
 const requestedStyles = process.argv.slice(2);
 for (const name of requestedStyles) {
   if (!styles.includes(name as StyleId)) throw new Error(`Unknown layout style: ${name}`);
@@ -106,6 +129,32 @@ for (const style of selectedStyles) {
     const baseline = sampledSelfCrossings(path.map(id => layout.positions[id]));
     const rendered = sampledSelfCrossings(route.samples);
     if (rendered > baseline) throw new Error(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
+
+    if (style === 'geographic') {
+      if (route.samples.length !== path.length) {
+        throw new Error(
+          `geographic/${route.lineId}: expected one rendered point per station anchor`,
+        );
+      }
+      route.samples.forEach((point, index) => {
+        const expected = layout.positions[path[index]];
+        if (Math.hypot(point.x - expected.x, point.y - expected.y) > 1e-7) {
+          throw new Error(
+            `geographic/${route.lineId}: renderer moved station ${path[index]} away from its projected lat/lon position`,
+          );
+        }
+      });
+    }
+
+    if (
+      style === 'moscow' &&
+      abruptRouteReversals(route.samples) > 0
+    ) {
+      throw new Error(
+        `moscow/${route.lineId}: rendered route contains a >=150° U-turn`,
+      );
+    }
+
     if (style === 'moscow' && rings.length && !buildRenderedRoutePaths(graph, layout).some(p => p.arcCount > 0)) throw new Error('Moscow has no rendered circular route arcs');
   }
 
