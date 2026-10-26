@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildGraph } from '../src/core/graph';
+import { computeLayout } from '../src/layout/index';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import type { LayoutResult, Point, StyleId } from '../src/types';
 
@@ -23,8 +24,9 @@ function fixture(
 
 const corners = { A: { x: 0, y: 0 }, B: { x: 100, y: 0 }, C: { x: 100, y: 100 }, D: { x: 200, y: 100 } };
 const route = fixture(corners, ['A', 'B', 'C', 'D']);
-assert(route.d.includes('C '), 'nontrivial corners must be interpolated smoothly');
-for (const station of Object.values(corners)) assert(route.samples.some(p => Math.hypot(p.x - station.x, p.y - station.y) < 1e-8), 'curve must pass through every station');
+assert(!route.d.includes('C '), 'Geographic must not spline or schematicize coordinates');
+assert.equal(route.samples.length, 4, 'Geographic must contain only the projected station anchors');
+for (const station of Object.values(corners)) assert(route.samples.some(p => Math.hypot(p.x - station.x, p.y - station.y) < 1e-8), 'Geographic polyline must pass through every exact station position');
 
 const ring = { A: { x: 60, y: 20 }, B: { x: 10, y: 70 }, C: { x: -40, y: 20 }, D: { x: 10, y: -30 } };
 const circle = circleThroughStations(Object.values(ring));
@@ -74,6 +76,30 @@ for (const style of ['taipei', 'london', 'hex'] as const) {
   for (const point of Object.values(corners)) assert(schematic.samples.some(p =>
     Math.hypot(p.x-point.x,p.y-point.y)<1e-8), 'hard-axis geometry must retain every station anchor');
 }
+
+const centerGraph = buildGraph({
+  stations: [
+    { id: 'A', name: 'A', lat: 25.0, lon: 121.0 },
+    { id: 'B', name: 'B', lat: 25.1, lon: 121.1 },
+    { id: 'C', name: 'C', lat: 25.2, lon: 121.2 },
+  ],
+  lines: [
+    { id: 'center-test', color: '#123456', paths: [['A', 'B', 'C']] },
+  ],
+});
+const centeredLayout = computeLayout(
+  centerGraph,
+  'concentric',
+  { concentricCenterNodeId: 'B' },
+);
+assert(centeredLayout.radialCenter, 'Concentric layout must expose its exact common centre');
+assert(
+  Math.hypot(
+    centeredLayout.positions.B.x - centeredLayout.radialCenter.x,
+    centeredLayout.positions.B.y - centeredLayout.radialCenter.y,
+  ) < 1e-7,
+  'selected concentric centre station must remain exactly at radius zero',
+);
 
 const orthoradial = fixture(
   { A: { x: 100, y: 0 }, B: { x: 0, y: 160 } },
