@@ -1539,23 +1539,38 @@ function orthoradialPath(
       center,
       sectionBreaks,
     );
-    const globalCrossings = sampledSelfCrossings(
-      globalFallback.samples,
-    );
-    if (globalCrossings < compactCrossings) {
-      return globalFallback;
-    }
-
     const escaped = orthoradialEscapePath(
       points,
       center,
     );
-    if (
-      sampledSelfCrossings(escaped.samples) <
-      compactCrossings
-    ) {
-      return escaped;
-    }
+
+    const alternatives = [
+      {
+        geometry: compact,
+        crossings: compactCrossings,
+        fallbackRank: 0,
+      },
+      {
+        geometry: globalFallback,
+        crossings: sampledSelfCrossings(
+          globalFallback.samples,
+        ),
+        fallbackRank: 1,
+      },
+      {
+        geometry: escaped,
+        crossings: sampledSelfCrossings(
+          escaped.samples,
+        ),
+        fallbackRank: 2,
+      },
+    ].sort(
+      (a, b) =>
+        a.crossings - b.crossings ||
+        a.fallbackRank - b.fallbackRank,
+    );
+
+    return alternatives[0].geometry;
   }
 
   return compact;
