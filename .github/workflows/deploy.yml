@@ -46,6 +46,9 @@ jobs:
       - name: Rendered route topology QA
         run: npm run qa:render
 
+      - name: Schematic design-principle audit
+        run: npm run qa:principles
+
       - name: Build
         run: npm run build
 
