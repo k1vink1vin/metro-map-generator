@@ -93,18 +93,25 @@ export function offsetPathForLine(
     return path.map((id) => ({ ...positions[id] }));
   }
 
-  const contributions = new Map<string, Point[]>();
-  for (const id of path) contributions.set(id, []);
+  type OffsetSegment = {
+    a: Point;
+    b: Point;
+    direction: Point;
+    normal: Point;
+    offset: number;
+  };
 
-  for (let i = 0; i < path.length - 1; i += 1) {
-    const aId = path[i];
-    const bId = path[i + 1];
+  const segments: OffsetSegment[] = [];
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const aId = path[index];
+    const bId = path[index + 1];
     const a = positions[aId];
     const b = positions[bId];
     const dx = b.x - a.x;
     const dy = b.y - a.y;
-    const length = Math.max(1, Math.hypot(dx, dy));
-    const normal = { x: -dy / length, y: dx / length };
+    const length = Math.max(1e-9, Math.hypot(dx, dy));
+    const direction = { x: dx / length, y: dy / length };
+    const normal = { x: -direction.y, y: direction.x };
     const offset = segmentOffset(
       graph,
       aId,
@@ -115,20 +122,82 @@ export function offsetPathForLine(
       gap,
       geometricBundles,
     );
-    const shift = { x: normal.x * offset, y: normal.y * offset };
-
-    contributions.get(aId)?.push({ x: a.x + shift.x, y: a.y + shift.y });
-    contributions.get(bId)?.push({ x: b.x + shift.x, y: b.y + shift.y });
+    const shift = {
+      x: normal.x * offset,
+      y: normal.y * offset,
+    };
+    segments.push({
+      a: { x: a.x + shift.x, y: a.y + shift.y },
+      b: { x: b.x + shift.x, y: b.y + shift.y },
+      direction,
+      normal,
+      offset,
+    });
   }
 
-  return path.map((id) => {
-    const points = contributions.get(id) ?? [];
-    if (!points.length) return { ...positions[id] };
+  const lineIntersection = (
+    p: Point,
+    d: Point,
+    q: Point,
+    e: Point,
+  ): Point | undefined => {
+    const det = d.x * e.y - d.y * e.x;
+    if (Math.abs(det) < 1e-8) return undefined;
+    const qpx = q.x - p.x;
+    const qpy = q.y - p.y;
+    const t = (qpx * e.y - qpy * e.x) / det;
     return {
-      x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-      y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+      x: p.x + d.x * t,
+      y: p.y + d.y * t,
     };
-  });
+  };
+
+  const result: Point[] = [];
+  result.push({ ...segments[0].a });
+
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const previous = segments[index - 1];
+    const next = segments[index];
+    const vertex = positions[path[index]];
+    const intersection = lineIntersection(
+      previous.b,
+      previous.direction,
+      next.a,
+      next.direction,
+    );
+
+    if (intersection) {
+      // A true miter keeps this vertex on BOTH constant-offset lines, so the
+      // lane gap remains exactly parallel through a 45°/60° bend.
+      const miterDistance = Math.hypot(
+        intersection.x - vertex.x,
+        intersection.y - vertex.y,
+      );
+      const expected =
+        Math.max(
+          Math.abs(previous.offset),
+          Math.abs(next.offset),
+          gap,
+        );
+      // Extremely shallow reversals can send the mathematical intersection
+      // far away. In that degenerate case prefer a bounded bevel transition.
+      if (miterDistance <= expected * 5 + 12) {
+        result.push(intersection);
+        continue;
+      }
+    }
+
+    // Collinear bundle starts/ends cannot share one exact offset point.
+    // Average only for that split/merge transition; the interior of every
+    // genuinely parallel segment remains at its exact lane offset.
+    result.push({
+      x: (previous.b.x + next.a.x) / 2,
+      y: (previous.b.y + next.a.y) / 2,
+    });
+  }
+
+  result.push({ ...segments[segments.length - 1].b });
+  return result;
 }
 
 export function roundedPath(
