@@ -75,7 +75,7 @@ export function layoutHexilinear(
     24,
   );
   const sectionRouted = routeTopologySectionsSafely(graph, topologyReference, untangled, geographic, {
-    angleStep: 60, passes: 8, equalSpacingWeight: 0.8,
+    angleStep: 60, passes: 8, equalSpacingWeight: 1,
     minimumNodeDistance: 29, maximumShift: 110, minimumTurnDegrees: 20,
     maxShapeAnchors: 2, shapeTolerance: 24,
   });
