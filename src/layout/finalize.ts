@@ -113,10 +113,10 @@ function passengerCanvasScale(
   const styleMultiplier: Record<StyleId, number> = {
     geographic: 1.05,
     taipei: 2.1,
-    london: 1.12,
+    london: 1.45,
     moscow: 1.9,
     concentric: 1.08,
-    hex: 1.12,
+    hex: 1.24,
   };
   return Math.min(style === 'moscow' ? 6 : 4.5, base * styleMultiplier[style]);
 }
