@@ -204,9 +204,6 @@ function strictAxisPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
-        a.reversals - b.reversals ||
-        a.zigzags - b.zigzags ||
-        a.turnPenalty - b.turnPenalty ||
         a.bends - b.bends ||
         a.length - b.length,
     );
@@ -1560,6 +1557,9 @@ function moscowStrictPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        a.reversals - b.reversals ||
+        a.zigzags - b.zigzags ||
+        a.turnPenalty - b.turnPenalty ||
         a.bends - b.bends ||
         a.length - b.length,
     );
