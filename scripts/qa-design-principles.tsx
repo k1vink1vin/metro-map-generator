@@ -347,6 +347,8 @@ function roundedCornerAudit(layout: LayoutResult) {
   };
 }
 
+const hardFailures: string[] = [];
+
 for (const style of styles) {
   const layout = computeLayout(graph, style, { moscowRings: rings });
   const topology = topologyAudit(layout);
@@ -355,10 +357,52 @@ for (const style of styles) {
   const parallel = parallelAudit(layout);
   const spacing = equidistanceAudit(layout);
 
+  const topologyCompliant =
+    topology.valid && topology.addedSelfCrossings === 0;
+  const angleCompliant =
+    angles.illegalCurveCommands === 0 &&
+    angles.worstDegrees < 1e-6;
+  const roundedCompliant =
+    rounded.rounded && rounded.uniformStroke;
+  const parallelCompliant =
+    parallel.samples === 0 ||
+    (
+      parallel.worstGapError < 0.25 &&
+      parallel.worstEndpointDrift < 0.25
+    );
+  // "Completely equidistant" is represented by a strict 2% CV target.
+  // Keep this diagnostic (not yet a deploy blocker) until the layout solvers
+  // are upgraded for all five schematic grammars.
+  const spacingCompliant = spacing.maxCv <= 0.02;
+
+  if (!topologyCompliant) {
+    hardFailures.push(`${style}: topology relation/order regression`);
+  }
+  if (!angleCompliant) {
+    hardFailures.push(
+      `${style}: angular grammar error ${angles.worstDegrees}°`,
+    );
+  }
+  if (!roundedCompliant) {
+    hardFailures.push(`${style}: route corners are not uniformly rounded`);
+  }
+  if (!parallelCompliant) {
+    hardFailures.push(
+      `${style}: parallel lane spacing drift ${parallel.worstGapError}px`,
+    );
+  }
+
   console.log(
     '[design-principles]',
     JSON.stringify({
       style,
+      compliant: {
+        topology: topologyCompliant,
+        angles: angleCompliant,
+        roundedCorners: roundedCompliant,
+        parallelSpacing: parallelCompliant,
+        equidistantStations: spacingCompliant,
+      },
       topology,
       angles,
       rounded,
@@ -370,5 +414,12 @@ for (const style of styles) {
         medianCvPercent: Number((spacing.medianCv * 100).toFixed(2)),
       },
     }),
+  );
+}
+
+if (hardFailures.length) {
+  throw new Error(
+    'Schematic design-principle regression:\n' +
+      hardFailures.join('\n'),
   );
 }
