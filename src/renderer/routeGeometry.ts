@@ -639,18 +639,449 @@ function extensionCrossings(
   return crossings;
 }
 
+interface PolarGridStep {
+  commands: string[];
+  samples: Point[];
+  length: number;
+  orientation: 1 | 2;
+}
+
+interface PolarQueueItem {
+  key: string;
+  radiusIndex: number;
+  angleIndex: number;
+  orientation: 0 | 1 | 2;
+  cost: number;
+}
+
+function pushPolarQueue(
+  heap: PolarQueueItem[],
+  item: PolarQueueItem,
+): void {
+  heap.push(item);
+  let index = heap.length - 1;
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (heap[parent].cost <= heap[index].cost) break;
+    [heap[parent], heap[index]] = [
+      heap[index],
+      heap[parent],
+    ];
+    index = parent;
+  }
+}
+
+function popPolarQueue(
+  heap: PolarQueueItem[],
+): PolarQueueItem | undefined {
+  if (!heap.length) return undefined;
+  const first = heap[0];
+  const last = heap.pop()!;
+  if (heap.length) {
+    heap[0] = last;
+    let index = 0;
+    while (true) {
+      const left = index * 2 + 1;
+      const right = left + 1;
+      let smallest = index;
+      if (
+        left < heap.length &&
+        heap[left].cost < heap[smallest].cost
+      ) {
+        smallest = left;
+      }
+      if (
+        right < heap.length &&
+        heap[right].cost < heap[smallest].cost
+      ) {
+        smallest = right;
+      }
+      if (smallest === index) break;
+      [heap[index], heap[smallest]] = [
+        heap[smallest],
+        heap[index],
+      ];
+      index = smallest;
+    }
+  }
+  return first;
+}
+
+function uniquePolarValues(
+  values: number[],
+  tolerance = 1e-6,
+): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  const result: number[] = [];
+  for (const value of sorted) {
+    if (
+      !result.length ||
+      Math.abs(value - result[result.length - 1]) >
+        tolerance
+    ) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
+function crossingsAgainstPath(
+  existing: Point[],
+  extension: Point[],
+): number {
+  if (existing.length < 2 || extension.length < 2) {
+    return 0;
+  }
+  let crossings = 0;
+  for (let i = 0; i < extension.length - 1; i += 1) {
+    for (let j = 0; j < existing.length - 1; j += 1) {
+      if (
+        intersects(
+          extension[i],
+          extension[i + 1],
+          existing[j],
+          existing[j + 1],
+        )
+      ) {
+        crossings += 1;
+      }
+    }
+  }
+  return crossings;
+}
+
+function findPolarValueIndex(
+  values: number[],
+  target: number,
+): number {
+  let bestIndex = 0;
+  let bestError = Number.POSITIVE_INFINITY;
+  values.forEach((value, index) => {
+    const error = Math.abs(value - target);
+    if (error < bestError) {
+      bestError = error;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
+/**
+ * Route one station pair on an explicit polar grid. Nodes are intersections
+ * of routing circles and radial spokes; edges are therefore *only* circular
+ * arcs or radial straight lines. Previously drawn pieces of the same route
+ * are treated as obstacles with a lexicographically dominant crossing cost.
+ */
+function polarGridConnection(
+  a: Point,
+  b: Point,
+  center: Point,
+  radii: number[],
+  angles: number[],
+  existing: Point[],
+): OrthoradialEdgeGeometry | undefined {
+  const tau = Math.PI * 2;
+  const ra = Math.hypot(
+    a.x - center.x,
+    a.y - center.y,
+  );
+  const rb = Math.hypot(
+    b.x - center.x,
+    b.y - center.y,
+  );
+  const aa = normalizedAngle(
+    Math.atan2(a.y - center.y, a.x - center.x),
+  );
+  const ab = normalizedAngle(
+    Math.atan2(b.y - center.y, b.x - center.x),
+  );
+  const startR = findPolarValueIndex(radii, ra);
+  const endR = findPolarValueIndex(radii, rb);
+  const startA = findPolarValueIndex(angles, aa);
+  const endA = findPolarValueIndex(angles, ab);
+
+  const stateKey = (
+    radiusIndex: number,
+    angleIndex: number,
+    orientation: 0 | 1 | 2,
+  ) => `${radiusIndex}:${angleIndex}:${orientation}`;
+
+  const queue: PolarQueueItem[] = [];
+  const distances = new Map<string, number>();
+  const previous = new Map<
+    string,
+    { key: string; step: PolarGridStep }
+  >();
+
+  const startKey = stateKey(startR, startA, 0);
+  distances.set(startKey, 0);
+  pushPolarQueue(queue, {
+    key: startKey,
+    radiusIndex: startR,
+    angleIndex: startA,
+    orientation: 0,
+    cost: 0,
+  });
+
+  let goalKey: string | undefined;
+
+  while (queue.length) {
+    const current = popPolarQueue(queue)!;
+    if (
+      current.cost !== distances.get(current.key)
+    ) {
+      continue;
+    }
+    if (
+      current.radiusIndex === endR &&
+      current.angleIndex === endA
+    ) {
+      goalKey = current.key;
+      break;
+    }
+
+    const radius = radii[current.radiusIndex];
+    const angle = angles[current.angleIndex];
+    const from = pointOnPolar(
+      center,
+      radius,
+      angle,
+    );
+
+    const neighbors: Array<{
+      radiusIndex: number;
+      angleIndex: number;
+      step: PolarGridStep;
+    }> = [];
+
+    for (const radialDelta of [-1, 1]) {
+      const nextR = current.radiusIndex + radialDelta;
+      if (nextR < 0 || nextR >= radii.length) {
+        continue;
+      }
+      const to = pointOnPolar(
+        center,
+        radii[nextR],
+        angle,
+      );
+      neighbors.push({
+        radiusIndex: nextR,
+        angleIndex: current.angleIndex,
+        step: {
+          commands: [`L ${to.x} ${to.y}`],
+          samples: [from, to],
+          length: Math.abs(
+            radii[nextR] - radius,
+          ),
+          orientation: 1,
+        },
+      });
+    }
+
+    for (const angularDirection of [-1, 1] as const) {
+      const nextA =
+        (current.angleIndex +
+          angularDirection +
+          angles.length) %
+        angles.length;
+      const nextAngle = angles[nextA];
+      let delta =
+        angularDirection > 0
+          ? (nextAngle - angle + tau) % tau
+          : -((angle - nextAngle + tau) % tau);
+      if (Math.abs(delta) < 1e-9) continue;
+      const to = pointOnPolar(
+        center,
+        radius,
+        nextAngle,
+      );
+      neighbors.push({
+        radiusIndex: current.radiusIndex,
+        angleIndex: nextA,
+        step: {
+          commands: [
+            arcCommand(radius, delta, to),
+          ],
+          samples: [
+            from,
+            ...circularArcTopologySamples(
+              center,
+              radius,
+              angle,
+              delta,
+            ),
+          ],
+          length: Math.abs(delta) * radius,
+          orientation: 2,
+        },
+      });
+    }
+
+    for (const neighbor of neighbors) {
+      const crossings = crossingsAgainstPath(
+        existing,
+        neighbor.step.samples,
+      );
+      const bend =
+        current.orientation !== 0 &&
+        current.orientation !==
+          neighbor.step.orientation
+          ? 1
+          : 0;
+      const nextCost =
+        current.cost +
+        crossings * 1e9 +
+        bend * 36 +
+        neighbor.step.length;
+      const nextKey = stateKey(
+        neighbor.radiusIndex,
+        neighbor.angleIndex,
+        neighbor.step.orientation,
+      );
+      if (
+        nextCost + 1e-9 >=
+        (distances.get(nextKey) ??
+          Number.POSITIVE_INFINITY)
+      ) {
+        continue;
+      }
+      distances.set(nextKey, nextCost);
+      previous.set(nextKey, {
+        key: current.key,
+        step: neighbor.step,
+      });
+      pushPolarQueue(queue, {
+        key: nextKey,
+        radiusIndex: neighbor.radiusIndex,
+        angleIndex: neighbor.angleIndex,
+        orientation: neighbor.step.orientation,
+        cost: nextCost,
+      });
+    }
+  }
+
+  if (!goalKey) return undefined;
+
+  const steps: PolarGridStep[] = [];
+  let cursor = goalKey;
+  while (cursor !== startKey) {
+    const entry = previous.get(cursor);
+    if (!entry) return undefined;
+    steps.push(entry.step);
+    cursor = entry.key;
+  }
+  steps.reverse();
+
+  const commands: string[] = [];
+  const samples: Point[] = [a];
+  let length = 0;
+  let arcCount = 0;
+  for (const step of steps) {
+    commands.push(...step.commands);
+    samples.push(...step.samples.slice(1));
+    length += step.length;
+    if (step.orientation === 2) arcCount += 1;
+  }
+
+  // Snap the mathematical grid endpoints back to the exact route anchors.
+  // They should already be equal up to floating-point tolerance.
+  if (distance(samples[0], a) > 1e-6) {
+    samples.unshift(a);
+  }
+  if (
+    distance(samples[samples.length - 1], b) >
+    1e-6
+  ) {
+    commands.push(`L ${b.x} ${b.y}`);
+    samples.push(b);
+    length += distance(
+      samples[samples.length - 2],
+      b,
+    );
+  }
+
+  return {
+    commands,
+    samples,
+    arcCount,
+    length,
+  };
+}
+
 function orthoradialEscapePath(
   points: Point[],
   center: Point,
 ): RouteGeometry {
-  const outerBase = Math.max(
-    1,
-    ...points.map((point) =>
-      Math.hypot(
-        point.x - center.x,
+  const tau = Math.PI * 2;
+  const stationRadii = points.map((point) =>
+    Math.hypot(
+      point.x - center.x,
+      point.y - center.y,
+    ),
+  );
+  const stationAngles = points.map((point) =>
+    normalizedAngle(
+      Math.atan2(
         point.y - center.y,
+        point.x - center.x,
       ),
     ),
+  );
+
+  const sortedStationRadii = uniquePolarValues(
+    stationRadii,
+  );
+  const radialValues = [...sortedStationRadii];
+  for (
+    let index = 0;
+    index < sortedStationRadii.length - 1;
+    index += 1
+  ) {
+    const a = sortedStationRadii[index];
+    const b = sortedStationRadii[index + 1];
+    if (b - a > 30) {
+      radialValues.push((a + b) / 2);
+    }
+  }
+  const minRadius = Math.min(...stationRadii);
+  const maxRadius = Math.max(...stationRadii);
+  radialValues.push(
+    Math.max(12, minRadius - 72),
+    maxRadius + 72,
+    maxRadius + 160,
+    maxRadius + 300,
+  );
+  const radii = uniquePolarValues(
+    radialValues.filter((radius) => radius > 1),
+  );
+
+  const sortedStationAngles = uniquePolarValues(
+    stationAngles,
+  );
+  const angularValues = [...sortedStationAngles];
+  for (
+    let index = 0;
+    index < sortedStationAngles.length;
+    index += 1
+  ) {
+    const current = sortedStationAngles[index];
+    const next =
+      index + 1 < sortedStationAngles.length
+        ? sortedStationAngles[index + 1]
+        : sortedStationAngles[0] + tau;
+    const gap = next - current;
+    angularValues.push(
+      normalizedAngle(current + gap / 2),
+    );
+    if (gap > Math.PI / 5) {
+      angularValues.push(
+        normalizedAngle(current + gap / 3),
+        normalizedAngle(current + (2 * gap) / 3),
+      );
+    }
+  }
+  const angles = uniquePolarValues(
+    angularValues.map(normalizedAngle),
   );
 
   const commands = [
@@ -658,62 +1089,67 @@ function orthoradialEscapePath(
   ];
   const samples: Point[] = [points[0]];
   let arcCount = 0;
+  let fallbackCount = 0;
 
-  for (let index = 0; index < points.length - 1; index += 1) {
+  for (
+    let index = 0;
+    index < points.length - 1;
+    index += 1
+  ) {
     const compact = orthoradialEdgeCandidates(
       points[index],
       points[index + 1],
       center,
-    );
-    const rank = (candidate: OrthoradialEdgeGeometry) => ({
-      candidate,
-      crossings:
-        extensionCrossings(samples, candidate.samples) +
-        sampledSelfCrossings(candidate.samples),
-    });
-    const compactRanked = compact
-      .map(rank)
+    )
+      .map((candidate) => ({
+        candidate,
+        crossings:
+          extensionCrossings(
+            samples,
+            candidate.samples,
+          ) +
+          sampledSelfCrossings(candidate.samples),
+      }))
       .sort(
         (a, b) =>
           a.crossings - b.crossings ||
           a.candidate.length - b.candidate.length,
       );
 
-    let best = compactRanked[0];
-    if (best.crossings > 0) {
-      const escapeRanked = orthoradialEscapeCandidates(
+    let chosen = compact[0].candidate;
+    if (compact[0].crossings > 0) {
+      const routed = polarGridConnection(
         points[index],
         points[index + 1],
         center,
-        outerBase,
-      )
-        .map(rank)
-        .sort(
-          (a, b) =>
-            a.crossings - b.crossings ||
-            a.candidate.length - b.candidate.length,
-        );
-      if (
-        escapeRanked.length &&
-        (escapeRanked[0].crossings < best.crossings ||
-          (escapeRanked[0].crossings === best.crossings &&
-            escapeRanked[0].candidate.length <
-              best.candidate.length))
-      ) {
-        best = escapeRanked[0];
+        radii,
+        angles,
+        samples,
+      );
+      if (routed) {
+        const routedCrossings =
+          extensionCrossings(
+            samples,
+            routed.samples,
+          ) +
+          sampledSelfCrossings(routed.samples);
+        if (routedCrossings < compact[0].crossings) {
+          chosen = routed;
+          fallbackCount += 1;
+        }
       }
     }
 
-    commands.push(...best.candidate.commands);
-    samples.push(...best.candidate.samples.slice(1));
-    arcCount += best.candidate.arcCount;
+    commands.push(...chosen.commands);
+    samples.push(...chosen.samples.slice(1));
+    arcCount += chosen.arcCount;
   }
 
   return {
     d: commands.join(' '),
     samples,
     arcCount,
-    fallbackCount: 1,
+    fallbackCount,
   };
 }
 
