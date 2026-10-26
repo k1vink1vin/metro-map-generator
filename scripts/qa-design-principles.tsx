@@ -23,7 +23,16 @@ const data = new Uint8Array(
 const input = await importExcelBuffer(data);
 const graph = buildGraph(input);
 const rings = validateMoscowRings(graph, input.moscowRings ?? []);
-const styles: StyleId[] = ['taipei', 'london', 'moscow', 'concentric', 'hex'];
+const allStyles: StyleId[] = ['taipei', 'london', 'moscow', 'concentric', 'hex'];
+const requestedStyles = process.argv.slice(2);
+for (const requested of requestedStyles) {
+  if (!allStyles.includes(requested as StyleId)) {
+    throw new Error(`Unknown schematic style: ${requested}`);
+  }
+}
+const styles = requestedStyles.length
+  ? allStyles.filter((style) => requestedStyles.includes(style))
+  : allStyles;
 
 const distance = (a: Point, b: Point) =>
   Math.hypot(b.x - a.x, b.y - a.y);
