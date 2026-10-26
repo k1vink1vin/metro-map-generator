@@ -276,7 +276,7 @@ export function finalizeLayoutPositions(
   const simplified = style !== 'geographic' && style !== 'concentric'
     ? collapseRouteZigzagsSafely(graph, spaced, {
         fixedNodes,
-        angleStep: style === 'hex' ? 60 : style === 'moscow' || style === 'concentric' ? 15 : 45,
+        angleStep: style === 'hex' ? 60 : style === 'moscow' ? 15 : 45,
         passes: 6,
         minimumTurnDegrees: 20,
         minimumNodeDistance: style === 'taipei' ? 29 : style === 'moscow' ? 36 : 50,
