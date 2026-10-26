@@ -245,6 +245,23 @@ function circularArcSamples(
   });
 }
 
+function circularArcTopologySamples(
+  center: Point,
+  radius: number,
+  startAngle: number,
+  delta: number,
+): Point[] {
+  const steps = Math.max(
+    4,
+    Math.ceil(Math.abs(delta) / (Math.PI / 24)),
+  );
+  return Array.from({ length: steps }, (_, index) => {
+    const angle =
+      startAngle + (delta * (index + 1)) / steps;
+    return pointOnPolar(center, radius, angle);
+  });
+}
+
 function arcCommand(
   radius: number,
   delta: number,
@@ -455,12 +472,14 @@ function orthoradialEscapeCandidates(
 
   const aa = Math.atan2(ay, ax);
   const ab = Math.atan2(by, bx);
-  const offsets = [0, -Math.PI / 9, Math.PI / 9];
-  const radii = [
-    outerBase + 64,
-    outerBase + 144,
-    outerBase + 256,
+  const offsets = [
+    0,
+    -Math.PI / 9,
+    Math.PI / 9,
+    -2 * Math.PI / 9,
+    2 * Math.PI / 9,
   ];
+  const radii = [outerBase + 256];
   const candidates: OrthoradialEdgeGeometry[] = [];
 
   for (const routeRadius of radii) {
@@ -471,7 +490,7 @@ function orthoradialEscapeCandidates(
         const startDelta = shortestSignedAngle(aa, alpha);
         const endDelta = shortestSignedAngle(beta, ab);
 
-        for (const middleDelta of arcDeltas(alpha, beta)) {
+        for (const middleDelta of [shortestSignedAngle(alpha, beta)]) {
           const startShell = pointOnPolar(center, ra, alpha);
           const outerStart = pointOnPolar(
             center,
@@ -525,7 +544,7 @@ function orthoradialEscapeCandidates(
               ),
             );
             samples.push(
-              ...circularArcSamples(
+              ...circularArcTopologySamples(
                 center,
                 routeRadius,
                 alpha,
@@ -646,31 +665,48 @@ function orthoradialEscapePath(
       points[index + 1],
       center,
     );
-    const escapes = orthoradialEscapeCandidates(
-      points[index],
-      points[index + 1],
-      center,
-      outerBase,
-    );
-    const ranked = [...compact, ...escapes]
-      .map((candidate) => ({
-        candidate,
-        crossings:
-          extensionCrossings(samples, candidate.samples) +
-          sampledSelfCrossings(candidate.samples),
-      }))
+    const rank = (candidate: OrthoradialEdgeGeometry) => ({
+      candidate,
+      crossings:
+        extensionCrossings(samples, candidate.samples) +
+        sampledSelfCrossings(candidate.samples),
+    });
+    const compactRanked = compact
+      .map(rank)
       .sort(
         (a, b) =>
           a.crossings - b.crossings ||
-          a.candidate.length - b.candidate.length ||
-          a.candidate.commands.length -
-            b.candidate.commands.length,
+          a.candidate.length - b.candidate.length,
       );
 
-    const best = ranked[0].candidate;
-    commands.push(...best.commands);
-    samples.push(...best.samples.slice(1));
-    arcCount += best.arcCount;
+    let best = compactRanked[0];
+    if (best.crossings > allowedCrossings) {
+      const escapeRanked = orthoradialEscapeCandidates(
+        points[index],
+        points[index + 1],
+        center,
+        outerBase,
+      )
+        .map(rank)
+        .sort(
+          (a, b) =>
+            a.crossings - b.crossings ||
+            a.candidate.length - b.candidate.length,
+        );
+      if (
+        escapeRanked.length &&
+        (escapeRanked[0].crossings < best.crossings ||
+          (escapeRanked[0].crossings === best.crossings &&
+            escapeRanked[0].candidate.length <
+              best.candidate.length))
+      ) {
+        best = escapeRanked[0];
+      }
+    }
+
+    commands.push(...best.candidate.commands);
+    samples.push(...best.candidate.samples.slice(1));
+    arcCount += best.candidate.arcCount;
   }
 
   return {
@@ -684,6 +720,7 @@ function orthoradialEscapePath(
 function orthoradialPath(
   points: Point[],
   center: Point,
+  allowedCrossings = 0,
 ): RouteGeometry {
   if (!points.length) {
     return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
@@ -1036,7 +1073,14 @@ export function stationAnchoredPath(
         })()
       : undefined;
   if (layout.style === 'concentric' && concentricCenter) {
-    return orthoradialPath(points, concentricCenter);
+    const baseline = sampledSelfCrossings(
+      path.map((nodeId) => layout.positions[nodeId]),
+    );
+    return orthoradialPath(
+      points,
+      concentricCenter,
+      baseline,
+    );
   }
 
   if (
