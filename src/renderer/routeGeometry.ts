@@ -1370,14 +1370,15 @@ function orthoradialPath(
     fallbackCount: 0,
   };
 
-  if (best.crossings > allowedCrossings) {
+  const compactCrossings = sampledSelfCrossings(compact.samples);
+  if (compactCrossings > allowedCrossings) {
     const escaped = orthoradialEscapePath(
       points,
       center,
     );
     if (
       sampledSelfCrossings(escaped.samples) <
-      sampledSelfCrossings(compact.samples)
+      compactCrossings
     ) {
       return escaped;
     }
