@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { buildGraph } from '../src/core/graph';
 import { computeLayout } from '../src/layout/index';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
+import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
 import type { LayoutResult, Point, StyleId } from '../src/types';
 
 function fixture(
@@ -75,6 +76,58 @@ for (const style of ['taipei', 'london', 'hex'] as const) {
     `${style} route geometry must lie exactly on its angular family`);
   for (const point of Object.values(corners)) assert(schematic.samples.some(p =>
     Math.hypot(p.x-point.x,p.y-point.y)<1e-8), 'hard-axis geometry must retain every station anchor');
+}
+
+const parallelGraph = buildGraph({
+  stations: [
+    { id: 'A', name: 'A', lat: 0, lon: 0 },
+    { id: 'B', name: 'B', lat: 0, lon: 1 },
+    { id: 'C', name: 'C', lat: 1, lon: 1 },
+  ],
+  lines: [
+    { id: 'lane-a', color: '#111111', paths: [['A', 'B', 'C']] },
+    { id: 'lane-b', color: '#222222', paths: [['A', 'B', 'C']] },
+  ],
+});
+const parallelPositions = {
+  A: { x: 0, y: 0 },
+  B: { x: 100, y: 0 },
+  C: { x: 100, y: 100 },
+};
+const parallelBundles = buildGeometricBundleMap(
+  parallelGraph,
+  parallelPositions,
+);
+const laneA = offsetPathForLine(
+  parallelGraph,
+  ['A', 'B', 'C'],
+  parallelPositions,
+  'lane-a',
+  12,
+  parallelBundles,
+);
+const laneB = offsetPathForLine(
+  parallelGraph,
+  ['A', 'B', 'C'],
+  parallelPositions,
+  'lane-b',
+  12,
+  parallelBundles,
+);
+const horizontalGapAtA = Math.abs(laneA[0].y - laneB[0].y);
+const horizontalGapAtB = Math.abs(laneA[1].y - laneB[1].y);
+const verticalGapAtB = Math.abs(laneA[1].x - laneB[1].x);
+const verticalGapAtC = Math.abs(laneA[2].x - laneB[2].x);
+for (const [label, value] of [
+  ['horizontal start', horizontalGapAtA],
+  ['horizontal bend', horizontalGapAtB],
+  ['vertical bend', verticalGapAtB],
+  ['vertical end', verticalGapAtC],
+] as const) {
+  assert(
+    Math.abs(value - 12) < 1e-7,
+    `parallel lane gap must stay exactly 12px at ${label}; got ${value}`,
+  );
 }
 
 const centerGraph = buildGraph({
