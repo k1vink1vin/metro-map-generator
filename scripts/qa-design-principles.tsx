@@ -397,6 +397,86 @@ function equidistanceAudit(layout: LayoutResult) {
   };
 }
 
+function syntheticParallelGapAudit() {
+  let worstGapError = 0;
+
+  for (const bendDegrees of [45, 60]) {
+    const radians = (bendDegrees * Math.PI) / 180;
+    const positions = {
+      PA: { x: 0, y: 0 },
+      PB: { x: 100, y: 0 },
+      PC: {
+        x: 100 + Math.cos(radians) * 100,
+        y: Math.sin(radians) * 100,
+      },
+    };
+    const testGraph = buildGraph({
+      stations: [
+        { id: 'PA', lat: 0, lon: 0 },
+        { id: 'PB', lat: 0, lon: 1 },
+        { id: 'PC', lat: 1, lon: 2 },
+      ],
+      lines: [
+        {
+          id: 'P1',
+          color: '#ff0000',
+          paths: [['PA', 'PB', 'PC']],
+        },
+        {
+          id: 'P2',
+          color: '#0000ff',
+          paths: [['PA', 'PB', 'PC']],
+        },
+      ],
+    });
+    const bundles = buildGeometricBundleMap(
+      testGraph,
+      positions,
+    );
+    const lanes = ['P1', 'P2'].map((lineId) =>
+      offsetPathForLine(
+        testGraph,
+        ['PA', 'PB', 'PC'],
+        positions,
+        lineId,
+        12,
+        bundles,
+      ),
+    );
+
+    for (let segment = 0; segment < 2; segment += 1) {
+      const ids = [
+        ['PA', 'PB'],
+        ['PB', 'PC'],
+      ][segment] as ['PA' | 'PB', 'PB' | 'PC'];
+      const a = positions[ids[0]];
+      const b = positions[ids[1]];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      const normal = {
+        x: -dy / length,
+        y: dx / length,
+      };
+
+      for (const endpoint of [segment, segment + 1]) {
+        const gap = Math.abs(
+          (lanes[0][endpoint].x - lanes[1][endpoint].x) *
+            normal.x +
+          (lanes[0][endpoint].y - lanes[1][endpoint].y) *
+            normal.y,
+        );
+        worstGapError = Math.max(
+          worstGapError,
+          Math.abs(gap - 12),
+        );
+      }
+    }
+  }
+
+  return { worstGapError };
+}
+
 function roundedCornerAudit(layout: LayoutResult) {
   const markup = renderToStaticMarkup(
     React.createElement(SvgMap, {
@@ -424,6 +504,7 @@ function roundedCornerAudit(layout: LayoutResult) {
 }
 
 const hardFailures: string[] = [];
+const syntheticParallel = syntheticParallelGapAudit();
 
 for (const style of styles) {
   const layout = computeLayout(graph, style, { moscowRings: rings });
@@ -441,10 +522,13 @@ for (const style of styles) {
   const roundedCompliant =
     rounded.rounded && rounded.uniformStroke;
   const parallelCompliant =
-    parallel.samples === 0 ||
+    syntheticParallel.worstGapError < 1e-6 &&
     (
-      parallel.worstGapError < 0.25 &&
-      parallel.worstEndpointDrift < 0.25
+      parallel.samples === 0 ||
+      (
+        parallel.worstGapError < 0.25 &&
+        parallel.worstEndpointDrift < 0.25
+      )
     );
   // "Completely equidistant" is represented by a strict 2% CV target.
   // Keep this diagnostic (not yet a deploy blocker) until the layout solvers
@@ -464,7 +548,17 @@ for (const style of styles) {
   }
   if (!parallelCompliant) {
     hardFailures.push(
-      `${style}: parallel lane spacing drift ${parallel.worstGapError}px`,
+      `${style}: parallel lane spacing drift ${Math.max(
+        parallel.worstGapError,
+        syntheticParallel.worstGapError,
+      )}px`,
+    );
+  }
+  if (!spacingCompliant) {
+    hardFailures.push(
+      `${style}: ordinary-station spacing CV ${(
+        spacing.maxCv * 100
+      ).toFixed(2)}% exceeds 2%`,
     );
   }
 
@@ -482,7 +576,11 @@ for (const style of styles) {
       topology,
       angles,
       rounded,
-      parallel,
+      parallel: {
+        ...parallel,
+        synthetic45And60WorstGapError:
+          syntheticParallel.worstGapError,
+      },
       spacing: {
         runs: spacing.runs,
         maxCvPercent: Number((spacing.maxCv * 100).toFixed(2)),
