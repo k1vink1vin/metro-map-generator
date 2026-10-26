@@ -295,6 +295,26 @@ export function finalizeLayoutPositions(
   fixedNodes: ReadonlySet<string> = new Set(),
 ): { positions: Record<string, Point>; integrity: LayoutIntegrity } {
   const completed = ensureEveryNodeHasPosition(graph, proposed, geographic);
+
+  // Geographic is the literal north-up latitude/longitude reference view.
+  // Do not run passenger-map collision repair, fit-to-canvas, zig-zag
+  // simplification, or any other schematic deformation here. projectGeographic
+  // has already applied one uniform projection/fitting transform.
+  if (style === 'geographic') {
+    const validated = validateEveryRouteIsDrawable(
+      graph,
+      completed.positions,
+    );
+    return {
+      positions: completed.positions,
+      integrity: {
+        ...validated,
+        repairedNodeCount: completed.repairedNodeCount,
+        separatedNodePairs: 0,
+      },
+    };
+  }
+
   // Moscow ring stations are deliberately placed on exact circles. The
   // generic pair-separation repair is not topology-aware and can deform
   // those circles, so Moscow relies on its own ring spacing/deformation pass.
