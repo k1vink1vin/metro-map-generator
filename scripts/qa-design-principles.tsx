@@ -105,8 +105,25 @@ function renderedAngleAudit(layout: LayoutResult) {
   let worst = 0;
   let checked = 0;
   let illegalCurveCommands = 0;
+  let abruptReversals = 0;
 
   for (const route of buildRenderedRoutePaths(graph, layout)) {
+    const directions: number[] = [];
+    for (let index = 0; index < route.samples.length - 1; index += 1) {
+      const a = route.samples[index];
+      const b = route.samples[index + 1];
+      if (distance(a, b) < 1e-8) continue;
+      directions.push(Math.atan2(b.y - a.y, b.x - a.x));
+    }
+    for (let index = 1; index < directions.length; index += 1) {
+      let delta = directions[index] - directions[index - 1];
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      if (Math.abs(delta) >= (150 * Math.PI) / 180) {
+        abruptReversals += 1;
+      }
+    }
+
     illegalCurveCommands +=
       (route.d.match(/[QC]/g) ?? []).length;
     const commands = parseCommands(route.d);
@@ -146,7 +163,12 @@ function renderedAngleAudit(layout: LayoutResult) {
     }
   }
 
-  return { worstDegrees: worst, checked, illegalCurveCommands };
+  return {
+    worstDegrees: worst,
+    checked,
+    illegalCurveCommands,
+    abruptReversals,
+  };
 }
 
 function topologyAudit(layout: LayoutResult) {
@@ -518,6 +540,7 @@ for (const style of styles) {
     topology.valid && topology.addedSelfCrossings === 0;
   const angleCompliant =
     angles.illegalCurveCommands === 0 &&
+    angles.abruptReversals === 0 &&
     angles.worstDegrees < 1e-6;
   const roundedCompliant =
     rounded.rounded && rounded.uniformStroke;
@@ -540,7 +563,7 @@ for (const style of styles) {
   }
   if (!angleCompliant) {
     hardFailures.push(
-      `${style}: angular grammar error ${angles.worstDegrees}°`,
+      `${style}: angular grammar error ${angles.worstDegrees}°, reversals ${angles.abruptReversals}`,
     );
   }
   if (!roundedCompliant) {
