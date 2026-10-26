@@ -408,6 +408,28 @@ select {
   fill: #ffffff;
 }
 
+.taipei-river-path {
+  fill: none;
+  stroke: #bfdbfe;
+  stroke-width: 22;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.62;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.taipei-river-label {
+  fill: #5b9bd5;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  paint-order: stroke;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
 .moscow-ring-halo {
   fill: none;
   stroke: #d8dee8;
