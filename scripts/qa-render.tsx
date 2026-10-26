@@ -92,22 +92,44 @@ const normalizedSuffixCodes = suffixedStationIds.map((stationId) =>
 
 function abruptRouteReversals(
   points: Array<{ x: number; y: number }>,
-): number {
-  const directions: number[] = [];
+): Array<{
+  sampleIndex: number;
+  degrees: number;
+  point: { x: number; y: number };
+}> {
+  const segments: Array<{
+    sampleIndex: number;
+    direction: number;
+  }> = [];
   for (let index = 0; index < points.length - 1; index += 1) {
     const a = points[index];
     const b = points[index + 1];
     if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) continue;
-    directions.push(Math.atan2(b.y - a.y, b.x - a.x));
+    segments.push({
+      sampleIndex: index,
+      direction: Math.atan2(b.y - a.y, b.x - a.x),
+    });
   }
 
-  let reversals = 0;
-  for (let index = 1; index < directions.length; index += 1) {
-    let delta = directions[index] - directions[index - 1];
+  const reversals: Array<{
+    sampleIndex: number;
+    degrees: number;
+    point: { x: number; y: number };
+  }> = [];
+  for (let index = 1; index < segments.length; index += 1) {
+    let delta =
+      segments[index].direction -
+      segments[index - 1].direction;
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
-    if (Math.abs(delta) >= (150 * Math.PI) / 180) {
-      reversals += 1;
+    const degrees = Math.abs(delta) * 180 / Math.PI;
+    if (degrees >= 150) {
+      const sampleIndex = segments[index].sampleIndex;
+      reversals.push({
+        sampleIndex,
+        degrees,
+        point: points[sampleIndex],
+      });
     }
   }
   return reversals;
@@ -146,13 +168,21 @@ for (const style of selectedStyles) {
       });
     }
 
-    if (
-      style === 'moscow' &&
-      abruptRouteReversals(route.samples) > 0
-    ) {
-      throw new Error(
-        `moscow/${route.lineId}: rendered route contains a >=150° U-turn`,
-      );
+    if (style === 'moscow') {
+      const reversals = abruptRouteReversals(route.samples);
+      if (reversals.length) {
+        throw new Error(
+          `moscow/${route.lineId}: rendered route contains a >=150° U-turn: ` +
+          JSON.stringify({
+            reversals,
+            stations: path.map((nodeId) => ({
+              nodeId,
+              name: graph.nodeById.get(nodeId)?.name ?? nodeId,
+              point: layout.positions[nodeId],
+            })),
+          }),
+        );
+      }
     }
 
     if (style === 'moscow' && rings.length && !buildRenderedRoutePaths(graph, layout).some(p => p.arcCount > 0)) throw new Error('Moscow has no rendered circular route arcs');
