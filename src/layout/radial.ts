@@ -1837,19 +1837,10 @@ export function layoutMoscow(
     setRing(info,bestPhase);
   }
 
-  for(let pass=0;pass<4;pass++) for(const info of ringInfos){
-    const slot=Math.PI*2/info.definition.nodes.length;
-    info.definition.nodes.forEach((id,index)=>{
-      const original=info.angles[index]; let best=original,bestCost=ringOrderCost();
-      const put=(angle:number)=>{positions[id]={x:info.geoCenter.x+Math.cos(angle)*info.targetRadius,y:info.geoCenter.y+Math.sin(angle)*info.targetRadius};};
-      for(const shift of [-0.24,-0.16,-0.08,0.08,0.16,0.24]){
-        const angle=original+shift*slot; put(angle);
-        if(info.definition.nodes.some(other=>other!==id && Math.hypot(positions[other].x-positions[id].x,positions[other].y-positions[id].y)<28))continue;
-        const cost=ringOrderCost();if(cost<bestCost){best=angle;bestCost=cost;}
-      }
-      info.angles[index]=best;put(best);
-    });
-  }
+  // Keep ring stations in exact equal-angle slots. Whole-ring phase rotation is
+  // allowed, but individual station angle nudges would destroy equidistant
+  // spacing on the defining circle.
+
 
   // Every non-ring station is handled by the nearest logical ring system.
   // This preserves the clean radial organization of the original Moscow
@@ -2218,6 +2209,166 @@ export function layoutMoscow(
   };
 }
 
+function concentricStructuralNode(
+  graph: GraphModel,
+  nodeId: string,
+): boolean {
+  const node = graph.nodeById.get(nodeId);
+  if (!node) return true;
+  if ((graph.adjacency.get(nodeId)?.length ?? 0) !== 2) return true;
+  if (node.stationIds.length > 1) return true;
+
+  let incidentLineCount = 0;
+  for (const line of graph.lines) {
+    if (line.paths.some((path) => path.includes(nodeId))) {
+      incidentLineCount += 1;
+      if (incidentLineCount > 1) return true;
+    }
+  }
+  return false;
+}
+
+function concentricShortestDelta(from: number, to: number): number {
+  let delta = to - from;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function pointOnConcentricRoute(
+  start: Point,
+  end: Point,
+  center: Point,
+  fraction: number,
+): Point {
+  const sx = start.x - center.x;
+  const sy = start.y - center.y;
+  const ex = end.x - center.x;
+  const ey = end.y - center.y;
+  const sr = Math.hypot(sx, sy);
+  const er = Math.hypot(ex, ey);
+  const sa = Math.atan2(sy, sx);
+  const ea = Math.atan2(ey, ex);
+  const delta = concentricShortestDelta(sa, ea);
+
+  // A centre station has no meaningful angle; connect it radially using the
+  // other endpoint's bearing and divide that radial segment evenly.
+  if (sr < 1e-7 || er < 1e-7) {
+    const radius = sr + (er - sr) * fraction;
+    const angle = sr < 1e-7 ? ea : sa;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
+    };
+  }
+
+  const radialLength = Math.abs(er - sr);
+  const arcAtStart = Math.abs(delta) * sr;
+  const arcAtEnd = Math.abs(delta) * er;
+
+  // Choose the shorter legal orthoradial form:
+  // arc on one shell + one radial segment.
+  const arcFirst = arcAtStart <= arcAtEnd;
+  const firstLength = arcFirst ? arcAtStart : radialLength;
+  const secondLength = arcFirst ? radialLength : arcAtEnd;
+  const total = Math.max(1e-9, firstLength + secondLength);
+  const target = fraction * total;
+
+  if (arcFirst) {
+    if (target <= arcAtStart || radialLength < 1e-9) {
+      const local = arcAtStart < 1e-9 ? 1 : target / arcAtStart;
+      const angle = sa + delta * local;
+      return {
+        x: center.x + Math.cos(angle) * sr,
+        y: center.y + Math.sin(angle) * sr,
+      };
+    }
+    const local = (target - arcAtStart) / Math.max(1e-9, radialLength);
+    const radius = sr + (er - sr) * local;
+    return {
+      x: center.x + Math.cos(ea) * radius,
+      y: center.y + Math.sin(ea) * radius,
+    };
+  }
+
+  if (target <= radialLength || arcAtEnd < 1e-9) {
+    const local = radialLength < 1e-9 ? 1 : target / radialLength;
+    const radius = sr + (er - sr) * local;
+    return {
+      x: center.x + Math.cos(sa) * radius,
+      y: center.y + Math.sin(sa) * radius,
+    };
+  }
+
+  const local = (target - radialLength) / Math.max(1e-9, arcAtEnd);
+  const angle = sa + delta * local;
+  return {
+    x: center.x + Math.cos(angle) * er,
+    y: center.y + Math.sin(angle) * er,
+  };
+}
+
+function redistributeConcentricOrdinaryStations(
+  graph: GraphModel,
+  input: Record<string, Point>,
+  center: Point,
+): Record<string, Point> {
+  const result = Object.fromEntries(
+    Object.entries(input).map(([id, point]) => [id, { ...point }]),
+  );
+  const proposals = new Map<string, Point[]>();
+
+  for (const line of graph.lines) {
+    for (const path of line.paths) {
+      if (path.length < 3) continue;
+      const anchors = new Set<number>([0, path.length - 1]);
+      path.forEach((nodeId, index) => {
+        if (concentricStructuralNode(graph, nodeId)) anchors.add(index);
+      });
+      const sorted = [...anchors].sort((a, b) => a - b);
+
+      for (let section = 0; section < sorted.length - 1; section += 1) {
+        const startIndex = sorted[section];
+        const endIndex = sorted[section + 1];
+        const segmentCount = endIndex - startIndex;
+        if (segmentCount < 2) continue;
+
+        const start = result[path[startIndex]];
+        const end = result[path[endIndex]];
+        for (let index = startIndex + 1; index < endIndex; index += 1) {
+          const nodeId = path[index];
+          if (concentricStructuralNode(graph, nodeId)) continue;
+          const fraction = (index - startIndex) / segmentCount;
+          const point = pointOnConcentricRoute(
+            start,
+            end,
+            center,
+            fraction,
+          );
+          const list = proposals.get(nodeId) ?? [];
+          list.push(point);
+          proposals.set(nodeId, list);
+        }
+      }
+    }
+  }
+
+  for (const [nodeId, candidates] of proposals) {
+    if (!candidates.length) continue;
+    const first = candidates[0];
+    const consistent = candidates.every(
+      (point) =>
+        Math.hypot(point.x - first.x, point.y - first.y) < 1e-5,
+    );
+    // Shared trunk occurrences should agree. If two route occurrences require
+    // incompatible positions, preserve the original station rather than
+    // violating one route to satisfy the other.
+    if (consistent) result[nodeId] = first;
+  }
+
+  return result;
+}
+
 export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
@@ -2415,6 +2566,11 @@ export function layoutConcentric(
   // stations off their circles and made the rendered style only "radial-ish".
   // Topology protection happens in the renderer/QA instead of deforming the
   // defining geometry of this style.
-  return { positions: target, center };
+  const equidistant = redistributeConcentricOrdinaryStations(
+    graph,
+    target,
+    center,
+  );
+  return { positions: equidistant, center };
 
 }
