@@ -204,6 +204,9 @@ function strictAxisPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        a.reversals - b.reversals ||
+        a.zigzags - b.zigzags ||
+        a.turnPenalty - b.turnPenalty ||
         a.bends - b.bends ||
         a.length - b.length,
     );
@@ -1272,8 +1275,21 @@ export function buildRenderedRoutePaths(graph: GraphModel, layout: LayoutResult)
   const bundles = buildGeometricBundleMap(graph, layout.positions);
   const ringNodes = new Set(layout.style === 'moscow' ? layout.moscowRings?.flatMap(r => r.nodes) ?? [] : []);
   const paths = graph.lines.flatMap(line => line.paths.map((path, pathIndex) => {
-    const points = offsetPathForLine(graph, path, layout.positions, line.id, 12, bundles)
-      .map((point, i) => ringNodes.has(path[i]) ? layout.positions[path[i]] : point);
+    const points =
+      layout.style === 'geographic'
+        ? path.map((nodeId) => layout.positions[nodeId])
+        : offsetPathForLine(
+            graph,
+            path,
+            layout.positions,
+            line.id,
+            12,
+            bundles,
+          ).map((point, i) =>
+            ringNodes.has(path[i])
+              ? layout.positions[path[i]]
+              : point,
+          );
     const geometry = stationAnchoredPath(graph, layout, path, points, line.id);
     return { ...geometry, lineId: line.id, lineColor: line.pathColors?.[pathIndex] ?? line.color,
       pathIndex, points: geometry.samples };
@@ -1400,6 +1416,68 @@ function moscowEdgeCandidates(
   }];
 }
 
+interface MoscowRouteShapeMetrics {
+  reversals: number;
+  zigzags: number;
+  turnPenalty: number;
+}
+
+/**
+ * Score the shape of the complete rendered line, not just one station pair.
+ *
+ * Moscow's 45° radial grammar can produce several locally valid elbows for
+ * each edge. Without a whole-line term, the shortest local choices may
+ * alternate left/right or even turn back on themselves. Ignore tiny smooth
+ * changes along exact ring arcs, but strongly penalize large direction
+ * reversals and repeated alternating schematic bends.
+ */
+function moscowRouteShapeMetrics(
+  samples: Point[],
+): MoscowRouteShapeMetrics {
+  const directions: number[] = [];
+  for (let index = 0; index < samples.length - 1; index += 1) {
+    const a = samples[index];
+    const b = samples[index + 1];
+    if (distance(a, b) < 1e-6) continue;
+    directions.push(
+      Math.atan2(b.y - a.y, b.x - a.x),
+    );
+  }
+
+  let reversals = 0;
+  let zigzags = 0;
+  let turnPenalty = 0;
+  let lastStrongSign = 0;
+
+  for (let index = 1; index < directions.length; index += 1) {
+    let delta = directions[index] - directions[index - 1];
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+
+    const degrees = Math.abs(delta) * 180 / Math.PI;
+    if (degrees >= 135 - 1e-6) {
+      reversals += 1;
+      turnPenalty += 40000 + (degrees - 135) * 1000;
+    } else if (degrees > 60) {
+      turnPenalty += (degrees - 60) ** 2;
+    } else if (degrees > 45) {
+      turnPenalty += (degrees - 45) * 4;
+    }
+
+    // Ring arcs are sampled into many small tangent changes, so they do not
+    // become false zig-zags. Only visible schematic direction changes count.
+    if (degrees >= 30) {
+      const sign = Math.sign(delta);
+      if (lastStrongSign && sign !== lastStrongSign) {
+        zigzags += 1;
+      }
+      lastStrongSign = sign;
+    }
+  }
+
+  return { reversals, zigzags, turnPenalty };
+}
+
 function moscowStrictPath(
   graph: GraphModel,
   layout: LayoutResult,
@@ -1419,6 +1497,9 @@ function moscowStrictPath(
     length: number;
     bends: number;
     arcCount: number;
+    reversals: number;
+    zigzags: number;
+    turnPenalty: number;
   };
 
   let states: State[] = [{
@@ -1428,9 +1509,14 @@ function moscowStrictPath(
     length: 0,
     bends: 0,
     arcCount: 0,
+    reversals: 0,
+    zigzags: 0,
+    turnPenalty: 0,
   }];
 
-  const beamWidth = 20;
+  // Keep enough alternatives for the path-level aesthetic objective to look
+  // past one locally short elbow. Crossings remain the first hard priority.
+  const beamWidth = 64;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const candidates = moscowEdgeCandidates(
@@ -1450,16 +1536,23 @@ function moscowStrictPath(
           state.samples,
           candidate.samples,
         );
+        const combinedSamples = [
+          ...state.samples,
+          ...candidate.samples.slice(1),
+        ];
+        const shape = moscowRouteShapeMetrics(
+          combinedSamples,
+        );
         next.push({
           commands: [...state.commands, ...candidate.commands],
-          samples: [
-            ...state.samples,
-            ...candidate.samples.slice(1),
-          ],
+          samples: combinedSamples,
           crossings: state.crossings + addedCrossings,
           length: state.length + candidate.length,
           bends: state.bends + candidate.bends,
           arcCount: state.arcCount + candidate.arcCount,
+          reversals: shape.reversals,
+          zigzags: shape.zigzags,
+          turnPenalty: shape.turnPenalty,
         });
       }
     }
@@ -1490,6 +1583,21 @@ export function stationAnchoredPath(
   graph: GraphModel, layout: LayoutResult, path: string[], points: Point[], lineId?: string,
 ): RouteGeometry {
   if (!points.length) return { d: '', samples: [], arcCount: 0, fallbackCount: 0 };
+
+  if (layout.style === 'geographic') {
+    return {
+      d: [
+        `M ${points[0].x} ${points[0].y}`,
+        ...points.slice(1).map(
+          (point) => `L ${point.x} ${point.y}`,
+        ),
+      ].join(' '),
+      samples: points.map((point) => ({ ...point })),
+      arcCount: 0,
+      fallbackCount: 0,
+    };
+  }
+
   const rings = new Map<string, CircleGeometry>();
   if (layout.style === 'moscow') {
     for (const ring of layout.moscowRings ?? []) {
