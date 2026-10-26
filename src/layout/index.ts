@@ -81,9 +81,13 @@ function finish(
     radialCenter,
   };
 
+  // Concentric equal spacing is solved natively in polar geometry and in the
+  // orthoradial beam objective. Avoid repeatedly rendering the whole network
+  // just to rediscover the same legal arc/radial corridor.
+  if (style === 'concentric') return result;
+
   let rhythm = result;
-  const rhythmPasses = style === 'concentric' ? 2 : 4;
-  for (let pass = 0; pass < rhythmPasses; pass += 1) {
+  for (let pass = 0; pass < 4; pass += 1) {
     const next = equalizeRenderedStationRhythm(graph, rhythm);
     if (next === rhythm) break;
     rhythm = next;
