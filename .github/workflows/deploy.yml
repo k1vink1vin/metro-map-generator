@@ -34,6 +34,9 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
+      - name: Schematic design-principle audit
+        run: npm run qa:principles
+
       - name: Passenger-map QA
         run: npm run qa:layouts
 
@@ -46,8 +49,6 @@ jobs:
       - name: Rendered route topology QA
         run: npm run qa:render
 
-      - name: Schematic design-principle audit
-        run: npm run qa:principles
 
       - name: Build
         run: npm run build
