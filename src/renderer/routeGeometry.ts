@@ -115,7 +115,7 @@ function circularArcSamples(
 ): Point[] {
   const steps = Math.max(
     4,
-    Math.ceil((Math.abs(delta) * Math.max(1, radius)) / 10),
+    Math.ceil((Math.abs(delta) * Math.max(1, radius)) / 16),
   );
   return Array.from({ length: steps }, (_, index) => {
     const angle = startAngle + (delta * (index + 1)) / steps;
@@ -247,6 +247,39 @@ function orthoradialEdgeCandidates(
   return candidates;
 }
 
+function extensionCrossings(
+  existing: Point[],
+  extension: Point[],
+): number {
+  if (existing.length < 2 || extension.length < 2) return 0;
+  let crossings = 0;
+  for (let nextIndex = 0; nextIndex < extension.length - 1; nextIndex += 1) {
+    const a = extension[nextIndex];
+    const b = extension[nextIndex + 1];
+    for (let previousIndex = 0; previousIndex < existing.length - 1; previousIndex += 1) {
+      // The first new segment shares the current station with the last
+      // existing segment; that legal adjacency is not a crossing.
+      if (
+        nextIndex === 0 &&
+        previousIndex === existing.length - 2
+      ) {
+        continue;
+      }
+      if (
+        intersects(
+          existing[previousIndex],
+          existing[previousIndex + 1],
+          a,
+          b,
+        )
+      ) {
+        crossings += 1;
+      }
+    }
+  }
+  return crossings;
+}
+
 function orthoradialPath(
   points: Point[],
   center: Point,
@@ -282,7 +315,7 @@ function orthoradialPath(
   // A small beam is enough because every edge has at most four legal
   // orthoradial forms. Ranking is lexicographic: self-crossings first,
   // then geometric length. This preserves topology before aesthetics.
-  const beamWidth = 36;
+  const beamWidth = 12;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const candidates = orthoradialEdgeCandidates(
@@ -294,6 +327,10 @@ function orthoradialPath(
 
     for (const state of states) {
       for (const candidate of candidates) {
+        const addedCrossings = extensionCrossings(
+          state.samples,
+          candidate.samples,
+        );
         const samples = [
           ...state.samples,
           ...candidate.samples.slice(1),
@@ -303,7 +340,7 @@ function orthoradialPath(
           samples,
           arcCount: state.arcCount + candidate.arcCount,
           length: state.length + candidate.length,
-          crossings: sampledSelfCrossings(samples),
+          crossings: state.crossings + addedCrossings,
         });
       }
     }
