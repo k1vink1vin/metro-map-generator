@@ -1210,7 +1210,15 @@ function repairMoscowDoglegsSafely(
             const structural =
               (graph.adjacency.get(bId)?.length ?? 0) !== 2 ||
               (graph.nodeById.get(bId)?.stationIds.length ?? 0) > 1;
-            const maxShift = structural ? 58 : 120;
+            // Ordinary corridor stations may be wildly displaced by an
+            // earlier regional repair (e.g. a 400-500px detour). Capping them
+            // at 120px prevents the move from ever crossing the U-turn
+            // threshold, so no candidate can be accepted. Let an ordinary
+            // station reach the true midpoint in one atomic move; hard
+            // spacing/crossing/self-crossing checks below still gate it.
+            const maxShift = structural
+              ? 90
+              : Number.POSITIVE_INFINITY;
             if (shift > maxShift) {
               dx = (dx / shift) * maxShift;
               dy = (dy / shift) * maxShift;
