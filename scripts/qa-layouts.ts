@@ -769,7 +769,9 @@ const crossingBudget: Record<StyleId, number> = {
 };
 
 for (const result of results) {
-  if (result.minNode < 28) {
+  // Geographic is a literal lat/lon reference, not a passenger schematic.
+  // Real stations may legitimately be very close together on this view.
+  if (result.style !== 'geographic' && result.minNode < 28) {
     failures.push(
       `${result.style}: minimum station distance ${result.minNode.toFixed(1)} < 28`,
     );
@@ -778,7 +780,11 @@ for (const result of results) {
   // station chord measured here: it is a sequence of circular arcs and radial
   // spokes. Its length/crossing topology is therefore verified by qa:render
   // and qa:geometry instead of treating invisible chords as passenger paths.
-  if (result.style !== 'concentric' && result.shortEdges > 10) {
+  if (
+    result.style !== 'geographic' &&
+    result.style !== 'concentric' &&
+    result.shortEdges > 10
+  ) {
     failures.push(
       `${result.style}: ${result.shortEdges} short edges > 10`,
     );
