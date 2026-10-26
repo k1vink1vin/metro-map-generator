@@ -3,6 +3,7 @@ import { buildGraph } from '../src/core/graph';
 import { computeLayout } from '../src/layout/index';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
+import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
 import type { LayoutResult, Point, StyleId } from '../src/types';
 
 function fixture(
@@ -164,3 +165,60 @@ const orthoradial = fixture(
 );
 assert(orthoradial.d.includes('A 100 100'), 'concentric routes must use common-centre circular arcs');
 assert(orthoradial.d.includes('L 0 160'), 'concentric routes must use radial straight segments between shells');
+
+
+const parallelGraph = buildGraph({
+  stations: [
+    { id: 'PA', lat: 0, lon: 0 },
+    { id: 'PB', lat: 0, lon: 1 },
+    { id: 'PC', lat: 1, lon: 2 },
+  ],
+  lines: [
+    { id: 'P1', color: '#ff0000', paths: [['PA', 'PB', 'PC']] },
+    { id: 'P2', color: '#0000ff', paths: [['PA', 'PB', 'PC']] },
+  ],
+});
+const parallelPositions = {
+  PA: { x: 0, y: 0 },
+  PB: { x: 100, y: 0 },
+  PC: { x: 200, y: 100 },
+};
+const parallelBundles = buildGeometricBundleMap(
+  parallelGraph,
+  parallelPositions,
+);
+const lane1 = offsetPathForLine(
+  parallelGraph,
+  ['PA', 'PB', 'PC'],
+  parallelPositions,
+  'P1',
+  12,
+  parallelBundles,
+);
+const lane2 = offsetPathForLine(
+  parallelGraph,
+  ['PA', 'PB', 'PC'],
+  parallelPositions,
+  'P2',
+  12,
+  parallelBundles,
+);
+for (let segment = 0; segment < 2; segment += 1) {
+  const a = parallelPositions[['PA', 'PB'][segment] as 'PA' | 'PB'];
+  const b = parallelPositions[['PB', 'PC'][segment] as 'PB' | 'PC'];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  const normal = { x: -dy / length, y: dx / length };
+  for (const endpoint of [segment, segment + 1]) {
+    const gap = Math.abs(
+      (lane1[endpoint].x - lane2[endpoint].x) * normal.x +
+      (lane1[endpoint].y - lane2[endpoint].y) * normal.y
+    );
+    assert(
+      Math.abs(gap - 12) < 1e-6,
+      `parallel lanes must keep an exact 12px gap through bends; got ${gap}`,
+    );
+  }
+}
+console.log('Parallel-lane QA passed: exact 12px gap is preserved through a 45-degree bend.');
