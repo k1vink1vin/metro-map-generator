@@ -4,6 +4,7 @@ import { finalizeLayoutPositions } from './finalize';
 import { layoutHexilinear } from './hexilinear';
 import { layoutLondon, layoutTaipei } from './octilinear';
 import { layoutConcentric, layoutMoscow } from './radial';
+import { equalizeRenderedStationRhythm } from './renderEquidistance';
 
 export interface LayoutOptions {
   moscowRings?: ValidatedMoscowRing[];
@@ -71,7 +72,7 @@ function finish(
     }
   }
 
-  return {
+  const result: LayoutResult = {
     style,
     positions: finalized.positions,
     geographicPositions: geographic,
@@ -79,6 +80,8 @@ function finish(
     ...extra,
     radialCenter,
   };
+
+  return equalizeRenderedStationRhythm(graph, result);
 }
 
 export function computeLayout(
