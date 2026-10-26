@@ -680,6 +680,85 @@ function buildLabelPlacements(
   return placements;
 }
 
+interface TaipeiRiverLandmark {
+  d: string;
+  label: Point;
+}
+
+function buildTaipeiRiverLandmark(
+  graph: GraphModel,
+  layout: LayoutResult,
+): TaipeiRiverLandmark | undefined {
+  // Only draw the landmark for an actual Taipei network. It is intentionally
+  // schematic: the route map uses the river as an orientation cue, not as a
+  // surveyed geographic feature.
+  const findNode = (...aliases: string[]) =>
+    graph.nodes.find((node) =>
+      aliases.some((alias) =>
+        node.name.toLowerCase().includes(alias.toLowerCase()),
+      ),
+    );
+
+  const tamsui = findNode('淡水', 'Tamsui');
+  const hongshulin = findNode('紅樹林', 'Hongshulin');
+  const zhuwei = findNode('竹圍', 'Zhuwei');
+  const guandu = findNode('關渡', 'Guandu');
+  const taipeiMain = findNode('台北車站', '臺北車站', 'Taipei Main');
+  if (!tamsui || !guandu || !taipeiMain) return undefined;
+
+  const anchors = [tamsui, hongshulin, zhuwei, guandu]
+    .filter((node): node is GraphNode => Boolean(node))
+    .map((node) => layout.positions[node.id])
+    .filter(Boolean);
+  if (anchors.length < 2) return undefined;
+
+  const north = anchors.map((point, index) => ({
+    x: point.x - 48 - index * 4,
+    y: point.y - (index === 0 ? 24 : 0),
+  }));
+  const last = north[north.length - 1];
+  const main = layout.positions[taipeiMain.id];
+
+  // After Guandu the Tamsui River turns south along the western side of
+  // central Taipei. Keep that bend broad so it reads as a landmark rather
+  // than another transit line.
+  const south1 = {
+    x: last.x - 72,
+    y: last.y + Math.max(90, (main.y - last.y) * 0.38),
+  };
+  const south2 = {
+    x: main.x - 150,
+    y: main.y + 95,
+  };
+  const end = {
+    x: main.x - 120,
+    y: main.y + 230,
+  };
+
+  const commands = [`M ${north[0].x} ${north[0].y}`];
+  for (let index = 1; index < north.length; index += 1) {
+    const previous = north[index - 1];
+    const point = north[index];
+    const midY = (previous.y + point.y) / 2;
+    commands.push(
+      `C ${previous.x} ${midY} ${point.x} ${midY} ${point.x} ${point.y}`,
+    );
+  }
+  commands.push(
+    `C ${last.x - 30} ${last.y + 55} ${south1.x} ${south1.y - 30} ${south1.x} ${south1.y}`,
+    `C ${south1.x} ${main.y - 20} ${south2.x} ${main.y + 25} ${south2.x} ${south2.y}`,
+    `C ${south2.x} ${south2.y + 45} ${end.x} ${end.y - 45} ${end.x} ${end.y}`,
+  );
+
+  return {
+    d: commands.join(' '),
+    label: {
+      x: south1.x - 8,
+      y: south1.y + 28,
+    },
+  };
+}
+
 function renderBounds(
   graph: GraphModel,
   layout: LayoutResult,
@@ -756,6 +835,11 @@ export function SvgMap({
     visualScale,
   );
 
+  const taipeiRiver =
+    layout.style === 'taipei'
+      ? buildTaipeiRiverLandmark(graph, layout)
+      : undefined;
+
   const concentricGuide =
     layout.style === 'concentric'
       ? (() => {
@@ -802,7 +886,18 @@ export function SvgMap({
         className="map-background"
       />
 
-
+      {taipeiRiver ? (
+        <g className="taipei-river-landmark" aria-label="淡水河 Tamsui River">
+          <path d={taipeiRiver.d} className="taipei-river-path" />
+          <text
+            x={taipeiRiver.label.x}
+            y={taipeiRiver.label.y}
+            className="taipei-river-label"
+          >
+            淡水河
+          </text>
+        </g>
+      ) : null}
 
       {layout.style === 'moscow' && layout.moscowRings?.length ? (
         <g className="moscow-ring-emphasis" aria-hidden="true">
