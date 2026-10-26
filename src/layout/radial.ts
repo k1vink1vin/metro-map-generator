@@ -998,6 +998,99 @@ function repairMoscowDoglegsSafely(
     if (!changed) break;
   }
 
+
+  const pathBacktracks = (path: string[]): number => {
+    let count = 0;
+    for (let index = 1; index < path.length - 1; index += 1) {
+      const turn = Math.abs(
+        signedTurn(
+          positions[path[index - 1]],
+          positions[path[index]],
+          positions[path[index + 1]],
+        ),
+      );
+      if (turn >= (135 * Math.PI) / 180) count += 1;
+    }
+    return count;
+  };
+
+  // After S-bends are removed, repair any true A-B-C backtrack. Ring nodes
+  // remain immovable so exact Moscow circles stay exact; a non-ring transfer
+  // or hub may shift only a bounded amount and only if topology improves.
+  for (let pass = 0; pass < 5; pass += 1) {
+    let changed = false;
+
+    for (const line of graph.lines) {
+      for (const path of line.paths) {
+        for (let index = 1; index < path.length - 1; index += 1) {
+          const aId = path[index - 1];
+          const bId = path[index];
+          const cId = path[index + 1];
+          if (ringNodes.has(bId)) continue;
+
+          const turn = Math.abs(
+            signedTurn(
+              positions[aId],
+              positions[bId],
+              positions[cId],
+            ),
+          );
+          if (turn < (135 * Math.PI) / 180) continue;
+
+          const moving = new Set([bId]);
+          const beforeBacktracks = pathBacktracks(path);
+          const beforeSelf = pathSelfCrossings(path);
+          const beforeCrossings = affectedCrossings(moving);
+          const original = { ...positions[bId] };
+          const midpoint = {
+            x: (positions[aId].x + positions[cId].x) / 2,
+            y: (positions[aId].y + positions[cId].y) / 2,
+          };
+
+          let accepted = false;
+          for (const blend of [1, 0.82, 0.64, 0.48, 0.34, 0.22]) {
+            let dx = (midpoint.x - original.x) * blend;
+            let dy = (midpoint.y - original.y) * blend;
+            const shift = Math.hypot(dx, dy);
+            const structural =
+              (graph.adjacency.get(bId)?.length ?? 0) !== 2 ||
+              (graph.nodeById.get(bId)?.stationIds.length ?? 0) > 1;
+            const maxShift = structural ? 58 : 120;
+            if (shift > maxShift) {
+              dx = (dx / shift) * maxShift;
+              dy = (dy / shift) * maxShift;
+            }
+
+            positions[bId] = {
+              x: original.x + dx,
+              y: original.y + dy,
+            };
+
+            if (
+              spacingSafe(moving) &&
+              pathSelfCrossings(path) <= beforeSelf &&
+              affectedCrossings(moving) <= beforeCrossings &&
+              pathBacktracks(path) < beforeBacktracks
+            ) {
+              accepted = true;
+              changed = true;
+              break;
+            }
+
+            positions[bId] = { ...original };
+          }
+
+          if (!accepted) {
+            positions[bId] = original;
+          }
+        }
+      }
+    }
+
+    if (!changed) break;
+  }
+
+
   return positions;
 }
 
