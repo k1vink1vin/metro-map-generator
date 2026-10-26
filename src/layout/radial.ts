@@ -1576,16 +1576,52 @@ export function layoutConcentric(
   const target: Record<string, Point> = {};
   const baseShellSpacing = Math.max(92, maxRadius / shellCount);
 
+  // Occupancy can force an inner shell to be larger than its nominal radius.
+  // Compute all radii cumulatively so a crowded inner shell can never overtake
+  // the next shell. This makes the minimum distance between different shells a
+  // hard geometric invariant instead of an accidental by-product.
+  const shellRadii: number[] = [];
+  let previousOccupiedRadius = 0;
+  let previousOccupiedIndex = -1;
+  for (let shellIndex = 0; shellIndex < shells.length; shellIndex += 1) {
+    const shell = shells[shellIndex];
+    if (!shell.length) {
+      shellRadii[shellIndex] = Math.max(
+        82 + shellIndex * baseShellSpacing,
+        previousOccupiedRadius,
+      );
+      continue;
+    }
+
+    const occupancyRadius =
+      (shell.length * 42) / (Math.PI * 2);
+    const nominalRadius =
+      82 + shellIndex * baseShellSpacing;
+    const skippedShells =
+      previousOccupiedIndex < 0
+        ? 1
+        : Math.max(1, shellIndex - previousOccupiedIndex);
+    const clearanceRadius =
+      previousOccupiedRadius +
+      skippedShells * 44;
+
+    const desiredRadius = Math.max(
+      nominalRadius,
+      occupancyRadius,
+      previousOccupiedIndex < 0 ? 82 : clearanceRadius,
+    );
+    shellRadii[shellIndex] = desiredRadius;
+    previousOccupiedRadius = desiredRadius;
+    previousOccupiedIndex = shellIndex;
+  }
+
   shells.forEach((shell, shellIndex) => {
     if (!shell.length) return;
 
-    const desiredRadius = Math.max(
-      82 + shellIndex * baseShellSpacing,
-      (shell.length * 38) / (Math.PI * 2),
-    );
+    const desiredRadius = shellRadii[shellIndex];
     const minGap = Math.min(
       (Math.PI * 2) / Math.max(1, shell.length),
-      38 / Math.max(1, desiredRadius),
+      42 / Math.max(1, desiredRadius),
     );
 
     const sorted = [...shell].sort((a, b) => a.angle - b.angle);
