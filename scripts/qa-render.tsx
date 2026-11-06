@@ -141,6 +141,7 @@ for (const name of requestedStyles) {
 }
 const selectedStyles = requestedStyles.length ? styles.filter(style => requestedStyles.includes(style)) : styles;
 let renderCount = 0;
+const renderFailures: string[] = [];
 for (const style of selectedStyles) {
   const layout = computeLayout(graph, style, {
     moscowRings: rings,
@@ -150,7 +151,7 @@ for (const style of selectedStyles) {
     const path = graph.lines.find(line => line.id === route.lineId)!.paths[route.pathIndex];
     const baseline = sampledSelfCrossings(path.map(id => layout.positions[id]));
     const rendered = sampledSelfCrossings(route.samples);
-    if (rendered > baseline) throw new Error(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
+    if (rendered > baseline) renderFailures.push(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
 
     if (style === 'geographic') {
       if (route.samples.length !== path.length) {
@@ -303,3 +304,7 @@ console.log(
   normalizedSuffixCodes,
 );
 
+
+// Collect all 24 previews for inspection even when a style fails geometry QA.
+// The job still fails and must never be treated as a passing passenger map.
+if (renderFailures.length) throw new Error('Rendered topology failures:\n' + renderFailures.join('\n'));
