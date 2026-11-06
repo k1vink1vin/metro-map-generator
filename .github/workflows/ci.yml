@@ -38,12 +38,15 @@ jobs:
         run: npm run qa:principles
 
       - name: Moscow pairwise geographic order QA
+        if: always()
         run: npm run qa:geography
 
       - name: Station and ring geometry regression QA
+        if: always()
         run: npm run qa:geometry
 
       - name: TPE Metro layout QA
+        if: always()
         run: npm run qa:layouts
 
 
