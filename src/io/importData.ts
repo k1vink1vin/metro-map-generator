@@ -96,6 +96,10 @@ function stationRecordsToStations(records: RecordRow[]): Station[] {
       '車站名稱',
       '站名',
     ]);
+    const nameEn = pick(row, [
+      'nameEn', 'englishName', 'stationEnglishName',
+      '英文站名', '英文名稱', '車站英文名稱',
+    ]);
     const latText = pick(row, [
       'lat',
       'latitude',
@@ -133,6 +137,7 @@ function stationRecordsToStations(records: RecordRow[]): Station[] {
     return {
       id,
       name: name || undefined,
+      nameEn: nameEn || undefined,
       lat,
       lon,
       complexId: complexId || undefined,

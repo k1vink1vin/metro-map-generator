@@ -190,10 +190,13 @@ export function buildGraph(input: NetworkInput): GraphModel {
         : stations.find((item) => item.name?.trim())?.name?.trim() ??
           stations.map((item) => item.id).join(' / ');
 
+    const nameEn = stations.find((station) => station.nameEn?.trim())?.nameEn?.trim();
+
     nodes.push({
       id: groupId,
       stationIds: stations.map((item) => item.id),
       name,
+      nameEn,
       lat,
       lon,
     });

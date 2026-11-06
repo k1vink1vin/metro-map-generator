@@ -27,6 +27,7 @@ interface Rect {
 interface LabelPlacement {
   nodeId: string;
   text: string;
+  englishText?: string;
   x: number;
   y: number;
   textAnchor: 'start' | 'middle' | 'end';
@@ -499,6 +500,7 @@ function labelRect(
   width: number,
   textAnchor: LabelPlacement['textAnchor'],
   scale = 1,
+  twoLines = false,
 ): Rect {
   const left =
     textAnchor === 'start'
@@ -511,7 +513,7 @@ function labelRect(
     x: left,
     y: y - 13 * scale,
     width,
-    height: 16 * scale,
+    height: (twoLines ? 31 : 16) * scale,
   };
 }
 
@@ -568,7 +570,11 @@ function buildLabelPlacements(
   for (const node of orderedNodes) {
     const point = layout.positions[node.id];
     const text = node.name || node.id;
-    const width = estimateTextWidth(text) * labelVisualScale;
+    const englishText = node.nameEn?.trim();
+    const width = Math.max(
+      estimateTextWidth(text),
+      englishText ? estimateTextWidth(englishText) * 0.82 : 0,
+    ) * labelVisualScale;
 
     const s = labelVisualScale;
     const markerRadius =
@@ -609,6 +615,7 @@ function buildLabelPlacements(
         width,
         candidate.anchor,
         labelVisualScale,
+        Boolean(englishText),
       );
       const paddedRect = padded(rect, 3 * labelVisualScale);
 
@@ -634,6 +641,7 @@ function buildLabelPlacements(
       const placement: LabelPlacement = {
         nodeId: node.id,
         text,
+        englishText,
         x: candidate.x,
         y: candidate.y,
         textAnchor: candidate.anchor,
@@ -1046,6 +1054,13 @@ export function SvgMap({
             }}
           >
             {label.text}
+            {label.englishText ? (
+              <tspan
+                x={label.x}
+                dy={13 * labelVisualScale}
+                style={{ fontSize: `${10 * labelVisualScale}px`, fontWeight: 500 }}
+              >{label.englishText}</tspan>
+            ) : null}
           </text>
         ))}
       </g>

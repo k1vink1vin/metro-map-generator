@@ -453,7 +453,7 @@ export function App() {
                 {[...graph.nodes]
                   .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'))
                   .map((node) => (
-                    <option key={node.id} value={node.id}>{node.name}</option>
+                    <option key={node.id} value={node.id}>{node.name}{node.nameEn ? ` / ${node.nameEn}` : ''}</option>
                   ))}
               </select>
             </label>
