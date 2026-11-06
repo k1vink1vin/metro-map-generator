@@ -877,12 +877,18 @@ export function SvgMap({
     routePaths,
     labelPlacements,
   );
+  // A passenger map requires a permanent route-color key, not a control
+  // visible only on the generator webpage. Keep it in exported SVG as well.
+  const legendWidth = 285;
+  const fullBounds = { ...bounds, width: bounds.width + legendWidth };
+  const legendX = bounds.x + bounds.width + 20;
+  const legendY = bounds.y + 25;
 
   return (
     <svg
       id="metro-map-svg"
       className="map-svg"
-      viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
+      viewBox={`${fullBounds.x} ${fullBounds.y} ${fullBounds.width} ${fullBounds.height}`}
       data-layout-valid={layout.integrity.valid ? 'true' : 'false'}
       data-layout-route-count={layout.integrity.routeCount}
       data-layout-path-count={layout.integrity.pathCount}
@@ -897,8 +903,8 @@ export function SvgMap({
       <rect
         x={bounds.x}
         y={bounds.y}
-        width={bounds.width}
-        height={bounds.height}
+        width={fullBounds.width}
+        height={fullBounds.height}
         className="map-background"
       />
 
@@ -1008,6 +1014,15 @@ export function SvgMap({
           pointerEvents="none"
         />
       ) : null}
+      <g id="route-legend" aria-label="路線圖例">
+        <text x={legendX} y={legendY} fill="#111827" fontSize="20" fontWeight="700">路線圖例</text>
+        {graph.lines.map((line, index) => (
+          <g key={line.id} transform={`translate(${legendX} ${legendY + 26 + index * 33})`}>
+            <line x1={2} y1={0} x2={43} y2={0} stroke={line.color} strokeWidth={9} strokeLinecap="round" />
+            <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{line.name || line.id}</text>
+          </g>
+        ))}
+      </g>
       <g id="labels">
         {labelPlacements.map((label) => (
           <text

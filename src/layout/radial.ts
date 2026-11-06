@@ -2566,12 +2566,51 @@ export function layoutConcentric(
   // stations off their circles and made the rendered style only "radial-ish".
   // Topology protection happens in the renderer/QA instead of deforming the
   // defining geometry of this style.
-  // Do not interpolate corridor stations across a mixed arc/radial
-  // path without testing intersections and clearance. The previous
-  // interpolation put unrelated stations at identical coordinates, then the
-  // global min-distance rescaler exploded the entire map to ~70k units.
-  // Keep the uniquely allocated shell stations until a topology-safe,
-  // occupancy-aware orthoradial router is available.
-  return { positions: target, center };
+  const equidistant = redistributeConcentricOrdinaryStations(
+    graph,
+    target,
+    center,
+  );
+
+  // An otherwise regularized arc can place two unrelated lines' stations
+  // on the exact same polar coordinate. Repair *before* the final canvas
+  // scale, preserving the shared centre and each station's original shell.
+  const placed = Object.fromEntries(
+    Object.entries(equidistant).map(([id, point]) => [id, { ...point }]),
+  );
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (let i = 0; i < graph.nodes.length; i++) {
+      for (let j = i + 1; j < graph.nodes.length; j++) {
+        const a = graph.nodes[i].id, b = graph.nodes[j].id;
+        if (Math.hypot(placed[a].x - placed[b].x, placed[a].y - placed[b].y) >= 28) continue;
+        for (const id of [b, a]) {
+          const desired = target[id];
+          const radial = Math.hypot(desired.x - center.x, desired.y - center.y);
+          const baseAngle = Math.atan2(desired.y - center.y, desired.x - center.x);
+          let replacement: Point | undefined;
+          for (let step = 0; step < 48; step++) {
+            const delta = step === 0 ? 0 : Math.ceil(step / 2) * 0.035 * (step % 2 ? 1 : -1);
+            const proposed = {
+              x: center.x + radial * Math.cos(baseAngle + delta),
+              y: center.y + radial * Math.sin(baseAngle + delta),
+            };
+            if (graph.nodes.every(node => node.id === id ||
+                Math.hypot(placed[node.id].x - proposed.x, placed[node.id].y - proposed.y) >= 28)) {
+              replacement = proposed;
+              break;
+            }
+          }
+          if (replacement) {
+            placed[id] = replacement;
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return { positions: placed, center };
 
 }

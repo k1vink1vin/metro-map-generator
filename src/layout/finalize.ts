@@ -394,17 +394,13 @@ export function finalizeLayoutPositions(
             passes: 4,
           },
         );
-  const passengerSpaced =
-    style === 'london'
-      ? separateNodesSafely(graph, equidistantPositions, 34, 14)
-      : equidistantPositions;
   const validated = validateEveryRouteIsDrawable(
     graph,
-    passengerSpaced,
+    equidistantPositions,
   );
 
   return {
-    positions: passengerSpaced,
+    positions: equidistantPositions,
     integrity: {
       ...validated,
       repairedNodeCount: completed.repairedNodeCount,

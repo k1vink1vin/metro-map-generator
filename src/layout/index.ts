@@ -92,6 +92,35 @@ function finish(
     if (next === rhythm) break;
     rhythm = next;
   }
+  if (style === 'london') {
+    // Preserve equal station rhythm and 45-degree geometry. A local pairwise
+    // repulsion here disturbs corridor spacing and failed the design audit.
+    // A uniform display-scale adjustment preserves those invariants.
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < graph.nodes.length; i++) {
+      for (let j = i + 1; j < graph.nodes.length; j++) {
+        const a = rhythm.positions[graph.nodes[i].id];
+        const b = rhythm.positions[graph.nodes[j].id];
+        minDistance = Math.min(minDistance, Math.hypot(b.x - a.x, b.y - a.y));
+      }
+    }
+    if (minDistance > 0 && minDistance < 30) {
+      const factor = Math.min(4, 30.5 / minDistance);
+      const points = Object.values(rhythm.positions);
+      const center = {
+        x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+        y: points.reduce((sum, p) => sum + p.y, 0) / points.length,
+      };
+      return {
+        ...rhythm,
+        positions: Object.fromEntries(Object.entries(rhythm.positions).map(([id, point]) => [
+          id,
+          { x: center.x + (point.x - center.x) * factor,
+            y: center.y + (point.y - center.y) * factor },
+        ])),
+      };
+    }
+  }
   return rhythm;
 }
 
