@@ -887,8 +887,27 @@ export function SvgMap({
   );
   // A passenger map requires a permanent route-color key, not a control
   // visible only on the generator webpage. Keep it in exported SVG as well.
+  const legendEntries = graph.lines.flatMap((line) => {
+    const seen = new Set<string>();
+    return line.paths.flatMap((path, index) => {
+      const color = line.pathColors?.[index] ?? line.color;
+      if (seen.has(color)) return [];
+      seen.add(color);
+      return [{
+        key: `${line.id}-${index}`,
+        color,
+        name: index === 0
+          ? (line.name || line.id)
+          : `${line.name || line.id} / ${line.pathIds?.[index] || '支線'}`,
+      }];
+    });
+  });
   const legendWidth = 285;
-  const fullBounds = { ...bounds, width: bounds.width + legendWidth };
+  const fullBounds = {
+    ...bounds,
+    width: bounds.width + legendWidth,
+    height: Math.max(bounds.height, 70 + legendEntries.length * 33),
+  };
   const legendX = bounds.x + bounds.width + 20;
   const legendY = bounds.y + 25;
 
@@ -1024,10 +1043,10 @@ export function SvgMap({
       ) : null}
       <g id="route-legend" aria-label="路線圖例">
         <text x={legendX} y={legendY} fill="#111827" fontSize="20" fontWeight="700">路線圖例</text>
-        {graph.lines.map((line, index) => (
-          <g key={line.id} transform={`translate(${legendX} ${legendY + 26 + index * 33})`}>
-            <line x1={2} y1={0} x2={43} y2={0} stroke={line.color} strokeWidth={9} strokeLinecap="round" />
-            <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{line.name || line.id}</text>
+        {legendEntries.map((entry, index) => (
+          <g key={entry.key} transform={`translate(${legendX} ${legendY + 26 + index * 33})`}>
+            <line x1={2} y1={0} x2={43} y2={0} stroke={entry.color} strokeWidth={9} strokeLinecap="round" />
+            <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{entry.name}</text>
           </g>
         ))}
       </g>

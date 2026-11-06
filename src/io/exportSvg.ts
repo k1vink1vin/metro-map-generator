@@ -144,6 +144,8 @@ export function downloadSvg(
   verifySvgCompleteness(svg, expectedRoutes);
 
   const clone = svg.cloneNode(true) as SVGSVGElement;
+  // UI-only selection highlights must not leak into the exported public map.
+  clone.querySelector('.station-focus-ring')?.remove();
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
   const detailZoom = Math.max(
