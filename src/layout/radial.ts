@@ -2566,11 +2566,12 @@ export function layoutConcentric(
   // stations off their circles and made the rendered style only "radial-ish".
   // Topology protection happens in the renderer/QA instead of deforming the
   // defining geometry of this style.
-  const equidistant = redistributeConcentricOrdinaryStations(
-    graph,
-    target,
-    center,
-  );
-  return { positions: equidistant, center };
+  // Do not interpolate corridor stations across a mixed arc/radial
+  // path without testing intersections and clearance. The previous
+  // interpolation put unrelated stations at identical coordinates, then the
+  // global min-distance rescaler exploded the entire map to ~70k units.
+  // Keep the uniquely allocated shell stations until a topology-safe,
+  // occupancy-aware orthoradial router is available.
+  return { positions: target, center };
 
 }

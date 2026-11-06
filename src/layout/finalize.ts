@@ -210,7 +210,10 @@ function uniformlyEnforceMinimumNodeDistance(
       entries.reduce((sum, [, point]) => sum + point.y, 0) /
       Math.max(1, entries.length),
   };
-  const scale = minimumDistance / minimum;
+  // A near-coincident pair must not explode a whole metropolitan map.
+  // Treat residual crowding as a QA failure rather than hiding it by
+  // magnifying the output by hundreds of times.
+  const scale = Math.min(2, minimumDistance / minimum);
 
   return Object.fromEntries(
     entries.map(([id, point]) => [
@@ -391,13 +394,17 @@ export function finalizeLayoutPositions(
             passes: 4,
           },
         );
+  const passengerSpaced =
+    style === 'london'
+      ? separateNodesSafely(graph, equidistantPositions, 34, 14)
+      : equidistantPositions;
   const validated = validateEveryRouteIsDrawable(
     graph,
-    equidistantPositions,
+    passengerSpaced,
   );
 
   return {
-    positions: equidistantPositions,
+    positions: passengerSpaced,
     integrity: {
       ...validated,
       repairedNodeCount: completed.repairedNodeCount,

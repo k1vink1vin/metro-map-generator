@@ -14,6 +14,7 @@ interface SvgMapProps {
   layout: LayoutResult;
   zoom?: number;
   stationStyle?: StationVisualStyle;
+  focusedNodeId?: string;
 }
 
 interface Rect {
@@ -825,8 +826,11 @@ export function SvgMap({
   layout,
   zoom = 1,
   stationStyle = 'taipei',
+  focusedNodeId,
 }: SvgMapProps) {
-  const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
+  // Zoom must actually enlarge small station names. Counter-scaling by
+  // sqrt(zoom) made 400% render at only twice the original legibility.
+  const visualScale = 1;
   // Geographic keeps true station spacing, so a passenger-map-sized badge can
   // cover several nearby stations. Use a much smaller symbol scale here while
   // keeping the selected station visual style recognizable. Labels are also
@@ -991,6 +995,19 @@ export function SvgMap({
         })}
       </g>
 
+      {focusedNodeId && layout.positions[focusedNodeId] ? (
+        <circle
+          className="station-focus-ring"
+          cx={layout.positions[focusedNodeId].x}
+          cy={layout.positions[focusedNodeId].y}
+          r={29 * stationVisualScale}
+          fill="none"
+          stroke="#1d4ed8"
+          strokeWidth={3 * stationVisualScale}
+          strokeDasharray={`${6 * stationVisualScale} ${4 * stationVisualScale}`}
+          pointerEvents="none"
+        />
+      ) : null}
       <g id="labels">
         {labelPlacements.map((label) => (
           <text

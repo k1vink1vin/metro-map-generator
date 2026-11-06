@@ -86,10 +86,11 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
   const [mapZoom, setMapZoom] = useState(1);
+  const [focusedStationId, setFocusedStationId] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const changeMapZoom = (nextZoom: number) => {
-    const next = Math.min(4, Math.max(0.25, nextZoom));
+    const next = Math.min(12, Math.max(0.5, nextZoom));
     if (next === mapZoom) return;
 
     const frame = canvasRef.current;
@@ -112,8 +113,30 @@ export function App() {
     }
   };
 
+  // Readable close-up: keep the requested station in the visible viewport.
+  // The viewBox is in layout coordinates, while scrolling is in CSS pixels.
+  const focusStation = (stationId: string) => {
+    setFocusedStationId(stationId);
+    const point = graph.nodeById.has(stationId) ? layout.positions[stationId] : undefined;
+    if (!point) return;
+    setMapZoom((current) => Math.max(4, current));
+    requestAnimationFrame(() => {
+      const frame = canvasRef.current;
+      const svg = frame?.querySelector('svg.map-svg') as SVGSVGElement | null;
+      if (!frame || !svg) return;
+      const viewBox = svg.viewBox.baseVal;
+      const bounds = svg.getBoundingClientRect();
+      if (!viewBox.width || !viewBox.height || !bounds.width) return;
+      const x = (point.x - viewBox.x) / viewBox.width * bounds.width;
+      const y = (point.y - viewBox.y) / viewBox.height * bounds.height;
+      frame.scrollLeft = Math.max(0, x - frame.clientWidth / 2);
+      frame.scrollTop = Math.max(0, y - frame.clientHeight / 2);
+    });
+  };
+
   const resetMapZoom = () => {
     setMapZoom(1);
+    setFocusedStationId('');
     requestAnimationFrame(() => {
       if (!canvasRef.current) return;
       canvasRef.current.scrollLeft = 0;
@@ -419,6 +442,21 @@ export function App() {
               </label>
             ) : null}
 
+            <label className="station-finder">
+              <span>定位車站（進入清晰閱讀模式）</span>
+              <select
+                value={focusedStationId}
+                onChange={(event) => focusStation(event.target.value)}
+                aria-label="定位車站"
+              >
+                <option value="">選擇車站</option>
+                {[...graph.nodes]
+                  .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'))
+                  .map((node) => (
+                    <option key={node.id} value={node.id}>{node.name}</option>
+                  ))}
+              </select>
+            </label>
             <div className="style-description">
               <strong>{selectedStyle.label}</strong>
               <span>{selectedStyle.note}</span>
@@ -446,8 +484,13 @@ export function App() {
             <div className="zoom-controls" aria-label="地圖細節倍率">
               <button
                 type="button"
+                onClick={() => changeMapZoom(Math.max(mapZoom, 4))}
+                title="放大至少四倍，查看所有車站名稱"
+              >清晰閱讀</button>
+              <button
+                type="button"
                 onClick={() => changeMapZoom(mapZoom - 0.25)}
-                disabled={mapZoom <= 0.25}
+                disabled={mapZoom <= 0.5}
                 title="降低細節倍率"
               >
                 −
@@ -463,7 +506,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => changeMapZoom(mapZoom + 0.25)}
-                disabled={mapZoom >= 4}
+                disabled={mapZoom >= 12}
                 title="提高細節倍率"
               >
                 +
@@ -480,6 +523,7 @@ export function App() {
                 layout={layout}
                 zoom={mapZoom}
                 stationStyle={stationStyle}
+                focusedNodeId={focusedStationId}
               />
             </div>
           </div>
