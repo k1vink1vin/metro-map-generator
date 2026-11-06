@@ -260,21 +260,6 @@ export function equalizeRenderedStationRhythm(
 
   if (!moved) return layout;
 
-  // Never improve nominal spacing at the cost of a collapsed interchange
-  // or two different stations becoming visually indistinguishable.
-  const minDistance = (positions: Record<string, Point>) => {
-    let shortest = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < graph.nodes.length; i++) {
-      const a = positions[graph.nodes[i].id];
-      for (let j = i + 1; j < graph.nodes.length; j++) {
-        shortest = Math.min(shortest, distance(a, positions[graph.nodes[j].id]));
-      }
-    }
-    return shortest;
-  };
-  if (minDistance(nextPositions) < Math.min(28, minDistance(layout.positions) - 1e-5)) {
-    return layout;
-  }
 
   const candidate: LayoutResult = {
     ...layout,
