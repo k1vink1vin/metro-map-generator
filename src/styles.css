@@ -392,6 +392,13 @@ select {
   cursor: default;
 }
 
+.station-finder { min-width: min(220px, 36vw); }
+.station-focus-ring { paint-order: stroke; }
+.zoom-controls button[title*="四倍"] {
+  min-width: 70px;
+  padding: 0 8px;
+  font-size: 11px;
+}
 .zoom-controls .zoom-readout {
   min-width: 62px;
   font-size: 11px;

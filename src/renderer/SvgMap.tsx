@@ -14,6 +14,7 @@ interface SvgMapProps {
   layout: LayoutResult;
   zoom?: number;
   stationStyle?: StationVisualStyle;
+  focusedNodeId?: string;
 }
 
 interface Rect {
@@ -26,6 +27,7 @@ interface Rect {
 interface LabelPlacement {
   nodeId: string;
   text: string;
+  englishText?: string;
   x: number;
   y: number;
   textAnchor: 'start' | 'middle' | 'end';
@@ -498,6 +500,7 @@ function labelRect(
   width: number,
   textAnchor: LabelPlacement['textAnchor'],
   scale = 1,
+  twoLines = false,
 ): Rect {
   const left =
     textAnchor === 'start'
@@ -510,7 +513,7 @@ function labelRect(
     x: left,
     y: y - 13 * scale,
     width,
-    height: 16 * scale,
+    height: (twoLines ? 31 : 16) * scale,
   };
 }
 
@@ -567,7 +570,11 @@ function buildLabelPlacements(
   for (const node of orderedNodes) {
     const point = layout.positions[node.id];
     const text = node.name || node.id;
-    const width = estimateTextWidth(text) * labelVisualScale;
+    const englishText = node.nameEn?.trim();
+    const width = Math.max(
+      estimateTextWidth(text),
+      englishText ? estimateTextWidth(englishText) * 0.82 : 0,
+    ) * labelVisualScale;
 
     const s = labelVisualScale;
     const markerRadius =
@@ -608,6 +615,7 @@ function buildLabelPlacements(
         width,
         candidate.anchor,
         labelVisualScale,
+        Boolean(englishText),
       );
       const paddedRect = padded(rect, 3 * labelVisualScale);
 
@@ -633,6 +641,7 @@ function buildLabelPlacements(
       const placement: LabelPlacement = {
         nodeId: node.id,
         text,
+        englishText,
         x: candidate.x,
         y: candidate.y,
         textAnchor: candidate.anchor,
@@ -825,8 +834,11 @@ export function SvgMap({
   layout,
   zoom = 1,
   stationStyle = 'taipei',
+  focusedNodeId,
 }: SvgMapProps) {
-  const visualScale = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
+  // Zoom must actually enlarge small station names. Counter-scaling by
+  // sqrt(zoom) made 400% render at only twice the original legibility.
+  const visualScale = 1;
   // Geographic keeps true station spacing, so a passenger-map-sized badge can
   // cover several nearby stations. Use a much smaller symbol scale here while
   // keeping the selected station visual style recognizable. Labels are also
@@ -873,12 +885,18 @@ export function SvgMap({
     routePaths,
     labelPlacements,
   );
+  // A passenger map requires a permanent route-color key, not a control
+  // visible only on the generator webpage. Keep it in exported SVG as well.
+  const legendWidth = 285;
+  const fullBounds = { ...bounds, width: bounds.width + legendWidth };
+  const legendX = bounds.x + bounds.width + 20;
+  const legendY = bounds.y + 25;
 
   return (
     <svg
       id="metro-map-svg"
       className="map-svg"
-      viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
+      viewBox={`${fullBounds.x} ${fullBounds.y} ${fullBounds.width} ${fullBounds.height}`}
       data-layout-valid={layout.integrity.valid ? 'true' : 'false'}
       data-layout-route-count={layout.integrity.routeCount}
       data-layout-path-count={layout.integrity.pathCount}
@@ -893,8 +911,8 @@ export function SvgMap({
       <rect
         x={bounds.x}
         y={bounds.y}
-        width={bounds.width}
-        height={bounds.height}
+        width={fullBounds.width}
+        height={fullBounds.height}
         className="map-background"
       />
 
@@ -991,6 +1009,28 @@ export function SvgMap({
         })}
       </g>
 
+      {focusedNodeId && layout.positions[focusedNodeId] ? (
+        <circle
+          className="station-focus-ring"
+          cx={layout.positions[focusedNodeId].x}
+          cy={layout.positions[focusedNodeId].y}
+          r={29 * stationVisualScale}
+          fill="none"
+          stroke="#1d4ed8"
+          strokeWidth={3 * stationVisualScale}
+          strokeDasharray={`${6 * stationVisualScale} ${4 * stationVisualScale}`}
+          pointerEvents="none"
+        />
+      ) : null}
+      <g id="route-legend" aria-label="路線圖例">
+        <text x={legendX} y={legendY} fill="#111827" fontSize="20" fontWeight="700">路線圖例</text>
+        {graph.lines.map((line, index) => (
+          <g key={line.id} transform={`translate(${legendX} ${legendY + 26 + index * 33})`}>
+            <line x1={2} y1={0} x2={43} y2={0} stroke={line.color} strokeWidth={9} strokeLinecap="round" />
+            <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{line.name || line.id}</text>
+          </g>
+        ))}
+      </g>
       <g id="labels">
         {labelPlacements.map((label) => (
           <text
@@ -1014,6 +1054,13 @@ export function SvgMap({
             }}
           >
             {label.text}
+            {label.englishText ? (
+              <tspan
+                x={label.x}
+                dy={13 * labelVisualScale}
+                style={{ fontSize: `${10 * labelVisualScale}px`, fontWeight: 500 }}
+              >{label.englishText}</tspan>
+            ) : null}
           </text>
         ))}
       </g>

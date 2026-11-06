@@ -11,6 +11,8 @@ export type StyleId =
 export interface Station {
   id: string;
   name?: string;
+  /** Optional official English station label for bilingual wayfinding. */
+  nameEn?: string;
   lat: number;
   lon: number;
   /**
@@ -64,6 +66,7 @@ export interface GraphNode {
   id: string;
   stationIds: string[];
   name: string;
+  nameEn?: string;
   lat: number;
   lon: number;
 }
