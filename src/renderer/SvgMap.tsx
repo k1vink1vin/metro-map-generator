@@ -1055,7 +1055,7 @@ export function SvgMap({
                 }
               } : undefined}
             >
-              <title>{node.name}{node.nameEn ? ` / ${node.nameEn}` : ''}</title>
+              <title>{`${node.name}${node.nameEn ? ` / ${node.nameEn}` : ''}`}</title>
               {stationStyle === 'tokyo'
                 ? renderTokyoStation(graph, node, stationVisualScale)
                 : stationStyle === 'osaka'
