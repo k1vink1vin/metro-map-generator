@@ -15,6 +15,7 @@ interface SvgMapProps {
   zoom?: number;
   stationStyle?: StationVisualStyle;
   focusedNodeId?: string;
+  onStationSelect?: (nodeId: string) => void;
 }
 
 interface Rect {
@@ -835,6 +836,7 @@ export function SvgMap({
   zoom = 1,
   stationStyle = 'taipei',
   focusedNodeId,
+  onStationSelect,
 }: SvgMapProps) {
   // Zoom must actually enlarge small station names. Counter-scaling by
   // sqrt(zoom) made 400% render at only twice the original legibility.
@@ -924,7 +926,7 @@ export function SvgMap({
       data-station-style={stationStyle}
       data-station-visual-scale={stationVisualScale}
       data-label-visual-scale={labelVisualScale}
-      role="img"
+      role={onStationSelect ? 'group' : 'img'}
       aria-label="Generated schematic metro map"
     >
       <rect
@@ -1015,7 +1017,18 @@ export function SvgMap({
               transform={`translate(${point.x} ${point.y})`}
               data-node-id={node.id}
               data-interchange={isInterchangeNode(graph, node) ? 'true' : 'false'}
+              role={onStationSelect ? 'button' : undefined}
+              tabIndex={onStationSelect ? 0 : undefined}
+              aria-label={onStationSelect ? `${node.name}${node.nameEn ? ` / ${node.nameEn}` : ''}（${node.stationIds.join('、')}）` : undefined}
+              onClick={onStationSelect ? () => onStationSelect(node.id) : undefined}
+              onKeyDown={onStationSelect ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onStationSelect(node.id);
+                }
+              } : undefined}
             >
+              <title>{node.name}{node.nameEn ? ` / ${node.nameEn}` : ''}</title>
               {stationStyle === 'tokyo'
                 ? renderTokyoStation(graph, node, stationVisualScale)
                 : stationStyle === 'osaka'

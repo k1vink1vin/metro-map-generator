@@ -394,6 +394,11 @@ select {
 
 .station-finder { min-width: min(220px, 36vw); }
 .station-focus-ring { paint-order: stroke; }
+#stations g[data-node-id][role='button'] { cursor: pointer; }
+#stations g[data-node-id][role='button']:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 3px #2563eb);
+}
 .zoom-controls button[title*="四倍"] {
   min-width: 70px;
   padding: 0 8px;

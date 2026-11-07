@@ -531,6 +531,7 @@ export function App() {
                 zoom={mapZoom}
                 stationStyle={stationStyle}
                 focusedNodeId={focusedStationId}
+                onStationSelect={focusStation}
               />
             </div>
           </div>
