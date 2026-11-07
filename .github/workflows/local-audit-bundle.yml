@@ -15,7 +15,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Package sources, fixture and offline dependencies
         run: |
-          tar -czf /tmp/metro-audit-bundle.tgz --exclude=.git --exclude=dist --exclude=qa-artifacts .
+          tar -czf /tmp/metro-audit-bundle.tgz .
           ls -lh /tmp/metro-audit-bundle.tgz
           cp /tmp/metro-audit-bundle.tgz ./metro-audit-bundle.tgz
       - uses: actions/upload-artifact@v4
