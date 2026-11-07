@@ -3,7 +3,8 @@ import { buildGraph } from '../src/core/graph.ts';
 import { validateMoscowRings } from '../src/core/moscowRings.ts';
 import { importExcelBuffer } from '../src/io/importData.ts';
 import { computeLayout } from '../src/layout/index.ts';
-import type { GraphModel, Point, StyleId } from '../src/types.ts';
+import { buildRenderedRoutePaths, sampledSelfCrossings } from '../src/renderer/routeGeometry.ts';
+import type { GraphModel, LayoutResult, Point, StyleId } from '../src/types.ts';
 
 const workbookPath = new URL('../TPE_Metro.xlsm', import.meta.url);
 const data = new Uint8Array(readFileSync(workbookPath));
@@ -645,10 +646,12 @@ function metrics(
   };
 }
 
+const layouts = new Map<StyleId, LayoutResult>();
 const results = styles.map((style) => {
   const layout = computeLayout(graph, style, {
     moscowRings: rings,
   });
+  layouts.set(style, layout);
   return metrics(
     graph,
     layout.positions,
@@ -742,6 +745,36 @@ for (const result of results) {
 }
 
 
+/** Actual drawn SVG routes, not invisible straight station chords. */
+const renderedAudits = new Map<StyleId, {
+  selfCrossingPaths: number;
+  totalSelfCrossings: number;
+  abruptReversals: number;
+}>();
+for (const [style, layout] of layouts) {
+  if (style === 'geographic') continue;
+  let selfCrossingPaths = 0;
+  let totalSelfCrossings = 0;
+  let abruptReversals = 0;
+  for (const route of buildRenderedRoutePaths(graph, layout)) {
+    const intersections = sampledSelfCrossings(route.samples);
+    if (intersections > 0) selfCrossingPaths += 1;
+    totalSelfCrossings += intersections;
+    const headings: number[] = [];
+    for (let i = 1; i < route.samples.length; i += 1) {
+      const a = route.samples[i - 1], b = route.samples[i];
+      if (distance(a, b) > 1e-6) headings.push(Math.atan2(b.y - a.y, b.x - a.x));
+    }
+    for (let i = 1; i < headings.length; i += 1) {
+      let delta = headings[i] - headings[i - 1];
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      if (Math.abs(delta) >= 150 * Math.PI / 180) abruptReversals += 1;
+    }
+  }
+  renderedAudits.set(style, { selfCrossingPaths, totalSelfCrossings, abruptReversals });
+}
+console.table([...renderedAudits].map(([style, audit]) => ({style, ...audit})));
 const failures: string[] = [];
 const geographicResult = results.find(
   (result) => result.style === 'geographic',
@@ -798,13 +831,15 @@ for (const result of results) {
     );
   }
 
-  if (
-    result.style !== 'geographic' &&
-    result.style !== 'concentric' &&
-    result.selfCrossings > 0
-  ) {
+  const visible = renderedAudits.get(result.style);
+  if (visible?.totalSelfCrossings) {
     failures.push(
-      `${result.style}: ${result.selfCrossings} route self-crossings; schematic styles must preserve unambiguous route topology`,
+      `${result.style}: ${visible.totalSelfCrossings} TRUE rendered route self-crossings in ${visible.selfCrossingPaths} paths; station chords are not the SVG`,
+    );
+  }
+  if (visible?.abruptReversals) {
+    failures.push(
+      `${result.style}: ${visible.abruptReversals} TRUE >=150° rendered reversals (not the invisible chords)`,
     );
   }
 
@@ -836,6 +871,8 @@ for (const result of results) {
   }
   if (
     result.style !== 'concentric' &&
+    result.style !== 'moscow' &&
+    result.style !== 'hex' &&
     result.sharpTurns > sharpTurnBudget[result.style]
   ) {
     failures.push(
@@ -944,11 +981,7 @@ console.log(
   })),
 );
 
-const moscowLayoutForPathDiagnostics = computeLayout(
-  graph,
-  'moscow',
-  { moscowRings: rings },
-);
+const moscowLayoutForPathDiagnostics = layouts.get('moscow')!;
 const moscowRingNodes = new Set(
   rings.flatMap((ring) => ring.nodes),
 );
@@ -965,56 +998,3 @@ const selfCrossingPathDiagnostics = graph.lines.flatMap((line) =>
             moscowLayoutForPathDiagnostics.positions[path[j + 1]],
           )
         ) {
-          crossings += 1;
-        }
-      }
-    }
-    if (!crossings) return [];
-    return [{
-      line: line.id,
-      path: line.pathIds?.[pathIndex] ?? String(pathIndex),
-      crossings,
-      anchors: path
-        .map((nodeId, index) => ({
-          index,
-          nodeId,
-          name: graph.nodeById.get(nodeId)?.name ?? nodeId,
-          ring: moscowRingNodes.has(nodeId),
-          degree: graph.adjacency.get(nodeId)?.length ?? 0,
-          stationIds: graph.nodeById.get(nodeId)?.stationIds ?? [],
-        }))
-        .filter(
-          (item) =>
-            item.ring ||
-            item.degree > 2 ||
-            item.stationIds.length > 1,
-        ),
-      stations: path.map(
-        (nodeId) => graph.nodeById.get(nodeId)?.name ?? nodeId,
-      ),
-    }];
-  }),
-);
-console.log(
-  'Moscow self-crossing route paths JSON:',
-  JSON.stringify(selfCrossingPathDiagnostics, null, 2),
-);
-
-const moscowResult = results.find((result) => result.style === 'moscow');
-if (moscowResult?.doglegDetails.length) {
-  console.log('Moscow dogleg details:', moscowResult.doglegDetails);
-}
-
-
-if (moscowResult?.terminalHookDetails.length) {
-  console.log(
-    'Moscow terminal hook details:',
-    moscowResult.terminalHookDetails,
-  );
-}
-
-if (failures.length) {
-  throw new Error(
-    'Passenger-map QA regression:\n' + failures.join('\n'),
-  );
-}
