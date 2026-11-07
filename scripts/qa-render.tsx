@@ -26,6 +26,8 @@ const styles: StyleId[] = [
 
 const css = `
 .map-background{fill:#fff}
+.taipei-river-path{fill:none;stroke:#bfdbfe;stroke-width:22;stroke-linejoin:round;stroke-linecap:round;opacity:.62}
+.taipei-river-label{fill:#5b9bd5;stroke:#fff;stroke-width:3;paint-order:stroke}
 .moscow-ring-halo{fill:none;stroke:#d8dee8;stroke-width:16;stroke-linecap:round;stroke-linejoin:round;opacity:.72}
 .concentric-guide{fill:none;stroke:#dbe4ee;stroke-width:1.2;stroke-dasharray:5 9}
 .ring-guide{display:none}

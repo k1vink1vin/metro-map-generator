@@ -1,0 +1,27 @@
+name: Quick Code and Geometry QA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript and production build
+        run: npm run build
+      - name: Fast renderer and parallel-lane geometry checks
+        run: npm run qa:geometry

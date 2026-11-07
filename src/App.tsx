@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { validateMoscowRings } from './core/moscowRings';
 import { importExcelWorkbook } from './io/importData';
@@ -89,6 +89,24 @@ export function App() {
   const [focusedStationId, setFocusedStationId] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Centre the chosen station AFTER React updates the SVG size and viewBox.
+  // Scheduling this in the selection handler used the previous zoom width
+  // and left stations outside the visible viewport.
+  useLayoutEffect(() => {
+    if (!focusedStationId) return;
+    const frame = canvasRef.current;
+    const svg = frame?.querySelector('svg.map-svg') as SVGSVGElement | null;
+    const point = layout.positions[focusedStationId];
+    if (!frame || !svg || !point) return;
+    const viewBox = svg.viewBox.baseVal;
+    const bounds = svg.getBoundingClientRect();
+    if (!viewBox.width || !viewBox.height || !bounds.width) return;
+    const x = ((point.x - viewBox.x) / viewBox.width) * bounds.width;
+    const y = ((point.y - viewBox.y) / viewBox.height) * bounds.height;
+    frame.scrollLeft = Math.max(0, x - frame.clientWidth / 2);
+    frame.scrollTop = Math.max(0, y - frame.clientHeight / 2);
+  }, [focusedStationId, mapZoom, layout]);
+
   const changeMapZoom = (nextZoom: number) => {
     const next = Math.min(12, Math.max(0.5, nextZoom));
     if (next === mapZoom) return;
@@ -103,7 +121,7 @@ export function App() {
 
     setMapZoom(next);
 
-    if (frame) {
+    if (frame && !focusedStationId) {
       requestAnimationFrame(() => {
         frame.scrollLeft =
           centerX * frame.scrollWidth - frame.clientWidth / 2;
@@ -117,24 +135,13 @@ export function App() {
   // The viewBox is in layout coordinates, while scrolling is in CSS pixels.
   const focusStation = (stationId: string) => {
     setFocusedStationId(stationId);
-    const point = graph.nodeById.has(stationId) ? layout.positions[stationId] : undefined;
-    if (!point) return;
-    setMapZoom((current) => Math.max(4, current));
-    requestAnimationFrame(() => {
-      const frame = canvasRef.current;
-      const svg = frame?.querySelector('svg.map-svg') as SVGSVGElement | null;
-      if (!frame || !svg) return;
-      const viewBox = svg.viewBox.baseVal;
-      const bounds = svg.getBoundingClientRect();
-      if (!viewBox.width || !viewBox.height || !bounds.width) return;
-      const x = (point.x - viewBox.x) / viewBox.width * bounds.width;
-      const y = (point.y - viewBox.y) / viewBox.height * bounds.height;
-      frame.scrollLeft = Math.max(0, x - frame.clientWidth / 2);
-      frame.scrollTop = Math.max(0, y - frame.clientHeight / 2);
-    });
+    if (!graph.nodeById.has(stationId)) return;
+    // At 1000px screen width, 400% still displayed many labels under 12px.
+    // Eight times zoom provides a genuinely readable station-level view.
+    setMapZoom((current) => Math.max(8, current));
   };
 
-  const resetMapZoom = () => {
+    const resetMapZoom = () => {
     setMapZoom(1);
     setFocusedStationId('');
     requestAnimationFrame(() => {
@@ -484,8 +491,8 @@ export function App() {
             <div className="zoom-controls" aria-label="地圖細節倍率">
               <button
                 type="button"
-                onClick={() => changeMapZoom(Math.max(mapZoom, 4))}
-                title="放大至少四倍，查看所有車站名稱"
+                onClick={() => changeMapZoom(Math.max(mapZoom, 8))}
+                title="放大至少八倍，查看車站名稱"
               >清晰閱讀</button>
               <button
                 type="button"

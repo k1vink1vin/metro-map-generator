@@ -3,7 +3,6 @@ import { buildGraph } from '../src/core/graph';
 import { computeLayout } from '../src/layout/index';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
-import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
 import type { LayoutResult, Point, StyleId } from '../src/types';
 
 function fixture(
@@ -167,7 +166,7 @@ assert(orthoradial.d.includes('A 100 100'), 'concentric routes must use common-c
 assert(orthoradial.d.includes('L 0 160'), 'concentric routes must use radial straight segments between shells');
 
 
-const parallelGraph = buildGraph({
+const diagonalParallelGraph = buildGraph({
   stations: [
     { id: 'PA', lat: 0, lon: 0 },
     { id: 'PB', lat: 0, lon: 1 },
@@ -178,34 +177,34 @@ const parallelGraph = buildGraph({
     { id: 'P2', color: '#0000ff', paths: [['PA', 'PB', 'PC']] },
   ],
 });
-const parallelPositions = {
+const diagonalParallelPositions = {
   PA: { x: 0, y: 0 },
   PB: { x: 100, y: 0 },
   PC: { x: 200, y: 100 },
 };
-const parallelBundles = buildGeometricBundleMap(
-  parallelGraph,
-  parallelPositions,
+const diagonalParallelBundles = buildGeometricBundleMap(
+  diagonalParallelGraph,
+  diagonalParallelPositions,
 );
 const lane1 = offsetPathForLine(
-  parallelGraph,
+  diagonalParallelGraph,
   ['PA', 'PB', 'PC'],
-  parallelPositions,
+  diagonalParallelPositions,
   'P1',
   12,
-  parallelBundles,
+  diagonalParallelBundles,
 );
 const lane2 = offsetPathForLine(
-  parallelGraph,
+  diagonalParallelGraph,
   ['PA', 'PB', 'PC'],
-  parallelPositions,
+  diagonalParallelPositions,
   'P2',
   12,
-  parallelBundles,
+  diagonalParallelBundles,
 );
 for (let segment = 0; segment < 2; segment += 1) {
-  const a = parallelPositions[['PA', 'PB'][segment] as 'PA' | 'PB'];
-  const b = parallelPositions[['PB', 'PC'][segment] as 'PB' | 'PC'];
+  const a = diagonalParallelPositions[['PA', 'PB'][segment] as 'PA' | 'PB'];
+  const b = diagonalParallelPositions[['PB', 'PC'][segment] as 'PB' | 'PC'];
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const length = Math.hypot(dx, dy);
