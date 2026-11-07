@@ -2571,6 +2571,53 @@ export function layoutConcentric(
     target,
     center,
   );
-  return { positions: equidistant, center };
+  // A station-spacing proposal can place stations from unrelated corridors
+  // at the same point on an arc. Prefer the original, shell-constrained
+  // location for a moved node when it is the only safe way to separate them.
+  // Do not use global magnification to disguise unresolved collisions.
+  const positions: Record<string, Point> = Object.fromEntries(
+    Object.entries(equidistant).map(([id, point]) => [id, { ...point }]),
+  );
+  for (let pass = 0; pass < 3; pass += 1) {
+    let restored = false;
+    for (let i = 0; i < graph.nodes.length; i += 1) {
+      for (let j = i + 1; j < graph.nodes.length; j += 1) {
+        const aId = graph.nodes[i].id;
+        const bId = graph.nodes[j].id;
+        if (Math.hypot(
+          positions[aId].x - positions[bId].x,
+          positions[aId].y - positions[bId].y,
+        ) >= 30) continue;
+
+        for (const nodeId of [aId, bId].sort((a, b) =>
+          Math.hypot(
+            positions[b].x - target[b].x,
+            positions[b].y - target[b].y,
+          ) - Math.hypot(
+            positions[a].x - target[a].x,
+            positions[a].y - target[a].y,
+          )
+        )) {
+          const original = target[nodeId];
+          if (Math.hypot(
+            positions[nodeId].x - original.x,
+            positions[nodeId].y - original.y,
+          ) < 1e-5) continue;
+          const safe = graph.nodes.every((other) =>
+            other.id === nodeId || Math.hypot(
+              original.x - positions[other.id].x,
+              original.y - positions[other.id].y,
+            ) >= 30,
+          );
+          if (!safe) continue;
+          positions[nodeId] = { ...original };
+          restored = true;
+          break;
+        }
+      }
+    }
+    if (!restored) break;
+  }
+  return { positions, center };
 
 }

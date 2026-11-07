@@ -346,7 +346,7 @@ select {
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
-  transition: width 120ms ease-out;
+  /* Immediate sizing keeps the selected station and zoom anchor centred. */
 }
 
 .map-zoom-stage .map-svg {

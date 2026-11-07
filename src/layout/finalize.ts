@@ -190,7 +190,9 @@ function uniformlyEnforceMinimumNodeDistance(
       const b = positions[graph.nodes[j].id];
       if (!a || !b) continue;
       const d = Math.hypot(b.x - a.x, b.y - a.y);
-      if (d > 1e-8) minimum = Math.min(minimum, d);
+      // Exactly coincident stations are a hard layout failure, not a reason
+      // to rescale the whole metropolitan diagram to infinity.
+      minimum = Math.min(minimum, d);
     }
   }
 
@@ -210,7 +212,10 @@ function uniformlyEnforceMinimumNodeDistance(
       entries.reduce((sum, [, point]) => sum + point.y, 0) /
       Math.max(1, entries.length),
   };
-  const scale = minimumDistance / minimum;
+  // Keep the map bounded even if an upstream angular interpolator creates
+  // near-identical coordinates. This is NOT a collision fix: the strict
+  // passenger QA must still reject stations whose final clearance is low.
+  const scale = minimum < 1e-7 ? 1 : Math.min(2, minimumDistance / minimum);
 
   return Object.fromEntries(
     entries.map(([id, point]) => [
