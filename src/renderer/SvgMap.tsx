@@ -9,6 +9,19 @@ import type {
 import { nodeDegree } from '../core/graph';
 
 
+/** Keep official route colors; add a narrow high-contrast casing only when
+ * a route color is too light to follow against the white map background. */
+function needsDarkRouteCasing(color: string): boolean {
+  const match = /^#([0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) return false;
+  const rgb = [0, 2, 4].map((index) => {
+    const channel = parseInt(match[1].slice(index, index + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  return 1.05 / (luminance + 0.05) < 3;
+}
+
 interface SvgMapProps {
   graph: GraphModel;
   layout: LayoutResult;
@@ -989,8 +1002,21 @@ export function SvgMap({
               data-path-count={line.paths.length}
             >
               {paths.map((routePath) => (
-                <path
-                  key={`${line.id}-${routePath.pathIndex}`}
+                <g key={`${line.id}-${routePath.pathIndex}`}>
+                  {needsDarkRouteCasing(routePath.lineColor) ? (
+                    <path
+                      className="route-contrast-casing"
+                      d={routePath.d}
+                      fill="none"
+                      stroke="#334155"
+                      strokeWidth={11 * visualScale}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      pointerEvents="none"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <path
                   data-line-id={line.id}
                   data-path-index={routePath.pathIndex}
                   data-path-id={line.pathIds?.[routePath.pathIndex] ?? routePath.pathIndex}
@@ -1000,7 +1026,8 @@ export function SvgMap({
                   strokeWidth={8 * visualScale}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                />
+                  />
+                </g>
               ))}
             </g>
           );
@@ -1028,7 +1055,7 @@ export function SvgMap({
                 }
               } : undefined}
             >
-              <title>{node.name}{node.nameEn ? ` / ${node.nameEn}` : ''}</title>
+              <title>{`${node.name}${node.nameEn ? ` / ${node.nameEn}` : ''}`}</title>
               {stationStyle === 'tokyo'
                 ? renderTokyoStation(graph, node, stationVisualScale)
                 : stationStyle === 'osaka'
@@ -1058,6 +1085,7 @@ export function SvgMap({
         <text x={legendX} y={legendY} fill="#111827" fontSize="20" fontWeight="700">路線圖例</text>
         {legendEntries.map((entry, index) => (
           <g key={entry.key} transform={`translate(${legendX} ${legendY + 26 + index * 33})`}>
+            {needsDarkRouteCasing(entry.color) ? <line x1={2} y1={0} x2={43} y2={0} stroke="#334155" strokeWidth={12} strokeLinecap="round" /> : null}
             <line x1={2} y1={0} x2={43} y2={0} stroke={entry.color} strokeWidth={9} strokeLinecap="round" />
             <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{entry.name}</text>
           </g>

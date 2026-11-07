@@ -5,6 +5,7 @@ import { layoutHexilinear } from './hexilinear';
 import { layoutLondon, layoutTaipei } from './octilinear';
 import { layoutConcentric, layoutMoscow } from './radial';
 import { equalizeRenderedStationRhythm } from './renderEquidistance';
+import { refinePassengerClearance } from './passengerClearance';
 
 export interface LayoutOptions {
   moscowRings?: ValidatedMoscowRing[];
@@ -92,6 +93,7 @@ function finish(
     if (next === rhythm) break;
     rhythm = next;
   }
+  if (style === 'taipei' || style === 'hex') return refinePassengerClearance(graph, rhythm);
   if (style === 'london') {
     // Preserve equal station rhythm and 45-degree geometry. A local pairwise
     // repulsion here disturbs corridor spacing and failed the design audit.
