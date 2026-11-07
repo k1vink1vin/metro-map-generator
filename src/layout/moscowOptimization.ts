@@ -287,8 +287,8 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
     }
   };
 
-  optimize(2200, 1.8, 120, 70, 150, 0.03, 0.1, 0.000005);
-  optimize(3600, 0.45, 4000, 14000, 2500, 1, 0.6, 0.0000001);
+  optimize(600, 1.8, 120, 70, 150, 0.03, 0.1, 0.000005);
+  optimize(1600, 0.45, 4000, 14000, 2500, 1, 0.6, 0.0000001);
 
   const output = Object.fromEntries(ids.map((id, index) => [id, {
     x: fixed[index] ? fixedOrigins[index * 2] : values[index * 2],
