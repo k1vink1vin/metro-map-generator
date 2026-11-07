@@ -1,0 +1,25 @@
+name: Local Full-Repo Audit Bundle
+on:
+  push:
+    branches: [fix/full-acceptance-20261107]
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Package sources, fixture and offline dependencies
+        run: |
+          tar -czf /tmp/metro-audit-bundle.tgz --exclude=.git --exclude=dist --exclude=qa-artifacts .
+          ls -lh /tmp/metro-audit-bundle.tgz
+          cp /tmp/metro-audit-bundle.tgz ./metro-audit-bundle.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metro-audit-bundle
+          path: metro-audit-bundle.tgz
+          retention-days: 2
