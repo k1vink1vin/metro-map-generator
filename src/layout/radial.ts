@@ -2312,7 +2312,10 @@ function redistributeConcentricOrdinaryStations(
   graph: GraphModel,
   input: Record<string, Point>,
   center: Point,
+  centerStationNodeId?: string,
 ): Record<string, Point> {
+  const isStructural = (nodeId: string) =>
+    nodeId === centerStationNodeId || concentricStructuralNode(graph, nodeId);
   const result = Object.fromEntries(
     Object.entries(input).map(([id, point]) => [id, { ...point }]),
   );
@@ -2323,7 +2326,7 @@ function redistributeConcentricOrdinaryStations(
       if (path.length < 3) continue;
       const anchors = new Set<number>([0, path.length - 1]);
       path.forEach((nodeId, index) => {
-        if (concentricStructuralNode(graph, nodeId)) anchors.add(index);
+        if (isStructural(nodeId)) anchors.add(index);
       });
       const sorted = [...anchors].sort((a, b) => a - b);
 
@@ -2337,7 +2340,7 @@ function redistributeConcentricOrdinaryStations(
         const end = result[path[endIndex]];
         for (let index = startIndex + 1; index < endIndex; index += 1) {
           const nodeId = path[index];
-          if (concentricStructuralNode(graph, nodeId)) continue;
+          if (isStructural(nodeId)) continue;
           const fraction = (index - startIndex) / segmentCount;
           const point = pointOnConcentricRoute(
             start,
@@ -2570,6 +2573,7 @@ export function layoutConcentric(
     graph,
     target,
     center,
+    centerNode?.id,
   );
   return { positions: equidistant, center };
 
