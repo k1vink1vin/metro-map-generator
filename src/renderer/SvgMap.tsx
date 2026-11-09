@@ -11,6 +11,20 @@ import { nodeDegree } from '../core/graph';
 
 /** Keep official route colors; add a narrow high-contrast casing only when
  * a route color is too light to follow against the white map background. */
+// Identical layout/graph objects yield identical route paths even when
+// station-marker styles change. Weak keys avoid retaining old imports.
+const svgRouteCache = new WeakMap<LayoutResult, {
+  graph: GraphModel;
+  routes: ReturnType<typeof buildRenderedRoutePaths>;
+}>();
+function reusableSvgRoutes(graph: GraphModel, layout: LayoutResult) {
+  const saved = svgRouteCache.get(layout);
+  if (saved?.graph === graph) return saved.routes;
+  const routes = buildRenderedRoutePaths(graph, layout);
+  svgRouteCache.set(layout, { graph, routes });
+  return routes;
+}
+
 function needsDarkRouteCasing(color: string): boolean {
   const match = /^#([0-9a-f]{6})$/i.exec(color.trim());
   if (!match) return false;
@@ -862,7 +876,7 @@ export function SvgMap({
     visualScale * (layout.style === 'geographic' ? 0.42 : 1);
   const labelVisualScale =
     visualScale * (layout.style === 'geographic' ? 0.58 : 1);
-  const routePaths = buildRenderedRoutePaths(graph, layout);
+  const routePaths = reusableSvgRoutes(graph, layout);
 
   const labelPlacements = buildLabelPlacements(
     graph,

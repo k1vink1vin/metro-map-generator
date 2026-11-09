@@ -198,7 +198,19 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
     const softmax = new Float64Array(sections.length);
     const kk = Math.SQRT2 - 1;
 
+    // Refresh a conservative active set rather than checking every far
+    // geographic-order constraint on every optimization iteration. The
+    // final result remains subject to exhaustive qa:geography.
+    let activeConstraints: OrderConstraint[] = [];
     for (let step = 1; step <= iterations; step += 1) {
+      if (step === 1 || step % 20 === 0) {
+        const margin = rate > 1 ? 90 : 40;
+        activeConstraints = constraints.filter((constraint) => {
+          const a = constraint.a * 2 + constraint.axis;
+          const b = constraint.b * 2 + constraint.axis;
+          return constraint.sign * (values[a] - values[b]) < margin;
+        });
+      }
       gradient.fill(0);
       let maximum = Number.NEGATIVE_INFINITY;
       for (let s = 0; s < sections.length; s += 1) {
@@ -249,7 +261,7 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
         }
       }
 
-      for (const constraint of constraints) {
+      for (const constraint of activeConstraints) {
         const a = constraint.a * 2 + constraint.axis;
         const b = constraint.b * 2 + constraint.axis;
         const signedGap = constraint.sign * (values[a] - values[b]);

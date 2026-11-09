@@ -264,7 +264,11 @@ export function equalizeRenderedStationRhythm(
     ...layout,
     positions: nextPositions,
   };
-  const beforeCrossings = totalRenderedSelfCrossings(graph, layout);
+  // The route geometry above is already sampled. Reuse it rather than
+  // repeating a costly full-network beam search on the same layout.
+  const beforeCrossings = rendered.reduce(
+    (sum, route) => sum + sampledSelfCrossings(route.samples), 0,
+  );
   const afterCrossings = totalRenderedSelfCrossings(graph, candidate);
 
   // Never pay for equal spacing by folding a route over itself.
