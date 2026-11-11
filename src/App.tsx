@@ -86,6 +86,7 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [dataOpen, setDataOpen] = useState(true);
   const [mapZoom, setMapZoom] = useState(1);
+  const [sourceName, setSourceName] = useState('內建測試資料');
   const [focusedStationId, setFocusedStationId] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -212,6 +213,7 @@ export function App() {
       const network = await importExcelWorkbook(file);
       setStationsText(pretty(network.stations));
       setLinesText(pretty(network.lines));
+      setSourceName(file.name);
       generateFrom(
         network.stations,
         network.lines,
@@ -226,6 +228,7 @@ export function App() {
   };
 
   const resetSample = () => {
+    setSourceName('內建測試資料');
     setStationsText(pretty(sampleNetwork.stations));
     setLinesText(pretty(sampleNetwork.lines));
     setStyle('taipei');
@@ -339,7 +342,7 @@ export function App() {
               </div>
               <textarea
                 value={stationsText}
-                onChange={(event) => setStationsText(event.target.value)}
+                onChange={(event) => { setStationsText(event.target.value); setSourceName('手動編輯資料'); }}
                 spellCheck={false}
                 aria-label="Stations JSON"
               />
@@ -354,7 +357,7 @@ export function App() {
               </div>
               <textarea
                 value={linesText}
-                onChange={(event) => setLinesText(event.target.value)}
+                onChange={(event) => { setLinesText(event.target.value); setSourceName('手動編輯資料'); }}
                 spellCheck={false}
                 aria-label="Lines JSON"
               />
@@ -530,6 +533,7 @@ export function App() {
                 layout={layout}
                 zoom={mapZoom}
                 stationStyle={stationStyle}
+                sourceName={sourceName}
                 focusedNodeId={focusedStationId}
                 onStationSelect={focusStation}
               />

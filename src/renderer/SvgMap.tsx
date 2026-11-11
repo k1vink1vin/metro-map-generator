@@ -41,6 +41,7 @@ interface SvgMapProps {
   layout: LayoutResult;
   zoom?: number;
   stationStyle?: StationVisualStyle;
+  sourceName?: string;
   focusedNodeId?: string;
   onStationSelect?: (nodeId: string) => void;
 }
@@ -862,6 +863,7 @@ export function SvgMap({
   layout,
   zoom = 1,
   stationStyle = 'taipei',
+  sourceName = '輸入路網資料',
   focusedNodeId,
   onStationSelect,
 }: SvgMapProps) {
@@ -927,15 +929,18 @@ export function SvgMap({
         color,
         name: index === 0
           ? (line.name || line.id)
-          : `${line.name || line.id} / ${line.pathIds?.[index] || '支線'}`,
+          : `${line.name || line.id}／${line.id === 'TPE_R' ? '新北投支線' : line.id === 'TPE_G' ? '小碧潭支線' : '支線'}`,
       }];
     });
   });
-  const legendWidth = 285;
+  const legendWidth = 305;
+  const partialRailCoverage = graph.lines.some((line) => line.id === 'THSR' || line.id === 'TR');
+  const generationDate = new Date().toISOString().slice(0, 10);
+  const footnoteY = bounds.y + 90 + legendEntries.length * 33;
   const fullBounds = {
     ...bounds,
     width: bounds.width + legendWidth,
-    height: Math.max(bounds.height, 70 + legendEntries.length * 33),
+    height: Math.max(bounds.height, 175 + legendEntries.length * 33),
   };
   const legendX = bounds.x + bounds.width + 20;
   const legendY = bounds.y + 25;
@@ -950,6 +955,7 @@ export function SvgMap({
       data-layout-path-count={layout.integrity.pathCount}
       data-layout-segment-count={layout.integrity.segmentCount}
       data-detail-zoom={zoom}
+      data-public-use="not-verified"
       data-station-style={stationStyle}
       data-station-visual-scale={stationVisualScale}
       data-label-visual-scale={labelVisualScale}
@@ -1104,6 +1110,22 @@ export function SvgMap({
             <text x={55} y={6} fontSize={16} fontWeight={600} fill="#111827">{entry.name}</text>
           </g>
         ))}
+      </g>
+      <g id="map-provenance" aria-label="資料來源與產製資訊">
+        <text x={legendX} y={footnoteY} fill="#374151" fontSize="12" fontWeight="600">
+          資料：{sourceName.length > 24 ? `${sourceName.slice(0, 23)}…` : sourceName}
+        </text>
+        <text x={legendX} y={footnoteY + 19} fill="#4b5563" fontSize="11">
+          圖面產製日：{generationDate}（非資料核定日）
+        </text>
+        {partialRailCoverage ? (
+          <text x={legendX} y={footnoteY + 38} fill="#4b5563" fontSize="11">
+            台鐵／高鐵僅顯示輸入資料所列部分車站
+          </text>
+        ) : null}
+        <text x={legendX} y={footnoteY + 57} fill="#9f1239" fontSize="11">
+          示意圖・未經營運機構核定，不得逕作站內公告
+        </text>
       </g>
       <g id="labels">
         {labelPlacements.map((label) => (

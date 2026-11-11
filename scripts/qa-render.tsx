@@ -204,6 +204,18 @@ for (const style of selectedStyles) {
       `><style>${css}</style>`,
     );
 
+    if (markup.includes(' / branch') || markup.includes('／branch')) {
+      throw new Error(`${style}/${stationStyle}: untranslated branch label`);
+    }
+    if (!markup.includes('id="map-provenance"') || !markup.includes('data-public-use="not-verified"')) {
+      throw new Error(`${style}/${stationStyle}: missing non-official map origin warning`);
+    }
+    if (!markup.includes('台鐵／高鐵僅顯示輸入資料所列部分車站')) {
+      throw new Error(`${style}/${stationStyle}: missing partial railway coverage disclosure`);
+    }
+    if (!markup.includes('新北投支線') || !markup.includes('小碧潭支線')) {
+      throw new Error(`${style}/${stationStyle}: missing explicit Taiwanese branch names`);
+    }
     const expectedStationScale =
       style === 'geographic' ? '0.42' : '1';
     const expectedLabelScale =
