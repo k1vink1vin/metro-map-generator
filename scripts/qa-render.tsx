@@ -149,11 +149,32 @@ for (const style of selectedStyles) {
     moscowRings: rings,
   });
 
+  if (style !== 'geographic') {
+    let minimum = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < graph.nodes.length; i++) {
+      for (let j = i + 1; j < graph.nodes.length; j++) {
+        const a = layout.positions[graph.nodes[i].id];
+        const b = layout.positions[graph.nodes[j].id];
+        minimum = Math.min(minimum, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    }
+    if (minimum < 28) {
+      renderFailures.push(`${style}: distinct stations are only ${minimum.toFixed(2)} units apart (minimum 28)`);
+    }
+  }
+
   for (const route of buildRenderedRoutePaths(graph, layout)) {
     const path = graph.lines.find(line => line.id === route.lineId)!.paths[route.pathIndex];
     const baseline = sampledSelfCrossings(path.map(id => layout.positions[id]));
     const rendered = sampledSelfCrossings(route.samples);
     if (rendered > baseline) renderFailures.push(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
+    if (style === 'moscow' && rendered > 0) {
+      renderFailures.push(`${style}/${route.lineId}: ${rendered} actual route self-crossings, even if baseline also crosses`);
+    }
+    if (style === 'concentric') {
+      const reversals = abruptRouteReversals(route.samples);
+      if (reversals.length) renderFailures.push(`${style}/${route.lineId}: ${reversals.length} near-180 degree U-turns`);
+    }
 
     if (style === 'geographic') {
       if (route.samples.length !== path.length) {
@@ -223,6 +244,20 @@ for (const style of selectedStyles) {
     if (!bilingualReady && !markup.includes('英文站名缺漏：')) {
       throw new Error(`${style}/${stationStyle}: missing visible bilingual data warning`);
     }
+    const markers = (markup.match(/data-node-id="/g) ?? []).length;
+    const labels = (markup.match(/class="station-label"/g) ?? []).length;
+    if (markers !== graph.nodes.length || labels !== graph.nodes.length) {
+      renderFailures.push(`${style}/${stationStyle}: ${markers} markers / ${labels} labels for ${graph.nodes.length} topology stations`);
+    }
+    const viewport = markup.match(/viewBox="([^"]+)"/);
+    const dimensions = viewport?.[1].trim().split(/\s+/).map(Number);
+    const maxDimension = Math.max(12000, graph.nodes.length * 40);
+    if (!dimensions || dimensions.length !== 4 || dimensions.some((n) => !Number.isFinite(n))) {
+      renderFailures.push(`${style}/${stationStyle}: invalid SVG viewport`);
+    } else if (Math.max(dimensions[2], dimensions[3]) > maxDimension) {
+      renderFailures.push(`${style}/${stationStyle}: ${dimensions[2].toFixed(0)}×${dimensions[3].toFixed(0)} viewport exceeds ${maxDimension}, stations become unreadably small`);
+    }
+
     const expectedStationScale =
       style === 'geographic' ? '0.42' : '1';
     const expectedLabelScale =
