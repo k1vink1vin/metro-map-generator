@@ -216,6 +216,13 @@ for (const style of selectedStyles) {
     if (!markup.includes('新北投支線') || !markup.includes('小碧潭支線')) {
       throw new Error(`${style}/${stationStyle}: missing explicit Taiwanese branch names`);
     }
+    const bilingualReady = graph.nodes.every(node => Boolean(node.nameEn?.trim()));
+    if (!markup.includes(`data-bilingual-ready="${bilingualReady}"`)) {
+      throw new Error(`${style}/${stationStyle}: bilingual readiness flag disagrees with source data`);
+    }
+    if (!bilingualReady && !markup.includes('英文站名缺漏：')) {
+      throw new Error(`${style}/${stationStyle}: missing visible bilingual data warning`);
+    }
     const expectedStationScale =
       style === 'geographic' ? '0.42' : '1';
     const expectedLabelScale =
