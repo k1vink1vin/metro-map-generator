@@ -204,6 +204,25 @@ for (const style of selectedStyles) {
       `><style>${css}</style>`,
     );
 
+    if (markup.includes(' / branch') || markup.includes('／branch')) {
+      throw new Error(`${style}/${stationStyle}: untranslated branch label`);
+    }
+    if (!markup.includes('id="map-provenance"') || !markup.includes('data-public-use="not-verified"')) {
+      throw new Error(`${style}/${stationStyle}: missing non-official map origin warning`);
+    }
+    if (!markup.includes('台鐵／高鐵僅顯示輸入資料所列部分車站')) {
+      throw new Error(`${style}/${stationStyle}: missing partial railway coverage disclosure`);
+    }
+    if (!markup.includes('新北投支線') || !markup.includes('小碧潭支線')) {
+      throw new Error(`${style}/${stationStyle}: missing explicit Taiwanese branch names`);
+    }
+    const bilingualReady = graph.nodes.every(node => Boolean(node.nameEn?.trim()));
+    if (!markup.includes(`data-bilingual-ready="${bilingualReady}"`)) {
+      throw new Error(`${style}/${stationStyle}: bilingual readiness flag disagrees with source data`);
+    }
+    if (!bilingualReady && !markup.includes('英文站名缺漏：')) {
+      throw new Error(`${style}/${stationStyle}: missing visible bilingual data warning`);
+    }
     const expectedStationScale =
       style === 'geographic' ? '0.42' : '1';
     const expectedLabelScale =
