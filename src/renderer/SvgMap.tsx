@@ -936,11 +936,12 @@ export function SvgMap({
   const legendWidth = 305;
   const partialRailCoverage = graph.lines.some((line) => line.id === 'THSR' || line.id === 'TR');
   const generationDate = new Date().toISOString().slice(0, 10);
+  const missingEnglishNames = graph.nodes.filter((node) => !node.nameEn?.trim()).length;
   const footnoteY = bounds.y + 90 + legendEntries.length * 33;
   const fullBounds = {
     ...bounds,
     width: bounds.width + legendWidth,
-    height: Math.max(bounds.height, 175 + legendEntries.length * 33),
+    height: Math.max(bounds.height, 195 + legendEntries.length * 33),
   };
   const legendX = bounds.x + bounds.width + 20;
   const legendY = bounds.y + 25;
@@ -956,6 +957,7 @@ export function SvgMap({
       data-layout-segment-count={layout.integrity.segmentCount}
       data-detail-zoom={zoom}
       data-public-use="not-verified"
+      data-bilingual-ready={missingEnglishNames === 0 ? "true" : "false"}
       data-station-style={stationStyle}
       data-station-visual-scale={stationVisualScale}
       data-label-visual-scale={labelVisualScale}
@@ -1123,7 +1125,12 @@ export function SvgMap({
             台鐵／高鐵僅顯示輸入資料所列部分車站
           </text>
         ) : null}
-        <text x={legendX} y={footnoteY + 57} fill="#9f1239" fontSize="11">
+        {missingEnglishNames ? (
+          <text x={legendX} y={footnoteY + 57} fill="#9f1239" fontSize="11">
+            英文站名缺漏：{missingEnglishNames} 站，尚未符合雙語導引需求
+          </text>
+        ) : null}
+        <text x={legendX} y={footnoteY + 76} fill="#9f1239" fontSize="11">
           示意圖・未經營運機構核定，不得逕作站內公告
         </text>
       </g>
