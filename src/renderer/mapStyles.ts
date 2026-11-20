@@ -34,6 +34,17 @@ export const mapStyles = `
   pointer-events: none;
 }
 
+.moscow-ring-halo[data-emphasis="primary"] {
+  stroke: #cbd5e1;
+  stroke-width: 18;
+  opacity: 0.9;
+}
+
+.moscow-ring-halo[data-emphasis="secondary"] {
+  stroke-width: 11;
+  opacity: 0.54;
+}
+
 .concentric-guide {
   fill: none;
   stroke: #dbe4ee;

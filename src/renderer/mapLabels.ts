@@ -50,7 +50,7 @@ function overlap(a: Rect, b: Rect): number {
   return Math.max(0, dx) * Math.max(0, dy);
 }
 
-export function touchesRect({ a, b }: Segment, rect: Rect): boolean {
+function segmentInterval({ a, b }: Segment, rect: Rect): [number, number] | undefined {
   // Clip the parameter interval of the segment against both rectangle axes.
   let low = 0;
   let high = 1;
@@ -59,16 +59,42 @@ export function touchesRect({ a, b }: Segment, rect: Rect): boolean {
     [a.y, b.y - a.y, rect.y, rect.y + rect.height],
   ]) {
     if (Math.abs(delta) < 1e-9) {
-      if (origin < min || origin > max) return false;
+      if (origin < min || origin > max) return undefined;
       continue;
     }
     const enter = (min - origin) / delta;
     const leave = (max - origin) / delta;
     low = Math.max(low, Math.min(enter, leave));
     high = Math.min(high, Math.max(enter, leave));
-    if (low > high) return false;
+    if (low > high) return undefined;
   }
-  return true;
+  return [low, high];
+}
+
+export function touchesRect(segment: Segment, rect: Rect): boolean {
+  return segmentInterval(segment, rect) !== undefined;
+}
+
+export function visibleLeaderSegments(label: LabelPlacement, others: LabelPlacement[]): Segment[] {
+  const leader = label.leader;
+  if (!leader) return [];
+  const { from: a, to: b } = leader;
+  const at = (t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  const gaps = others.flatMap(other => {
+    if (other.nodeId === label.nodeId) return [];
+    const interval = segmentInterval({ a, b }, expand(other.rect, 7));
+    return interval ? [interval] : [];
+  }).sort((first, second) => first[0] - second[0]);
+  // Print the guide on either side of any other label it passes. The original
+  // endpoints still identify the station and its own callout.
+  const segments: Segment[] = [];
+  let cursor = 0;
+  for (const [start, end] of gaps) {
+    if (start > cursor) segments.push({ a: at(cursor), b: at(start) });
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < 1) segments.push({ a: at(cursor), b });
+  return segments;
 }
 
 function segmentIndex(routes: RenderedRoutePath[], margin: number) {
@@ -122,7 +148,7 @@ function segmentIndex(routes: RenderedRoutePath[], margin: number) {
   };
 }
 
-function textWidth(text: string, font: number) {
+export function textWidth(text: string, font: number) {
   return Array.from(text).reduce((width, character) => {
     if (/^[ilI1.,'/() ]$/.test(character)) return width + 0.43 * font;
     if (/^[MW@%]$/.test(character)) return width + 1.03 * font;
@@ -176,11 +202,11 @@ function optionsForLabel(
     const gap = Math.hypot(to.x - from.x, to.y - from.y);
     const leader = (detached || gap > 12) && gap > 2 ? { from, to } : undefined;
     const leaderCost = leader ? 18 + routeIndex.leaderPenalty({ a: from, b: to }) : 0;
-    const cost = stationOverlap * 800 + (routeOverlap ? 100000 : 0) + gap * 1.5 + leaderCost + preference;
+    const cost = stationOverlap * 16000 + (routeOverlap ? 10000000 : 0) + gap * 1.5 + leaderCost + preference;
     options.push({ placement: { nodeId, text, englishText, x, y, textAnchor: anchor, rect, badge, leader }, cost });
   }
 
-  for (const gap of [6, 12, 21, 35, 52, 75, 105, 145, 190, 240]) {
+  for (const gap of [6, 12, 21, 35, 52, 75, 105, 145, 190, 240, 300]) {
     for (const offset of [0, -0.62, 0.62, -1.2, 1.2]) {
       const top = point.y - height / 2 + offset * height;
       add(point.x + marker.width / 2 + gap, top, 'start', Math.abs(offset) * 5);
@@ -239,8 +265,8 @@ export function buildLabelPlacements(
         const other = selected[j].placement;
         const otherRect = expand(other.rect, 2);
         score += overlap(rect, otherRect) * 750;
-        if (candidate.placement.leader && touchesRect({ a: candidate.placement.leader.from, b: candidate.placement.leader.to }, otherRect)) score += 400;
-        if (other.leader && touchesRect({ a: other.leader.from, b: other.leader.to }, rect)) score += 400;
+        if (candidate.placement.leader && touchesRect({ a: candidate.placement.leader.from, b: candidate.placement.leader.to }, otherRect)) score += 18000;
+        if (other.leader && touchesRect({ a: other.leader.from, b: other.leader.to }, rect)) score += 18000;
         if (score >= bestScore) break;
       }
       if (score < bestScore) {

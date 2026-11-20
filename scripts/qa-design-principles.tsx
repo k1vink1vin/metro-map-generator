@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { buildGraph } from '../src/core/graph.ts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
@@ -111,6 +112,20 @@ function circularCenter(item: PathCommand): Point | undefined {
   };
 }
 
+function isHexFillet(arc: PathCommand, incoming?: PathCommand, outgoing?: PathCommand) {
+  const center = circularCenter(arc);
+  if (!center || !arc.from || !incoming?.from || !outgoing?.from ||
+      incoming.command !== 'L' || outgoing.command !== 'L' || arc.operands[0] > 14.00001) return false;
+  const radius = arc.operands[0];
+  const chord = distance(arc.from, arc.to);
+  const angle = 2 * Math.asin(Math.min(1, chord / (2 * radius))) * 180 / Math.PI;
+  if (arc.operands[3] !== 0 || Math.min(Math.abs(angle - 60), Math.abs(angle - 120)) > 1e-5) return false;
+  return [[incoming.from, arc.from], [outgoing.to, arc.to]].every(([a, b]) =>
+    Math.abs((a.x - b.x) * (center.x - b.x) + (a.y - b.y) * (center.y - b.y)) <
+       1e-5 * Math.max(1, radius * distance(a, b)),
+  );
+}
+
 function renderedAngleAudit(layout: LayoutResult) {
   let worst = 0;
   let checked = 0;
@@ -162,12 +177,15 @@ function renderedAngleAudit(layout: LayoutResult) {
     illegalCurveCommands +=
       (route.d.match(/[QC]/g) ?? []).length;
     const commands = parseCommands(route.d);
-    for (const item of commands) {
+    for (const [index, item] of commands.entries()) {
       if (!item.from) continue;
       if (item.command === 'A') {
         circleArcs++;
         const center = circularCenter(item);
-        if (!center || !centers.some(expected => distance(center, expected) < 0.005)) invalidArcs++;
+        const valid = layout.style === 'hex'
+          ? isHexFillet(item, commands[index - 1], commands[index + 1])
+          : center && centers.some(expected => distance(center, expected) < 0.005);
+        if (!valid) invalidArcs++;
         continue;
       }
       if (layout.style === 'concentric') {
@@ -209,6 +227,36 @@ function renderedAngleAudit(layout: LayoutResult) {
     abruptReversals,
     reversalDetails,
   };
+}
+
+function concentricRouteAudit(layout: LayoutResult) {
+  const center = layout.radialCenter!;
+  const bundles = buildGeometricBundleMap(graph, layout.positions);
+  function measure(points: Point[]) {
+    let lastDirection = 0;
+    let changes = 0;
+    let travel = 0;
+    for (let i = 1; i < points.length; i++) {
+      const step = distance(points[i], center) - distance(points[i - 1], center);
+      if (Math.abs(step) < 1e-5) continue;
+      const direction = Math.sign(step);
+      changes += Number(lastDirection !== 0 && direction !== lastDirection);
+      lastDirection = direction;
+      travel += Math.abs(step);
+    }
+    return { changes, travel };
+  }
+  return buildRenderedRoutePaths(graph, layout).map(route => {
+    const line = graph.lines.find(item => item.id === route.lineId)!;
+    const anchors = offsetPathForLine(graph, line.paths[route.pathIndex], layout.positions, line.id, 12, bundles);
+    const stationSequence = measure(anchors);
+    const rendered = measure(route.samples);
+    const commands = parseCommands(route.d).slice(1);
+    const rightAngleJoins = commands.slice(1).filter((command, index) => command.command !== commands[index].command).length;
+    return { line: route.lineId, path: line.pathIds?.[route.pathIndex] ?? String(route.pathIndex),
+      stationRadialDirectionChanges: stationSequence.changes, renderedRadialDirectionChanges: rendered.changes,
+      extraRadialTravel: Number(Math.max(0, rendered.travel - stationSequence.travel).toFixed(3)), rightAngleJoins };
+  });
 }
 
 function topologyAudit(layout: LayoutResult) {
@@ -573,6 +621,11 @@ const syntheticParallel = syntheticParallelGapAudit();
 
 for (const style of styles) {
   const layout = workbookLayout(style);
+  if (style === 'concentric') {
+    const routes = concentricRouteAudit(layout);
+    mkdirSync('qa-artifacts', { recursive: true });
+    writeFileSync('qa-artifacts/concentric-routing.json', JSON.stringify(routes, null, 2));
+  }
   const topology = topologyAudit(layout);
   const angles = renderedAngleAudit(layout);
   const rounded = roundedCornerAudit(layout);
@@ -584,7 +637,7 @@ for (const style of styles) {
   const angleCompliant =
     angles.illegalCurveCommands === 0 &&
     angles.invalidArcs === 0 &&
-    (!(style === 'moscow' || style === 'concentric') || angles.circleArcs > 0) &&
+    (!(style === 'moscow' || style === 'concentric' || style === 'hex') || angles.circleArcs > 0) &&
     angles.abruptReversals === 0 &&
     angles.worstDegrees < 1e-6;
   const roundedCompliant =

@@ -319,7 +319,7 @@ Available station-marker systems:
 - `osaka` — horizontal station codes on filled line-color plates, stacked at transfers.
 - `moscow` — line-colored circular stations and concentric transfer rings.
 
-The selected station style is rendered directly into the live SVG and therefore remains identical in SVG export. QA renders all three station styles from `TPE_Metro.xlsm` on every CI run.
+The selected station style is rendered directly into the live SVG and therefore remains identical in SVG export. QA renders all four station symbol styles from `TPE_Metro.xlsm` on every CI run.
 
 ## Moscow terminal exits
 

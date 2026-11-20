@@ -98,7 +98,7 @@ export function routeCorridorBands(routes: RenderedRoutePath[], routeWidth: numb
       const colors = [...new Set(owners.map(route => routes[route].lineColor))];
       if (colors.length < 2 || (b - a) * unitLength < 2.5) continue;
       const casing = path(a, b, 0);
-      const width = Math.max(routeWidth + 2, colors.length * 3.2) / colors.length;
+      const width = Math.max(routeWidth + 3, colors.length * 3.5) / colors.length;
       bands[owners[owners.length - 1]].push({
         width,
         casing,

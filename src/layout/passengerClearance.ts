@@ -92,7 +92,7 @@ function pointAtFraction(samples: Point[], fraction: number): Point {
 }
 
 function renderedSelfCrossings(graph: GraphModel, layout: LayoutResult): number {
-  return buildRenderedRoutePaths(graph, layout).reduce(
+  return buildRenderedRoutePaths(graph, layout, false).reduce(
     (sum, route) => sum + sampledSelfCrossings(route.samples), 0,
   );
 }

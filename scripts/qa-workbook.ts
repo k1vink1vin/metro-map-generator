@@ -4,6 +4,7 @@ for (const run of [
   () => import('./qa-design-principles.tsx'),
   () => import('./qa-layouts.ts'),
   () => import('./qa-geography.ts'),
+  () => import('./qa-centres.tsx'),
 ]) {
   try {
     await run();

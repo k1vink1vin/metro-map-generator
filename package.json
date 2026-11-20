@@ -13,7 +13,8 @@
     "qa:geography": "node --import tsx scripts/qa-geography.ts",
     "qa:principles": "node --import tsx scripts/qa-design-principles.tsx",
     "qa:workbook": "node --import tsx scripts/qa-workbook.ts",
-    "qa:print": "node scripts/qa-print.mjs"
+    "qa:print": "node scripts/qa-print.mjs",
+    "qa:centres": "node --import tsx scripts/qa-centres.tsx"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

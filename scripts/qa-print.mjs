@@ -99,9 +99,14 @@ try {
           const b = box(element, stroke(element));
           return b.x < view.x - 0.5 || b.y < view.y - 0.5 || b.x + b.w > view.x + view.width + 0.5 || b.y + b.h > view.y + view.height + 0.5;
         }).map(element => element.dataset.lineId || element.textContent || element.getAttribute('class'));
+      const panel = svg.querySelector('#map-legend-panel > rect');
+      const panelBox = panel && box(panel);
+      const legendCollisions = panelBox ? [...labels, ...badges]
+        .filter(item => overlaps(item, panelBox)).map(item => item.id) : [];
       const labelsByCell = new Map();
       const cell = 64;
-      const gap = 7;
+      const visiblePaths = [...svg.querySelectorAll('#lines path')];
+      const gap = Math.max(7, ...visiblePaths.map(path => stroke(path))) + 3;
       for (const label of labels) {
         for (let x = Math.floor((label.x - gap) / cell); x <= Math.floor((label.x + label.w + gap) / cell); x++) {
           for (let y = Math.floor((label.y - gap) / cell); y <= Math.floor((label.y + label.h + gap) / cell); y++) {
@@ -112,24 +117,62 @@ try {
           }
         }
       }
-      const routeLabelCollisions = new Set();
-      for (const route of routeElements) {
-        const lineStroke = stroke(route) + (route.parentElement.querySelector('.route-contrast-casing') ? 1.5 : 0);
-        const total = route.getTotalLength();
-        for (let part = 0; part < total; part += 3) {
-          const { x, y } = route.getPointAtLength(part);
-          for (const label of labelsByCell.get(`${Math.floor(x / cell)}/${Math.floor(y / cell)}`) ?? []) {
-            if (x > label.x - lineStroke && x < label.x + label.w + lineStroke &&
-                y > label.y - lineStroke && y < label.y + label.h + lineStroke) routeLabelCollisions.add(`${label.id}/${route.dataset.lineId}`);
+
+      function segmentHitsBox(a, b, box, margin) {
+        let start = 0;
+        let end = 1;
+        for (const [origin, delta, min, max] of [
+          [a.x, b.x - a.x, box.x - margin, box.x + box.w + margin],
+          [a.y, b.y - a.y, box.y - margin, box.y + box.h + margin],
+        ]) {
+          if (Math.abs(delta) < 1e-9) {
+            if (origin < min || origin > max) return false;
+            continue;
           }
+          const entry = (min - origin) / delta;
+          const exit = (max - origin) / delta;
+          start = Math.max(start, Math.min(entry, exit));
+          end = Math.min(end, Math.max(entry, exit));
+          if (end < start) return false;
+        }
+        return true;
+      }
+
+      const routeLabelCollisions = new Set();
+      const routeLegendCollisions = new Set();
+      for (const route of visiblePaths) {
+        const lineStroke = stroke(route);
+        const lineId = route.closest('[data-line-id]')?.dataset.lineId ?? 'unknown';
+        const total = route.getTotalLength();
+        let prev = route.getPointAtLength(0);
+        for (let part = 3; ; part += 3) {
+          const point = route.getPointAtLength(Math.min(part, total));
+          for (const label of labelsByCell.get(`${Math.floor(point.x / cell)}/${Math.floor(point.y / cell)}`) ?? []) {
+            if (segmentHitsBox(prev, point, label, lineStroke)) routeLabelCollisions.add(`${label.id}/${lineId}`);
+          }
+          if (panelBox && segmentHitsBox(prev, point, panelBox, lineStroke)) routeLegendCollisions.add(lineId);
+          if (part >= total) break;
+          prev = point;
+        }
+      }
+
+      const leaderLabelCollisions = [];
+      for (const leader of svg.querySelectorAll('#station-leaders line')) {
+        const from = { x: leader.x1.baseVal.value, y: leader.y1.baseVal.value };
+        const to = { x: leader.x2.baseVal.value, y: leader.y2.baseVal.value };
+        for (const label of labels) {
+          if (label.id === leader.dataset.leaderFor) continue;
+          if (segmentHitsBox(from, to, label, stroke(leader))) leaderLabelCollisions.push(`${leader.dataset.leaderFor}/${label.id}`);
         }
       }
       const minText = Math.min(...labelElements.map(e => Number.parseFloat(getComputedStyle(e).fontSize)));
       return {
         dimensions: { width: view.width, height: view.height }, minText,
         labels: labels.length, routes: routeElements.length, crossingClips: svg.querySelectorAll('clipPath[id^="crossing-gap-"]').length,
-        leaders: svg.querySelectorAll('#station-leaders line').length, missing, badCodes, badRoutes,
+        leaders: new Set([...svg.querySelectorAll('#station-leaders line')].map(line => line.dataset.leaderFor)).size, missing, badCodes, badRoutes,
         labelCollisions, markerCollisions, labelMarkerCollisions, outside, routeLabelCollisions: [...routeLabelCollisions],
+        legendPlacement: panel?.parentElement.dataset.placement, legendCollisions,
+        routeLegendCollisions: [...routeLegendCollisions], leaderLabelCollisions,
       };
     }, { fixture });
     // A 4.5 mm Chinese em is the minimum for this proof set. Keep the vector
@@ -148,7 +191,8 @@ try {
       await page.pdf({ path: `${directory}/print/${name}.pdf`, preferCSSPageSize: true, printBackground: true });
     }
     const defects = [...audit.missing, ...audit.badCodes, ...audit.badRoutes, ...audit.labelCollisions,
-      ...audit.markerCollisions, ...audit.labelMarkerCollisions, ...audit.outside, ...audit.routeLabelCollisions];
+      ...audit.markerCollisions, ...audit.labelMarkerCollisions, ...audit.outside, ...audit.routeLabelCollisions,
+      ...audit.legendCollisions, ...audit.routeLegendCollisions, ...audit.leaderLabelCollisions];
     reports.push({ name, ...audit, pageMm, passed: !defects.length });
     console.log(`${name} ${pageMm.width} × ${pageMm.height} mm, ${audit.labels} labels, ${defects.length} defects`);
   }

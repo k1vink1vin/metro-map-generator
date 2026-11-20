@@ -241,6 +241,6 @@ const circularBands = routeCorridorBands([
   bandPath('inbound', '#c35617', 'M 0 100 A 100 100 0 0 0 100 0'),
 ], 8);
 assert.equal(circularBands[1].length, 1);
-assert.ok(circularBands[1][0].stripes[0].d.includes('A 97.5 97.5'));
-assert.ok(circularBands[1][0].stripes[1].d.includes('A 102.5 102.5'));
+assert.ok(circularBands[1][0].stripes[0].d.includes('A 97.25 97.25'));
+assert.ok(circularBands[1][0].stripes[1].d.includes('A 102.75 102.75'));
 console.log('Painted corridor QA passed: coincident straight and circular routes keep both colors visible.');

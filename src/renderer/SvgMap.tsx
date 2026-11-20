@@ -6,10 +6,11 @@ import type {
   Point,
   StationVisualStyle,
 } from '../types';
-import { buildLabelPlacements, type LabelPlacement, type MarkerSize } from './mapLabels';
+import { buildLabelPlacements, centeredRect, textWidth, visibleLeaderSegments, type LabelPlacement, type MarkerSize } from './mapLabels';
 import { mapStyles } from './mapStyles';
 import { disjointGapGroups, routeCrossingGaps } from './crossingGaps';
 import { routeCorridorBands } from './routeCorridors';
+import { placeLegend } from './mapComposition';
 
 
 function relativeLuminance(color: string): number | undefined {
@@ -605,13 +606,17 @@ function mapPresentation(
   if (cached?.graph === graph) return cached;
   const sizes = new Map(graph.nodes.map(node => [node.id, markerSize(graph, node, stationStyle, markerScale)]));
   const detached = detachedMarkers(graph, layout, sizes);
-  const labelPlacements = buildLabelPlacements(
-    graph, layout.positions, sizes, detached, detachedAnchorSize, routes, routeWidth / 2 + 4, fontSize, englishSize,
-  );
-  const labelByNode = new Map(labelPlacements.map(label => [label.nodeId, label]));
-  const previous = styles.values().next().value;
+  const previous = [...styles.values()].find(presentation => presentation.graph === graph);
   const crossingGaps = previous?.crossingGaps ?? routeCrossingGaps(graph, layout.positions, routes, routeWidth);
   const corridorBands = previous?.corridorBands ?? routeCorridorBands(routes, routeWidth);
+  const corridorMargin = Math.max(0, ...corridorBands.flatMap(bands => bands.map(band =>
+    (band.stripes.length * band.width + 1.3) / 2,
+  )));
+  const labelPlacements = buildLabelPlacements(
+    graph, layout.positions, sizes, detached, detachedAnchorSize, routes,
+    Math.max(routeWidth / 2 + 5, corridorMargin + 3), fontSize, englishSize,
+  );
+  const labelByNode = new Map(labelPlacements.map(label => [label.nodeId, label]));
   const output = { graph, detached, labelPlacements, labelByNode, crossingGaps, corridorBands };
   styles.set(stationStyle, output);
   presentationCache.set(layout, styles);
@@ -682,7 +687,7 @@ export function SvgMap({
     });
   });
   const headingByStyle = {
-    geographic: '地理投影',
+    geographic: '地理投影（站間直連）',
     taipei: '台北 45°',
     london: '倫敦 45°',
     moscow: '莫斯科環形放射',
@@ -691,22 +696,51 @@ export function SvgMap({
   };
   const taipeiNetwork = graph.lines.some(line => line.id === 'TPE_BL') && graph.lines.some(line => line.id === 'TAO_A');
   const mapTitle = taipeiNetwork ? '大台北與桃園軌道路網' : '軌道路網';
-  const legendWidth = Math.max(335, ...legendEntries.map(entry => 95 + Array.from(entry.name).length * 18));
   const partialRailCoverage = graph.lines.some(line => line.id === 'THSR' || line.id === 'TR');
   const missingEnglishNames = graph.nodes.filter(node => !node.nameEn?.trim()).length;
   const ordinary = graph.nodes.find(node => !isInterchangeNode(graph, node));
   const interchange = graph.nodes.find(node => isInterchangeNode(graph, node) && node.stationIds.length === 2);
-  const legendX = bounds.x + Math.max(bounds.width, 300) + 22;
-  const legendY = bounds.y + 48;
+  const centerName = layout.radialCenterNodeId && graph.nodeById.get(layout.radialCenterNodeId)?.name;
+  const subtitle = `${headingByStyle[layout.style]}${centerName ? `（中心 ${centerName}）` : ''}・${taipeiNetwork ? '工作簿全路網（含規劃路線）' : '路網示意圖'}`;
+  const shortSide = Math.min(bounds.width, bounds.height);
+  const titleSize = Math.max(40, Math.min(78, shortSide * 0.023));
+  const subtitleSize = Math.max(18, Math.min(39, shortSide * 0.012));
+  const headingHeight = titleSize * 1.25 + subtitleSize * 1.65 + 26;
+  const keyScale = Math.max(1, Math.min(1.5, shortSide / 1500));
+  const legendWidth = Math.max(335, ...legendEntries.map(entry => 72 + textWidth(entry.name, 17)));
+  const legendX = 18;
+  const legendY = 38;
   const footnoteY = legendY + 53 + legendEntries.length * 31;
   const noteCount = Number(partialRailCoverage) + Number(missingEnglishNames > 0);
   const hasCorridors = corridorBands.some(bands => bands.length);
   const notesOffset = hasCorridors ? 176 : 145;
+  const legendHeight = footnoteY + notesOffset + 55 + noteCount * 23;
+
+  const markers = graph.nodes.map(node => centeredRect(
+    layout.positions[node.id],
+    detached.has(node.id) ? detachedAnchorSize : markerSize(graph, node, stationStyle, stationVisualScale),
+  ));
+  const riverPoints = taipeiRiver
+    ? (taipeiRiver.d.match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi) ?? []).map(Number)
+    : [];
+  const riverBounds = riverPoints.length >= 2 ? (() => {
+    const xs = riverPoints.filter((_, i) => i % 2 === 0);
+    const ys = riverPoints.filter((_, i) => i % 2 !== 0);
+    return { x: Math.min(...xs) - 16, y: Math.min(...ys) - 16,
+      width: Math.max(...xs) - Math.min(...xs) + 32, height: Math.max(...ys) - Math.min(...ys) + 32 };
+  })() : undefined;
+  const legend = placeLegend(
+    bounds, (legendWidth + 38) * keyScale, legendHeight * keyScale,
+    [...markers, ...labelPlacements.map(label => label.rect), ...(riverBounds ? [riverBounds] : [])],
+    [...routePaths.map(route => route.samples), ...labelPlacements.flatMap(({ leader }) => leader ? [[leader.from, leader.to]] : [])],
+  );
+  const panel = legend.panel;
   const fullBounds = {
     x: bounds.x,
-    y: bounds.y - 93,
-    width: legendX - bounds.x + legendWidth + 24,
-    height: Math.max(bounds.height + 93, footnoteY - bounds.y + 93 + notesOffset + 80 + noteCount * 23),
+    y: bounds.y - headingHeight,
+    width: Math.max(bounds.width, legend.inside ? 0 : panel.x - bounds.x + panel.width + 24,
+      textWidth(mapTitle, titleSize) + 72, textWidth(subtitle, subtitleSize) + 72),
+    height: Math.max(bounds.height, legend.inside ? 0 : panel.y - bounds.y + panel.height + 24) + headingHeight,
   };
   const maxGuideRadius = concentricGuide ? Math.min(
     concentricGuide.center.x - bounds.x, bounds.x + bounds.width - concentricGuide.center.x,
@@ -718,7 +752,6 @@ export function SvgMap({
   const labelWidth = (node: GraphNode | undefined) => node ? markerSize(graph, node, stationStyle, stationVisualScale).width : 0;
   const symbolColumn = Math.max(labelWidth(ordinary), labelWidth(interchange), 16) / 2 + 6;
   const routeIndex = new Map(routePaths.map((path, index) => [path, index]));
-  const centerName = layout.radialCenterNodeId && graph.nodeById.get(layout.radialCenterNodeId)?.name;
   const sourceLabel = Array.from(sourceName).length > 19 ? `${Array.from(sourceName).slice(0, 18).join('')}…` : sourceName;
 
   return (
@@ -754,8 +787,8 @@ export function SvgMap({
       />
 
       <g id="map-heading" className="map-ink">
-        <text x={bounds.x + 30} y={fullBounds.y + 50} fontSize="40" fontWeight="700">{mapTitle}</text>
-        <text x={bounds.x + 31} y={fullBounds.y + 78} fontSize="18">{headingByStyle[layout.style]}{centerName ? `（中心 ${centerName}）` : ''}・{taipeiNetwork ? '工作簿全路網（含規劃路線）' : '路網示意圖'}</text>
+        <text x={bounds.x + 30} y={fullBounds.y + titleSize * 1.18} fontSize={titleSize} fontWeight="700">{mapTitle}</text>
+        <text x={bounds.x + 32} y={fullBounds.y + titleSize * 1.18 + subtitleSize * 1.42} fontSize={subtitleSize}>{subtitle}</text>
       </g>
 
       {taipeiRiver ? (
@@ -773,11 +806,11 @@ export function SvgMap({
 
       {layout.style === 'moscow' && layout.moscowRings?.length ? (
         <g className="moscow-ring-emphasis" aria-hidden="true">
-          {layout.moscowRings.map((ring) => {
+          {layout.moscowRings.map((ring, index) => {
             const circle = circleThroughStations(ring.nodes.map(id => layout.positions[id]));
             if (!circle) return null;
             return <circle key={ring.id} cx={circle.center.x} cy={circle.center.y}
-              r={circle.radius} className="moscow-ring-halo" />;
+              r={circle.radius} className="moscow-ring-halo" data-emphasis={index === 0 ? 'primary' : 'secondary'} />;
           })}
         </g>
       ) : null}
@@ -858,7 +891,7 @@ export function SvgMap({
                     <g key={index} data-route-corridor="true" aria-hidden="true" fill="none">
                       <path d={casing} stroke="#334155" strokeWidth={stripes.length * width + 1.3} />
                       {stripes.map(({ color, d }) => (
-                        <path key={color} d={d} stroke={color} strokeWidth={width - 0.35} />
+                        <path key={color} d={d} stroke={color} strokeWidth={width - 0.9} />
                       ))}
                     </g>
                   ))}
@@ -870,10 +903,10 @@ export function SvgMap({
       </g>
 
       <g id="station-leaders" aria-hidden="true">
-        {labelPlacements.map(({ nodeId, leader }) => leader ? (
-          <line key={nodeId} className="station-leader"
-            x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} />
-        ) : null)}
+        {labelPlacements.flatMap(label => visibleLeaderSegments(label, labelPlacements).map(({ a, b }, index) => (
+          <line key={`${label.nodeId}-${index}`} className="station-leader" data-leader-for={label.nodeId}
+            x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
+        )))}
       </g>
 
       <g id="stations" data-station-style={stationStyle}>
@@ -924,61 +957,63 @@ export function SvgMap({
           pointerEvents="none"
         />
       ) : null}
-      <g id="route-legend" className="map-ink" aria-label="路線圖例">
-        <line x1={legendX - 21} y1={legendY - 28} x2={legendX - 21} y2={footnoteY + notesOffset + 30 + noteCount * 23}
-          stroke="#cbd5e1" strokeWidth="1.2" />
-        <text x={legendX} y={legendY} fontSize="23" fontWeight="700">路線圖例</text>
-        {legendEntries.map((entry, index) => (
-          <g key={entry.key} data-legend-route={entry.key}
-            transform={`translate(${legendX} ${legendY + 28 + index * 31})`}>
-            {needsDarkRouteCasing(entry.color) ? <line x1={3} y1={0} x2={42} y2={0} stroke="#334155" strokeWidth={12} strokeLinecap="round" /> : null}
-            <line x1={3} y1={0} x2={42} y2={0} stroke={entry.color} strokeWidth={9} strokeLinecap="round" />
-            <text x={57} y={6} fontSize={17} fontWeight={600}>{entry.name}</text>
+      <g id="map-legend-panel" data-placement={legend.inside ? 'inset' : 'side'}
+        transform={`translate(${panel.x} ${panel.y}) scale(${keyScale})`}>
+        <rect width={legendWidth + 38} height={legendHeight} rx={9} fill="#fff" stroke="#cbd5e1" />
+        <g id="route-legend" className="map-ink" aria-label="路線圖例">
+          <text x={legendX} y={legendY} fontSize="23" fontWeight="700">路線圖例</text>
+          {legendEntries.map((entry, index) => (
+            <g key={entry.key} data-legend-route={entry.key}
+              transform={`translate(${legendX} ${legendY + 28 + index * 31})`}>
+              {needsDarkRouteCasing(entry.color) ? <line x1={3} y1={0} x2={42} y2={0} stroke="#334155" strokeWidth={12} strokeLinecap="round" /> : null}
+              <line x1={3} y1={0} x2={42} y2={0} stroke={entry.color} strokeWidth={9} strokeLinecap="round" />
+              <text x={57} y={6} fontSize={17} fontWeight={600}>{entry.name}</text>
+            </g>
+          ))}
+          <g id="station-key" transform={`translate(${legendX} ${footnoteY})`} aria-label="站點符號">
+            <text fontSize="21" fontWeight="700">站點符號</text>
+            {ordinary ? <g transform="translate(0 28)">
+              <g transform={`translate(${symbolColumn} 0)`}>{renderMarker(graph, ordinary, stationStyle, stationVisualScale)}</g>
+              <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>一般站</text>
+            </g> : null}
+            {interchange ? <g transform="translate(0 69)">
+              <g transform={`translate(${symbolColumn} 0)`}>{renderMarker(graph, interchange, stationStyle, stationVisualScale)}</g>
+              <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>轉乘站</text>
+            </g> : null}
+            {hasCrossings ? <g transform="translate(0 106)">
+              <path d={`M ${symbolColumn - 16} 0 h 9 m 14 0 h 9 M ${symbolColumn} -10 v 20`}
+                fill="none" stroke="#475569" strokeWidth="3" strokeLinecap="round" />
+              <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>路線交叉，無轉乘</text>
+            </g> : null}
+            {hasCorridors ? <g transform={`translate(0 ${hasCrossings ? 137 : 106})`}>
+              <path d={`M ${symbolColumn - 16} -2 h 32`} stroke="#0070BD" strokeWidth="3.2" />
+              <path d={`M ${symbolColumn - 16} 2 h 32`} stroke="#C35617" strokeWidth="3.2" />
+              <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>並行路線</text>
+            </g> : null}
           </g>
-        ))}
-        <g id="station-key" transform={`translate(${legendX} ${footnoteY})`} aria-label="站點符號">
-          <text fontSize="21" fontWeight="700">站點符號</text>
-          {ordinary ? <g transform="translate(0 28)">
-            <g transform={`translate(${symbolColumn} 0)`}>{renderMarker(graph, ordinary, stationStyle, stationVisualScale)}</g>
-            <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>一般站</text>
-          </g> : null}
-          {interchange ? <g transform="translate(0 69)">
-            <g transform={`translate(${symbolColumn} 0)`}>{renderMarker(graph, interchange, stationStyle, stationVisualScale)}</g>
-            <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>轉乘站</text>
-          </g> : null}
-          {hasCrossings ? <g transform="translate(0 106)">
-            <path d={`M ${symbolColumn - 16} 0 h 9 m 14 0 h 9 M ${symbolColumn} -10 v 20`}
-              fill="none" stroke="#475569" strokeWidth="3" strokeLinecap="round" />
-            <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>路線交叉，無轉乘</text>
-          </g> : null}
-          {hasCorridors ? <g transform={`translate(0 ${hasCrossings ? 137 : 106})`}>
-            <path d={`M ${symbolColumn - 16} -2 h 32`} stroke="#0070BD" strokeWidth="3.2" />
-            <path d={`M ${symbolColumn - 16} 2 h 32`} stroke="#C35617" strokeWidth="3.2" />
-            <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>並行路線</text>
-          </g> : null}
         </g>
-      </g>
-      {isGeographic ? (
-        <g id="north-arrow" className="map-ink" transform={`translate(${legendX + legendWidth - 14} ${legendY - 5})`}>
-          <text y="-13" textAnchor="middle" fontSize="17" fontWeight="700">北</text>
-          <path d="M 0 -5 L 7 16 L 0 11 L -7 16 Z" />
-        </g>
-      ) : null}
-      <g id="map-provenance" className="map-ink" aria-label="資料來源與產製資訊"
-        transform={`translate(${legendX} ${footnoteY + notesOffset})`}>
-        <text y={0} fontSize={16} fontWeight={700}>
-          <title>{sourceName}</title>
-          資料來源　{sourceLabel}
-        </text>
-        {partialRailCoverage ? (
-          <text y={23} fontSize={14}>台鐵／高鐵僅顯示輸入資料所列部分車站</text>
+        {isGeographic ? (
+          <g id="north-arrow" className="map-ink" transform={`translate(${legendX + legendWidth - 14} ${legendY - 5})`}>
+            <text y="-13" textAnchor="middle" fontSize="17" fontWeight="700">北</text>
+            <path d="M 0 -5 L 7 16 L 0 11 L -7 16 Z" />
+          </g>
         ) : null}
-        {missingEnglishNames ? (
-          <text y={23 + Number(partialRailCoverage) * 23} fontSize={14}>
-            英文站名缺漏：{missingEnglishNames} 站
+        <g id="map-provenance" className="map-ink" aria-label="資料來源與產製資訊"
+          transform={`translate(${legendX} ${footnoteY + notesOffset})`}>
+          <text y={0} fontSize={16} fontWeight={700}>
+            <title>{sourceName}</title>
+            資料來源　{sourceLabel}
           </text>
-        ) : null}
-        <text y={23 + noteCount * 23} fontSize={14} fill="#7f1d1d">規劃示意・以營運單位公告為準</text>
+          {partialRailCoverage ? (
+            <text y={23} fontSize={14}>台鐵／高鐵僅顯示輸入資料所列部分車站</text>
+          ) : null}
+          {missingEnglishNames ? (
+            <text y={23 + Number(partialRailCoverage) * 23} fontSize={14}>
+              英文站名缺漏：{missingEnglishNames} 站
+            </text>
+          ) : null}
+          <text y={23 + noteCount * 23} fontSize={14} fill="#7f1d1d">規劃示意・以營運單位公告為準</text>
+        </g>
       </g>
       <g id="labels">
         {labelPlacements.map((label) => (

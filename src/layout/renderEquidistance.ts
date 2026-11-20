@@ -105,7 +105,7 @@ function totalRenderedSelfCrossings(
   graph: GraphModel,
   layout: LayoutResult,
 ): number {
-  return buildRenderedRoutePaths(graph, layout).reduce(
+  return buildRenderedRoutePaths(graph, layout, false).reduce(
     (sum, route) => sum + sampledSelfCrossings(route.samples),
     0,
   );
@@ -134,7 +134,7 @@ export function equalizeRenderedStationRhythm(
       : [],
   );
   const bundles = buildGeometricBundleMap(graph, layout.positions);
-  const rendered = buildRenderedRoutePaths(graph, layout);
+  const rendered = buildRenderedRoutePaths(graph, layout, false);
   const proposals = new Map<string, Point[]>();
 
   for (const route of rendered) {
