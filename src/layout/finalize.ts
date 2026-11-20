@@ -210,7 +210,7 @@ function uniformlyEnforceMinimumNodeDistance(
       entries.reduce((sum, [, point]) => sum + point.y, 0) /
       Math.max(1, entries.length),
   };
-  const scale = minimumDistance / minimum;
+  const scale = Math.min(2, minimumDistance / minimum);
 
   return Object.fromEntries(
     entries.map(([id, point]) => [

@@ -228,16 +228,12 @@ B03,市政府,24.154,120.663,XFER_001
 If the user later renames both rows to `市府`, `XFER_001` remains the topology key. The website also auto-generates XFER IDs for repeated coordinates when the transfer column is blank. Existing XFER IDs take precedence, and automatically generated IDs avoid collisions with existing groups.
 
 
-## Detail scale
+## Map zoom
 
-The map control is a detail scale rather than a plain bitmap-like zoom.
-
-- Increasing detail scale increases the screen distance between stations and route geometry.
-- Route stroke width, station symbols and labels are counter-scaled so they do not grow at the same rate.
-- Label collision boxes are recomputed at the current detail scale.
-- SVG export preserves the current detail scale by exporting a proportionally larger natural canvas with the same counter-scaled line/station/label sizes.
-
-This is intended to make dense urban cores readable instead of simply magnifying every overlapping element.
+Zoom enlarges the whole map. Use the station finder or click a station marker
+to open a close-up. SVG export keeps the same map composition and sets the
+file's natural dimensions from the selected zoom. The workbook print proof
+sets physical page and text sizes independently of browser zoom.
 
 ## XLSM-defined Moscow rings
 
@@ -266,32 +262,24 @@ The embedded VBA validates the ring sheet and marks rows OK/ERROR. The web impor
 
 
 
-## Passenger-map regression QA
+## Workbook maps and print proofs
 
-`TPE_Metro.xlsm` is also the fixed regression fixture for layout quality.
+`TPE_Metro.xlsm` is the regression fixture. The generator supports six network
+layouts and four independent station symbol styles. The workbook QA generates
+all 24 SVG combinations using the application's map renderer. Each contains the
+workbook's full network, including proposed lines and all branch paths.
 
-CI runs all six styles from the real workbook:
+```bash
+npm run qa:geometry
+npm run qa:workbook
+npx playwright install chromium
+METRO_PRINT_PDF=1 npm run qa:print
+```
 
-- Geographic
-- Taipei 45°
-- London 45°
-- Moscow
-- Concentric
-- Hex 60°
-
-For each style it checks station spacing, short segments, non-transfer geometric crossings, angular error where applicable, and a composite passenger-readability score. It also renders six SVG artifacts for visual inspection.
-
-Current baseline requirements are intentionally strict:
-
-- passenger readability score >= 90
-- minimum station-to-station distance >= 38 layout units
-- short edges <= 6
-- zero non-transfer crossings for all styles except Moscow
-- Moscow may have at most 4 geometric crossings because the physical Taipei network contains ring/line over-under crossings that are not transfer stations
-- 45° / 60° angular error <= 12°
-
-Both CI and GitHub Pages deployment run the workbook QA, so a code change that makes the official Taipei workbook materially less readable will not deploy.
-
+Install a Traditional Chinese font such as Noto Sans CJK TC for the browser
+check. Use `CHROMIUM_PATH` to point to an existing Chromium installation. See
+[the workbook publication QA guide](docs/PUBLICATION_QA.md) for the design
+rules, print dimensions and review evidence.
 
 ## Per-path colors
 
@@ -328,6 +316,7 @@ Available station-marker systems:
 
 - `taipei` — compact colored line-code badges; interchange codes share a framed group.
 - `tokyo` — rounded dark outer shells with colored inner line-code badges.
+- `osaka` — horizontal station codes on filled line-color plates, stacked at transfers.
 - `moscow` — line-colored circular stations and concentric transfer rings.
 
 The selected station style is rendered directly into the live SVG and therefore remains identical in SVG export. QA renders all three station styles from `TPE_Metro.xlsm` on every CI run.

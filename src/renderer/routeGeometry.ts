@@ -25,6 +25,8 @@ export function circleThroughStations(points: Point[]): CircleGeometry | undefin
 function distance(a: Point, b: Point) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function cross(a: Point, b: Point, c: Point) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
 function intersects(a: Point, b: Point, c: Point, d: Point) {
+  if (Math.max(a.x, b.x) <= Math.min(c.x, d.x) || Math.max(c.x, d.x) <= Math.min(a.x, b.x) ||
+      Math.max(a.y, b.y) <= Math.min(c.y, d.y) || Math.max(c.y, d.y) <= Math.min(a.y, b.y)) return false;
   return cross(a, b, c) * cross(a, b, d) < -1e-8 && cross(c, d, a) * cross(c, d, b) < -1e-8;
 }
 function unit(a: Point, b: Point): Point {
@@ -446,19 +448,34 @@ function orthoradialEdgeCandidates(
   const ab = Math.atan2(by, bx);
   const angleDelta = shortestSignedAngle(aa, ab);
 
+  const candidates: OrthoradialEdgeGeometry[] = [];
+  const deltas = arcDeltas(aa, ab);
+
   if (Math.abs(angleDelta) < 1e-7) {
-    return [{
+    candidates.push({
       commands: [`L ${b.x} ${b.y}`],
       samples: [a, b],
       arcCount: 0,
       length: Math.abs(rb - ra),
-    }];
+    });
+    // A radial segment may need to approach a station from another side
+    // when the following leg leaves on the same ray in the opposite direction.
+    for (const delta of [-1, 1].flatMap(sign => [16, 32].map(clearance => sign * Math.min(0.45, clearance / Math.min(ra, rb))))) {
+      const cornerA = pointOnPolar(center, ra, aa + delta);
+      const cornerB = pointOnPolar(center, rb, aa + delta);
+      candidates.push({
+        commands: [arcCommand(ra, delta, cornerA), `L ${cornerB.x} ${cornerB.y}`, arcCommand(rb, -delta, b)],
+        samples: [a, ...circularArcTopologySamples(center, ra, aa, delta), cornerB,
+          ...circularArcTopologySamples(center, rb, aa + delta, -delta)],
+        arcCount: 2,
+        length: Math.abs(rb - ra) + Math.abs(delta) * (ra + rb),
+      });
+    }
+    return candidates;
   }
 
-  const candidates: OrthoradialEdgeGeometry[] = [];
-  const deltas = arcDeltas(aa, ab);
-
-  if (Math.abs(ra - rb) < 1e-6) {
+  const sameShell = Math.abs(ra - rb) < 1e-6;
+  if (sameShell) {
     for (const delta of deltas) {
       candidates.push({
         commands: [arcCommand(ra, delta, b)],
@@ -467,8 +484,20 @@ function orthoradialEdgeCandidates(
         length: Math.abs(delta) * ra,
       });
     }
-    return candidates;
   }
+
+  const offsetRadii = sameShell ? [ra - 16, ra + 16, ra - 32, ra + 32] : [];
+  for (const routeRadius of offsetRadii.filter(radius => radius > 8)) {
+    const start = pointOnPolar(center, routeRadius, aa);
+    const end = pointOnPolar(center, routeRadius, ab);
+    candidates.push({
+      commands: [`L ${start.x} ${start.y}`, arcCommand(routeRadius, angleDelta, end), `L ${b.x} ${b.y}`],
+      samples: [a, start, ...circularArcTopologySamples(center, routeRadius, aa, angleDelta), b],
+      arcCount: 1,
+      length: 2 * Math.abs(ra - routeRadius) + Math.abs(angleDelta) * routeRadius,
+    });
+  }
+  if (sameShell) return candidates;
 
   // Option A: circular movement on the start shell, then radial movement.
   for (const delta of deltas) {
@@ -1285,6 +1314,18 @@ function orthoradialEscapePath(
   };
 }
 
+function reversesAtJoin(previous: Point[], extension: Point[]): number {
+  const join = previous[previous.length - 1];
+  let before = previous.length - 2;
+  while (before >= 0 && distance(previous[before], join) < 1e-8) before--;
+  let after = 1;
+  while (after < extension.length && distance(extension[after], join) < 1e-8) after++;
+  if (before < 0 || after === extension.length) return 0;
+  const a = unit(previous[before], join);
+  const b = unit(join, extension[after]);
+  return Number(a.x * b.x + a.y * b.y <= Math.cos(150 * Math.PI / 180));
+}
+
 function orthoradialTopologyFallbackPath(
   points: Point[],
   center: Point,
@@ -1296,6 +1337,7 @@ function orthoradialTopologyFallbackPath(
     arcCount: number;
     length: number;
     crossings: number;
+    reversals: number;
     lastEdgeLength?: number;
     rhythmPenalty: number;
     detourPenalty: number;
@@ -1312,6 +1354,7 @@ function orthoradialTopologyFallbackPath(
     arcCount: 0,
     length: 0,
     crossings: 0,
+    reversals: 0,
     lastEdgeLength: undefined,
     rhythmPenalty: 0,
     detourPenalty: 0,
@@ -1339,6 +1382,7 @@ function orthoradialTopologyFallbackPath(
       1e-9,
       Math.min(...compact.map((candidate) => candidate.length)),
     );
+    const candidateReversals = new Map(candidates.map(candidate => [candidate, axisRouteReversalCount(candidate.samples)]));
     const resetRhythm = sectionBreaks.has(index);
     const next: State[] = [];
 
@@ -1373,6 +1417,7 @@ function orthoradialTopologyFallbackPath(
           arcCount: state.arcCount + candidate.arcCount,
           length: state.length + candidate.length,
           crossings: state.crossings + addedCrossings,
+          reversals: state.reversals + reversesAtJoin(state.samples, candidate.samples) + candidateReversals.get(candidate)!,
           lastEdgeLength: candidate.length,
           rhythmPenalty:
             state.rhythmPenalty +
@@ -1387,6 +1432,7 @@ function orthoradialTopologyFallbackPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        a.reversals - b.reversals ||
         (
           a.rhythmPenalty * 8 +
           a.detourPenalty * 1.5
@@ -1401,10 +1447,11 @@ function orthoradialTopologyFallbackPath(
     states = next.slice(0, beamWidth);
   }
 
-  states.sort(
+  const ranked = states.map(state => ({ ...state, crossings: sampledSelfCrossings(state.samples) }));
+  ranked.sort(
     (a, b) =>
-      sampledSelfCrossings(a.samples) -
-        sampledSelfCrossings(b.samples) ||
+      a.crossings - b.crossings ||
+      a.reversals - b.reversals ||
       (
         a.rhythmPenalty * 8 +
         a.detourPenalty * 1.5
@@ -1417,7 +1464,7 @@ function orthoradialTopologyFallbackPath(
       a.length - b.length,
   );
 
-  const best = states[0];
+  const best = ranked[0];
   return {
     d: best.commands.join(' '),
     samples: best.samples,
@@ -1450,6 +1497,7 @@ function orthoradialPath(
     arcCount: number;
     length: number;
     crossings: number;
+    reversals: number;
     lastEdgeLength?: number;
     rhythmPenalty: number;
     detourPenalty: number;
@@ -1461,6 +1509,7 @@ function orthoradialPath(
     arcCount: 0,
     length: 0,
     crossings: 0,
+    reversals: 0,
     lastEdgeLength: undefined,
     rhythmPenalty: 0,
     detourPenalty: 0,
@@ -1487,6 +1536,7 @@ function orthoradialPath(
       Math.min(...candidates.map((candidate) => candidate.length)),
     );
     const next: State[] = [];
+    const candidateReversals = new Map(candidates.map(candidate => [candidate, axisRouteReversalCount(candidate.samples)]));
     const resetRhythm = sectionBreaks.has(index);
 
     for (const state of states) {
@@ -1515,6 +1565,7 @@ function orthoradialPath(
           arcCount: state.arcCount + candidate.arcCount,
           length: state.length + candidate.length,
           crossings: state.crossings + addedCrossings,
+          reversals: state.reversals + reversesAtJoin(state.samples, candidate.samples) + candidateReversals.get(candidate)!,
           lastEdgeLength: candidate.length,
           rhythmPenalty:
             state.rhythmPenalty +
@@ -1529,6 +1580,7 @@ function orthoradialPath(
     next.sort(
       (a, b) =>
         a.crossings - b.crossings ||
+        a.reversals - b.reversals ||
         (
           a.rhythmPenalty * 8 +
           a.detourPenalty * 2
@@ -1548,10 +1600,11 @@ function orthoradialPath(
   // extensions can form a crossing that is visible only after the complete
   // route has been assembled, so choose the final survivor by the ACTUAL
   // sampled self-crossing count before applying rhythm/length aesthetics.
-  states.sort(
+  const ranked = states.map(state => ({ ...state, crossings: sampledSelfCrossings(state.samples) }));
+  ranked.sort(
     (a, b) =>
-      sampledSelfCrossings(a.samples) -
-        sampledSelfCrossings(b.samples) ||
+      a.crossings - b.crossings ||
+      a.reversals - b.reversals ||
       (
         a.rhythmPenalty * 8 +
         a.detourPenalty * 2
@@ -1565,7 +1618,7 @@ function orthoradialPath(
       a.commands.length - b.commands.length,
   );
 
-  const best = states[0];
+  const best = ranked[0];
   const compact: RouteGeometry = {
     d: best.commands.join(' '),
     samples: best.samples,
@@ -1574,7 +1627,8 @@ function orthoradialPath(
   };
 
   const compactCrossings = sampledSelfCrossings(compact.samples);
-  if (compactCrossings > allowedCrossings) {
+  const compactReversals = axisRouteReversalCount(compact.samples);
+  if (compactCrossings > allowedCrossings || compactReversals > 0) {
     const globalFallback = orthoradialTopologyFallbackPath(
       points,
       center,
@@ -1998,9 +2052,6 @@ export function stationAnchoredPath(
         })()
       : undefined;
   if (layout.style === 'concentric' && concentricCenter) {
-    const baseline = sampledSelfCrossings(
-      path.map((nodeId) => layout.positions[nodeId]),
-    );
     const sectionBreaks = new Set<number>([0]);
     path.forEach((nodeId, index) => {
       if (
@@ -2020,7 +2071,7 @@ export function stationAnchoredPath(
     return orthoradialPath(
       points,
       concentricCenter,
-      baseline,
+      0,
       sectionBreaks,
     );
   }

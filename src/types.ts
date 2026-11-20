@@ -79,6 +79,7 @@ export interface GraphEdge {
 }
 
 export interface GraphLine {
+  stationPaths: string[][];
   id: string;
   name: string;
   color: string;

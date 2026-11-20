@@ -1,20 +1,12 @@
 import React from 'react';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buildGraph } from '../src/core/graph.ts';
-import { validateMoscowRings } from '../src/core/moscowRings.ts';
-import { importExcelBuffer } from '../src/io/importData.ts';
-import { computeLayout } from '../src/layout/index.ts';
 import { buildRenderedRoutePaths, sampledSelfCrossings } from '../src/renderer/routeGeometry';
 import { SvgMap } from '../src/renderer/SvgMap.tsx';
 import type { StationVisualStyle, StyleId } from '../src/types.ts';
 
-const data = new Uint8Array(
-  readFileSync(new URL('../TPE_Metro.xlsm', import.meta.url)),
-);
-const input = await importExcelBuffer(data);
-const graph = buildGraph(input);
-const rings = validateMoscowRings(graph, input.moscowRings ?? []);
+import { graph, rings, input, workbookSha256, workbookLayout } from './workbook-fixture';
+
 const styles: StyleId[] = [
   'geographic',
   'taipei',
@@ -24,31 +16,21 @@ const styles: StyleId[] = [
   'hex',
 ];
 
-const css = `
-.map-background{fill:#fff}
-.taipei-river-path{fill:none;stroke:#bfdbfe;stroke-width:22;stroke-linejoin:round;stroke-linecap:round;opacity:.62}
-.taipei-river-label{fill:#5b9bd5;stroke:#fff;stroke-width:3;paint-order:stroke}
-.moscow-ring-halo{fill:none;stroke:#d8dee8;stroke-width:16;stroke-linecap:round;stroke-linejoin:round;opacity:.72}
-.concentric-guide{fill:none;stroke:#dbe4ee;stroke-width:1.2;stroke-dasharray:5 9}
-.ring-guide{display:none}
-.station{stroke:#111827}
-.station-normal{fill:#fff;stroke-width:2.5}
-.interchange-outer{fill:#fff;stroke-width:3}
-.interchange-inner{fill:#111827;stroke:none}
-.ring-node-marker{display:none}
-.tokyo-badge-shell{fill:#9ca3af;stroke:#30343b}
-.tokyo-badge-inner,.taipei-code-badge{fill:#fff}
-.taipei-transfer-shell{fill:#9ca3af;stroke:#30343b}
-.station-code-prefix,.station-code-number,.station-code-suffix{fill:#111827;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
-.osaka-code-badge{stroke:#fff}
-.osaka-transfer-shell{fill:#fff;stroke:#4b5563}
-.osaka-code-prefix,.osaka-code-number,.osaka-code-suffix,.osaka-code-text{fill:#fff;stroke:none;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:900}
-.moscow-station,.moscow-transfer-ring{fill:#fff}
-.moscow-transfer-base{fill:#fff;stroke:#222}
-.station-label{fill:#111827;font-family:Arial,"Noto Sans TC",sans-serif;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
-`;
-
 mkdirSync('qa-artifacts', { recursive: true });
+writeFileSync('qa-artifacts/workbook-manifest.json', JSON.stringify({
+  source: 'TPE_Metro.xlsm',
+  sha256: workbookSha256,
+  stationRecords: input.stations.length,
+  stations: graph.nodes.map(({ id, name, nameEn, stationIds }) => ({ id, name, nameEn, stationIds })),
+  routes: graph.lines.map(line => ({
+    id: line.id,
+    paths: line.paths.map((nodes, index) => ({
+      nodes,
+      id: line.pathIds?.[index] ?? String(index),
+      color: line.pathColors?.[index] ?? line.color,
+    })),
+  })),
+}, null, 2));
 
 const stationStyles: StationVisualStyle[] = [
   'taipei',
@@ -145,9 +127,7 @@ const selectedStyles = requestedStyles.length ? styles.filter(style => requested
 let renderCount = 0;
 const renderFailures: string[] = [];
 for (const style of selectedStyles) {
-  const layout = computeLayout(graph, style, {
-    moscowRings: rings,
-  });
+  const layout = workbookLayout(style);
 
   if (style !== 'geographic') {
     let minimum = Number.POSITIVE_INFINITY;
@@ -167,9 +147,9 @@ for (const style of selectedStyles) {
     const path = graph.lines.find(line => line.id === route.lineId)!.paths[route.pathIndex];
     const baseline = sampledSelfCrossings(path.map(id => layout.positions[id]));
     const rendered = sampledSelfCrossings(route.samples);
-    if (rendered > baseline) renderFailures.push(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
-    if (style === 'moscow' && rendered > 0) {
-      renderFailures.push(`${style}/${route.lineId}: ${rendered} actual route self-crossings, even if baseline also crosses`);
+    if (style === 'geographic' && rendered > baseline) renderFailures.push(`${style}/${route.lineId}: rendered curves add self-crossings (${rendered} > ${baseline})`);
+    if (style !== 'geographic' && rendered > 0) {
+      renderFailures.push(`${style}/${route.lineId}: ${rendered} self-crossings in the rendered path`);
     }
     if (style === 'concentric') {
       const reversals = abruptRouteReversals(route.samples);
@@ -219,10 +199,8 @@ for (const style of selectedStyles) {
         layout={layout}
         zoom={1}
         stationStyle={stationStyle}
+        sourceName="TPE_Metro.xlsm"
       />,
-    ).replace(
-      '>',
-      `><style>${css}</style>`,
     );
 
     if (markup.includes(' / branch') || markup.includes('／branch')) {
@@ -258,21 +236,11 @@ for (const style of selectedStyles) {
       renderFailures.push(`${style}/${stationStyle}: ${dimensions[2].toFixed(0)}×${dimensions[3].toFixed(0)} viewport exceeds ${maxDimension}, stations become unreadably small`);
     }
 
-    const expectedStationScale =
-      style === 'geographic' ? '0.42' : '1';
-    const expectedLabelScale =
-      style === 'geographic' ? '0.58' : '1';
-    if (
-      !markup.includes(
-        `data-station-visual-scale="${expectedStationScale}"`,
-      ) ||
-      !markup.includes(
-        `data-label-visual-scale="${expectedLabelScale}"`,
-      )
-    ) {
-      throw new Error(
-        `${style}/${stationStyle}: unexpected station/label visual scale`,
-      );
+    const expectedStationScale = style === 'geographic' ? '0.82' : '1';
+    const expectedLabelSize = style === 'geographic' ? '13' : '14';
+    if (!markup.includes(`data-station-visual-scale="${expectedStationScale}"`) ||
+        !markup.includes(`data-label-font-size="${expectedLabelSize}"`)) {
+      throw new Error(`${style}/${stationStyle}: unexpected station or label scale`);
     }
 
     for (const node of sameLineBranchJunctions) {
@@ -334,7 +302,7 @@ for (const style of selectedStyles) {
 
     writeFileSync(
       `qa-artifacts/${style}--stations-${stationStyle}.svg`,
-      '<?xml version="1.0" encoding="UTF-8"?>\n' + markup.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '),
+      '<?xml version="1.0" encoding="UTF-8"?>\n' + markup,
     );
     if (style === 'moscow' && stationStyle === 'taipei') {
       const hui = graph.nodes.find(node => node.name === '迴龍');
@@ -344,7 +312,6 @@ for (const style of selectedStyles) {
       const padding = 110;
       const focusBox = `${Math.min(a.x,b.x)-padding} ${Math.min(a.y,b.y)-padding} ${Math.abs(a.x-b.x)+padding*2} ${Math.abs(a.y-b.y)+padding*2}`;
       const focus = markup.replace(/viewBox="[^"]+"/, `viewBox="${focusBox}"`)
-        .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')
         .replace('</svg>', `<g fill="none" stroke="#111827" stroke-width="3"><circle cx="${a.x}" cy="${a.y}" r="24"/><circle cx="${b.x}" cy="${b.y}" r="24"/><path stroke-dasharray="8 6" d="M ${b.x} ${b.y} L ${a.x} ${a.y}"/></g><g fill="#111827" font-size="20" font-weight="bold"><text x="${a.x+28}" y="${a.y-30}">迴龍</text><text x="${b.x+28}" y="${b.y+44}">桃園車站</text></g></svg>`);
       writeFileSync('qa-artifacts/moscow--huilong-taoyuan-detail.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + focus);
     }

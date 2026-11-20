@@ -11,20 +11,23 @@
     "qa:render": "node --import tsx scripts/qa-render.tsx",
     "qa:geometry": "node --import tsx scripts/qa-geometry.ts",
     "qa:geography": "node --import tsx scripts/qa-geography.ts",
-    "qa:principles": "node --import tsx scripts/qa-design-principles.tsx"
+    "qa:principles": "node --import tsx scripts/qa-design-principles.tsx",
+    "qa:workbook": "node --import tsx scripts/qa-workbook.ts",
+    "qa:print": "node scripts/qa-print.mjs"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "exceljs": "^4.4.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.65.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.2",
-    "vite": "^6.0.1",
-    "tsx": "^4.20.6"
+    "vite": "^6.0.1"
   }
 }

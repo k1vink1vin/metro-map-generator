@@ -2308,68 +2308,132 @@ function pointOnConcentricRoute(
   };
 }
 
-function redistributeConcentricOrdinaryStations(
-  graph: GraphModel,
-  input: Record<string, Point>,
-  center: Point,
-  centerStationNodeId?: string,
-): Record<string, Point> {
-  const isStructural = (nodeId: string) =>
-    nodeId === centerStationNodeId || concentricStructuralNode(graph, nodeId);
-  const result = Object.fromEntries(
-    Object.entries(input).map(([id, point]) => [id, { ...point }]),
-  );
-  const proposals = new Map<string, Point[]>();
+interface ConcentricRun {
+  start: string;
+  end: string;
+  interior: string[];
+}
 
+function concentricRuns(graph: GraphModel, fixedCenter?: string): ConcentricRun[] {
+  const runs = new Map<string, ConcentricRun>();
   for (const line of graph.lines) {
     for (const path of line.paths) {
-      if (path.length < 3) continue;
-      const anchors = new Set<number>([0, path.length - 1]);
-      path.forEach((nodeId, index) => {
-        if (isStructural(nodeId)) anchors.add(index);
-      });
-      const sorted = [...anchors].sort((a, b) => a - b);
-
-      for (let section = 0; section < sorted.length - 1; section += 1) {
-        const startIndex = sorted[section];
-        const endIndex = sorted[section + 1];
-        const segmentCount = endIndex - startIndex;
-        if (segmentCount < 2) continue;
-
-        const start = result[path[startIndex]];
-        const end = result[path[endIndex]];
-        for (let index = startIndex + 1; index < endIndex; index += 1) {
-          const nodeId = path[index];
-          if (isStructural(nodeId)) continue;
-          const fraction = (index - startIndex) / segmentCount;
-          const point = pointOnConcentricRoute(
-            start,
-            end,
-            center,
-            fraction,
-          );
-          const list = proposals.get(nodeId) ?? [];
-          list.push(point);
-          proposals.set(nodeId, list);
-        }
+      let start = 0;
+      for (let end = 1; end < path.length; end++) {
+        if (end !== path.length - 1 && path[end] !== fixedCenter && !concentricStructuralNode(graph, path[end])) continue;
+        const section = path.slice(start, end + 1);
+        const reverse = [...section].reverse();
+        const key = JSON.stringify(section[0] < section[section.length - 1] ? section : reverse);
+        if (section.length > 2) runs.set(key, {
+          start: section[0], end: section[section.length - 1], interior: section.slice(1, -1),
+        });
+        start = end;
       }
     }
   }
+  return [...runs.values()];
+}
 
-  for (const [nodeId, candidates] of proposals) {
-    if (!candidates.length) continue;
-    const first = candidates[0];
-    const consistent = candidates.every(
-      (point) =>
-        Math.hypot(point.x - first.x, point.y - first.y) < 1e-5,
-    );
-    // Shared trunk occurrences should agree. If two route occurrences require
-    // incompatible positions, preserve the original station rather than
-    // violating one route to satisfy the other.
-    if (consistent) result[nodeId] = first;
+function redistributeConcentricStations(
+  graph: GraphModel,
+  targets: Record<string, Point>,
+  center: Point,
+  fixedCenter?: string,
+): Record<string, Point> {
+  const runs = concentricRuns(graph, fixedCenter);
+  const nodes = graph.nodes.map(node => node.id);
+  const owners = new Map<string, Set<string>>();
+  const conflicting = new Set<string>();
+  for (const run of runs) {
+    for (const node of run.interior) {
+      if (owners.has(node)) conflicting.add(node);
+      const anchors = owners.get(node) ?? new Set();
+      anchors.add(run.start);
+      anchors.add(run.end);
+      owners.set(node, anchors);
+    }
   }
 
-  return result;
+  function reflow() {
+    const result = { ...targets };
+    for (const { start, end, interior } of runs) {
+      for (const [index, id] of interior.entries()) {
+        // The same trunk can appear in multiple workbook paths. A node
+        // with conflicting memberships stays pinned to its shell.
+        if (conflicting.has(id)) continue;
+        result[id] = pointOnConcentricRoute(targets[start], targets[end], center, (index + 1) / (interior.length + 1));
+      }
+    }
+    return result;
+  }
+
+  const originals = { ...targets };
+  const radius = 14;
+
+  function clearanceCost(positions: Record<string, Point>, affected: Set<string>) {
+    let score = 0;
+    for (const id of affected) {
+      const a = positions[id];
+      for (const otherId of nodes) {
+        if (id === otherId || (affected.has(otherId) && otherId < id)) continue;
+        const b = positions[otherId];
+        const dx = Math.abs(a.x - b.x);
+        const dy = Math.abs(a.y - b.y);
+        if (dx >= radius || dy >= radius) continue;
+        score += Math.max(0, radius - Math.hypot(dx, dy)) ** 2;
+      }
+    }
+    return score;
+  }
+
+  let positions = reflow();
+  for (let pass = 0; pass < 10; pass++) {
+    const crowded = new Set<string>();
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = positions[nodes[i]];
+        const b = positions[nodes[j]];
+        if (Math.hypot(a.x - b.x, a.y - b.y) >= radius) continue;
+        for (const id of [nodes[i], nodes[j]]) {
+          for (const anchor of owners.get(id) ?? [id]) if (anchor !== fixedCenter) crowded.add(anchor);
+        }
+      }
+    }
+    let improved = false;
+    for (const id of crowded) {
+      const affected = new Set([id, ...runs.filter(run => run.start === id || run.end === id).flatMap(run => run.interior)]);
+      const base = targets[id];
+      const bearing = Math.atan2(base.y - center.y, base.x - center.x);
+      const radial = Math.hypot(base.x - center.x, base.y - center.y);
+      const displacement = (p: Point) => (p.x - originals[id].x) ** 2 + (p.y - originals[id].y) ** 2;
+      let bestScore = clearanceCost(positions, affected) + displacement(base) * 0.009;
+      let best = base;
+      let bestPositions = positions;
+      for (const dr of [0, -9, 9, -18, 18, -32, 32]) {
+        for (const tangent of [0, -9, 9, -18, 18, -32, 32]) {
+          if ((dr === 0 && tangent === 0) || radial + dr < 8) continue;
+          const angle = bearing + tangent / Math.max(radial, 20);
+          const point = { x: center.x + Math.cos(angle) * (radial + dr), y: center.y + Math.sin(angle) * (radial + dr) };
+          if (displacement(point) > 75 ** 2) continue;
+          targets[id] = point;
+          const candidate = reflow();
+          const cost = clearanceCost(candidate, affected) + displacement(point) * 0.009;
+          if (cost < bestScore - 1e-6) {
+            bestScore = cost;
+            best = point;
+            bestPositions = candidate;
+          }
+        }
+      }
+      targets[id] = best;
+      if (best !== base) {
+        positions = bestPositions;
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return positions;
 }
 
 export function layoutConcentric(
@@ -2559,17 +2623,19 @@ export function layoutConcentric(
     });
   });
 
-  // A full projection of every station onto a shell is visually pure but
-  // introduces many artificial crossings on a regional network. Blend the
-  // radial-shell solution with the north-up geography: the centre receives
-  // stronger shell structure, while outer districts retain more of their
-  // natural topology.
-  // Orthoradial mode is intentionally strict: every station remains on one
-  // of the common-centre shells. Geographic blending here used to move
-  // stations off their circles and made the rendered style only "radial-ish".
-  // Topology protection happens in the renderer/QA instead of deforming the
-  // defining geometry of this style.
-  const equidistant = redistributeConcentricOrdinaryStations(
+  // Keep regional bearings and the ordering of nearby corridors when
+  // choosing station anchors. The renderer still draws only exact
+  // common-centre arcs and radial segments.
+  const geographicScale = Math.max(...shellRadii) / maxRadius;
+  for (const id of Object.keys(target)) {
+    const source = geographic[id];
+    const radial = target[id];
+    target[id] = {
+      x: radial.x * 0.22 + (center.x + (source.x - center.x) * geographicScale) * 0.78,
+      y: radial.y * 0.22 + (center.y + (source.y - center.y) * geographicScale) * 0.78,
+    };
+  }
+  const equidistant = redistributeConcentricStations(
     graph,
     target,
     center,

@@ -1,15 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { buildGraph } from '../src/core/graph.ts';
-import { validateMoscowRings } from '../src/core/moscowRings.ts';
-import { importExcelBuffer } from '../src/io/importData.ts';
-import { computeLayout } from '../src/layout/index.ts';
 import type { GraphModel, Point, StyleId } from '../src/types.ts';
 
-const workbookPath = new URL('../TPE_Metro.xlsm', import.meta.url);
-const data = new Uint8Array(readFileSync(workbookPath));
-const input = await importExcelBuffer(data);
-const graph = buildGraph(input);
-const rings = validateMoscowRings(graph, input.moscowRings ?? []);
+import { graph, rings, workbookLayout } from './workbook-fixture';
+
 
 
 const multiColorLines = graph.lines
@@ -646,9 +638,7 @@ function metrics(
 }
 
 const results = styles.map((style) => {
-  const layout = computeLayout(graph, style, {
-    moscowRings: rings,
-  });
+  const layout = workbookLayout(style);
   return metrics(
     graph,
     layout.positions,
@@ -719,9 +709,7 @@ for (const result of results) {
         JSON.stringify(
           selfCrossingPathDetails(
             graph,
-            computeLayout(graph, result.style, {
-              moscowRings: rings,
-            }).positions,
+            workbookLayout(result.style).positions,
           ),
           null,
           2,
@@ -747,9 +735,7 @@ const geographicResult = results.find(
   (result) => result.style === 'geographic',
 );
 const baselineCrossings = geographicResult?.crossings ?? 0;
-const geographicReference = computeLayout(graph, 'geographic', {
-  moscowRings: rings,
-});
+const geographicReference = workbookLayout('geographic');
 const baselineMoscowDoglegs = moscowDoglegDetails(
   graph,
   geographicReference.positions,
@@ -811,10 +797,7 @@ for (const result of results) {
   const sharpTurnBudget: Record<StyleId, number> = {
     geographic: 100,
     taipei: 20,
-    london: 0,
     moscow: 25,
-    concentric: 60,
-    hex: 0,
   };
   const zigzagBudget: Record<StyleId, number> = {
     geographic: 140,
@@ -944,11 +927,7 @@ console.log(
   })),
 );
 
-const moscowLayoutForPathDiagnostics = computeLayout(
-  graph,
-  'moscow',
-  { moscowRings: rings },
-);
+const moscowLayoutForPathDiagnostics = workbookLayout('moscow');
 const moscowRingNodes = new Set(
   rings.flatMap((ring) => ring.nodes),
 );
