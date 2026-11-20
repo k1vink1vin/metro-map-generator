@@ -61,6 +61,8 @@ try {
       const labelsByNode = new Map(labelElements.map(element => [element.dataset.labelFor, element]));
       const stationsById = new Map(stationElements.map(element => [element.dataset.nodeId, element]));
       const missing = [];
+      if (svg.dataset.layoutStyle === 'concentric' &&
+          svg.dataset.concentricCenter !== fixture.concentricCenterNodeId) missing.push('incorrect concentric centre');
       const badCodes = [];
       for (const station of fixture.stations) {
         const label = labelsByNode.get(station.id);

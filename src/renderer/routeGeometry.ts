@@ -1326,6 +1326,30 @@ function reversesAtJoin(previous: Point[], extension: Point[]): number {
   return Number(a.x * b.x + a.y * b.y <= Math.cos(150 * Math.PI / 180));
 }
 
+function intermediateRayCandidates(a: Point, b: Point, center: Point): OrthoradialEdgeGeometry[] {
+  const ra = distance(a, center);
+  const rb = distance(b, center);
+  if (Math.min(ra, rb) < 1e-6 || Math.abs(ra - rb) < 1e-6) return [];
+  const start = Math.atan2(a.y - center.y, a.x - center.x);
+  const end = Math.atan2(b.y - center.y, b.x - center.x);
+  const delta = shortestSignedAngle(start, end);
+  const gap = Math.min(0.35, 16 / Math.min(ra, rb));
+  return [delta / 3, delta / 2, 2 * delta / 3, -gap, gap, delta - gap, delta + gap]
+    .filter(part => Math.abs(part) > 1e-7 && Math.abs(delta - part) > 1e-7)
+    .map(part => {
+      const ray = start + part;
+      const first = pointOnPolar(center, ra, ray);
+      const last = pointOnPolar(center, rb, ray);
+      return {
+        commands: [arcCommand(ra, part, first), `L ${last.x} ${last.y}`, arcCommand(rb, delta - part, b)],
+        samples: [a, ...circularArcTopologySamples(center, ra, start, part), last,
+          ...circularArcTopologySamples(center, rb, ray, delta - part)],
+        arcCount: 2,
+        length: ra * Math.abs(part) + Math.abs(rb - ra) + rb * Math.abs(delta - part),
+      };
+    });
+}
+
 function orthoradialTopologyFallbackPath(
   points: Point[],
   center: Point,
@@ -1377,7 +1401,11 @@ function orthoradialTopologyFallbackPath(
       center,
       outerBase,
     );
-    const candidates = [...compact, ...escape];
+    const candidates = [
+      ...compact,
+      ...intermediateRayCandidates(points[index], points[index + 1], center),
+      ...escape,
+    ];
     const shortest = Math.max(
       1e-9,
       Math.min(...compact.map((candidate) => candidate.length)),
@@ -1476,7 +1504,6 @@ function orthoradialTopologyFallbackPath(
 function orthoradialPath(
   points: Point[],
   center: Point,
-  allowedCrossings = 0,
   sectionBreaks: ReadonlySet<number> = new Set(),
 ): RouteGeometry {
   if (!points.length) {
@@ -1628,16 +1655,15 @@ function orthoradialPath(
 
   const compactCrossings = sampledSelfCrossings(compact.samples);
   const compactReversals = axisRouteReversalCount(compact.samples);
-  if (compactCrossings > allowedCrossings || compactReversals > 0) {
+  if (compactCrossings > 0 || compactReversals > 0) {
     const globalFallback = orthoradialTopologyFallbackPath(
       points,
       center,
       sectionBreaks,
     );
-    const escaped = orthoradialEscapePath(
-      points,
-      center,
-    );
+    const fallbackCrossings = sampledSelfCrossings(globalFallback.samples);
+    if (fallbackCrossings === 0 && axisRouteReversalCount(globalFallback.samples) === 0) return globalFallback;
+    const escaped = orthoradialEscapePath(points, center);
 
     const alternatives = [
       {
@@ -1647,9 +1673,7 @@ function orthoradialPath(
       },
       {
         geometry: globalFallback,
-        crossings: sampledSelfCrossings(
-          globalFallback.samples,
-        ),
+        crossings: fallbackCrossings,
         fallbackRank: 1,
       },
       {
@@ -2071,7 +2095,6 @@ export function stationAnchoredPath(
     return orthoradialPath(
       points,
       concentricCenter,
-      0,
       sectionBreaks,
     );
   }

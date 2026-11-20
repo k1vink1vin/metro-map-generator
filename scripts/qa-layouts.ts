@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import type { GraphModel, Point, StyleId } from '../src/types.ts';
 
 import { graph, rings, workbookLayout } from './workbook-fixture';
@@ -39,7 +40,7 @@ console.log(
   })),
 );
 
-const styles: StyleId[] = [
+const allStyles: StyleId[] = [
   'geographic',
   'taipei',
   'london',
@@ -47,6 +48,13 @@ const styles: StyleId[] = [
   'concentric',
   'hex',
 ];
+
+const requestedStyles = process.argv.slice(2);
+for (const requested of requestedStyles) {
+  if (!allStyles.includes(requested as StyleId)) throw new Error(`Unknown layout style: ${requested}`);
+}
+const styles = requestedStyles.length ? allStyles.filter(style => requestedStyles.includes(style)) : allStyles;
+const significantGap = 45;
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
@@ -88,11 +96,11 @@ function directionalFidelity(
 
       // Ignore geographically close pairs where a schematic layout is
       // allowed to reorder stations for legibility.
-      if (Math.abs(geoDy) >= 45) {
+      if (Math.abs(geoDy) >= significantGap) {
         northTotal += 1;
         if (Math.sign(geoDy) === Math.sign(outDy)) northMatches += 1;
       }
-      if (Math.abs(geoDx) >= 45) {
+      if (Math.abs(geoDx) >= significantGap) {
         eastTotal += 1;
         if (Math.sign(geoDx) === Math.sign(outDx)) eastMatches += 1;
       }
@@ -102,6 +110,8 @@ function directionalFidelity(
   return {
     northOrder: northTotal ? northMatches / northTotal : 1,
     eastOrder: eastTotal ? eastMatches / eastTotal : 1,
+    northComparisons: northTotal,
+    eastComparisons: eastTotal,
   };
 }
 
@@ -624,8 +634,7 @@ function metrics(
     doglegDetails,
     terminalHooks,
     terminalHookDetails,
-    northOrder: direction.northOrder,
-    eastOrder: direction.eastOrder,
+    ...direction,
     ringCenterDistance: separation.minDistance,
     ringCenterRatio: separation.minRatio,
     ringCircularity: circularity,
@@ -731,10 +740,43 @@ for (const result of results) {
 
 
 const failures: string[] = [];
+const reference = workbookLayout('geographic').geographicPositions;
+const verifyDirections = [
+  { a: '淡水', b: '台北車站', axes: ['y'] },
+  { a: '南港展覽館', b: '台北車站', axes: ['x'] },
+  { a: '高鐵桃園站', b: '板橋', axes: ['x'] },
+  { a: '迴龍', b: '桃園車站', axes: ['x', 'y'] },
+] as const;
+const geographicReport = results.map(result => ({
+  style: result.style,
+  northComparisons: result.northComparisons,
+  northPercent: result.northOrder * 100,
+  eastComparisons: result.eastComparisons,
+  eastPercent: result.eastOrder * 100,
+  checks: verifyDirections.map(({ a, b, axes }) => {
+    const aId = graph.nodes.find(node => node.name === a)?.id;
+    const bId = graph.nodes.find(node => node.name === b)?.id;
+    if (!aId || !bId) throw new Error(`Missing geographic regression pair ${a} / ${b}`);
+    const points = workbookLayout(result.style).positions;
+    const matches = axes.every(axis =>
+      Math.sign(reference[aId][axis] - reference[bId][axis]) === Math.sign(points[aId][axis] - points[bId][axis]),
+    );
+    if (!matches) failures.push(`${result.style}: incorrect relative direction for ${a} / ${b}`);
+    return { a, b, axes, matches };
+  }),
+}));
+const latitudes = graph.nodes.map(node => node.lat);
+const ys = Object.values(reference).map(point => point.y);
+const approximateGapKm = significantGap * (Math.max(...latitudes) - Math.min(...latitudes))
+  / (Math.max(...ys) - Math.min(...ys)) * 111.195;
+mkdirSync('qa-artifacts', { recursive: true });
+writeFileSync('qa-artifacts/geographic-order.json', JSON.stringify({
+  projectedSignificance: significantGap, approximateGapKm, layouts: geographicReport,
+}, null, 2));
 const geographicResult = results.find(
   (result) => result.style === 'geographic',
 );
-const baselineCrossings = geographicResult?.crossings ?? 0;
+const baselineCrossings = geographicResult?.crossings ?? crossingPairs(graph, workbookLayout('geographic').positions).length;
 const geographicReference = workbookLayout('geographic');
 const baselineMoscowDoglegs = moscowDoglegDetails(
   graph,
@@ -840,13 +882,8 @@ for (const result of results) {
     }
   }
 
-  const northMinimum =
-    result.style === 'concentric' ? 0.76 : 0.82;
-  const eastMinimum =
-    result.style === 'concentric' || result.style === 'moscow'
-      ? 0.7
-      : 0.75;
-
+  const northMinimum = result.style === 'geographic' ? 1 : 0.97;
+  const eastMinimum = northMinimum;
   if (result.northOrder < northMinimum) {
     failures.push(
       `${result.style}: north-up ordering ${(result.northOrder * 100).toFixed(1)}% < ${(northMinimum * 100).toFixed(0)}%`,

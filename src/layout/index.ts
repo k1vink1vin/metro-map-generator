@@ -35,7 +35,7 @@ function finish(
   extra: Partial<
     Pick<
       LayoutResult,
-      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings' | 'radialCenter'
+      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings' | 'radialCenter' | 'radialCenterNodeId'
     >
   > = {},
 ): LayoutResult {
@@ -117,7 +117,19 @@ function finish(
     const growth = (style === 'taipei' ? 0.24 : 0.35) * Math.min(1, graph.nodes.length / 240);
     return scalePositions(clearer, 1 + growth, { x: 86, y: 86 });
   }
-  if (style === 'moscow') return refineMoscowPassengerMap(graph, rhythm);
+  if (style === 'moscow') {
+    const clearer = refineMoscowPassengerMap(graph, rhythm);
+    const lengths = graph.edges.map(edge => {
+      const a = clearer.positions[edge.a];
+      const b = clearer.positions[edge.b];
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }).sort((a, b) => a - b);
+    // Keep compact radial branches readable after smoothing. The lower
+    // percentile leaves a few naturally close stops to the label callouts.
+    const shortInterval = lengths[Math.floor(lengths.length * 0.03)];
+    const scale = shortInterval ? Math.min(1.4, Math.max(1, 42.2 / shortInterval)) : 1;
+    return scalePositions(clearer, scale, { x: 86, y: 86 });
+  }
   if (style === 'london') {
     // Preserve equal station rhythm and 45-degree geometry. A local pairwise
     // repulsion here disturbs corridor spacing and failed the design audit.
@@ -211,6 +223,6 @@ export function computeLayout(
     style,
     geographic,
     concentric.positions,
-    { radialCenter: concentric.center },
+    { radialCenter: concentric.center, radialCenterNodeId: concentric.centerNodeId },
   );
 }

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { validateMoscowRings } from './core/moscowRings';
+import { defaultConcentricCenter } from './core/workbookPresentation';
 import { importExcelWorkbook } from './io/importData';
 import { downloadSvg } from './io/exportSvg';
 import { computeLayout } from './layout';
@@ -157,25 +158,20 @@ export function App() {
     lines: TransitLine[],
     rings: MoscowRingDefinition[] = moscowRingDefinitions,
     nextStyle = style,
+    importedFileName?: string,
   ) => {
     const nextGraph = buildGraph({ stations, lines });
     const nextRings = validateMoscowRings(nextGraph, rings);
-    const selectedConcentricCenter =
-      concentricCenterNodeId &&
-      nextGraph.nodeById.has(concentricCenterNodeId)
-        ? concentricCenterNodeId
-        : undefined;
-    if (
-      concentricCenterNodeId &&
-      !selectedConcentricCenter
-    ) {
-      setConcentricCenterNodeId('');
-    }
+    const center = importedFileName
+      ? defaultConcentricCenter(nextGraph, importedFileName)
+      : concentricCenterNodeId;
+    const selectedConcentricCenter = center && nextGraph.nodeById.has(center) ? center : undefined;
     const nextLayout = computeLayout(nextGraph, nextStyle, {
       moscowRings: nextRings,
       concentricCenterNodeId: selectedConcentricCenter,
     });
     setGraph(nextGraph);
+    setConcentricCenterNodeId(selectedConcentricCenter ?? '');
     setLayout(nextLayout);
     setMoscowRingDefinitions(rings);
     setValidatedMoscowRings(nextRings);
@@ -211,14 +207,16 @@ export function App() {
     if (!file) return;
     try {
       const network = await importExcelWorkbook(file);
-      setStationsText(pretty(network.stations));
-      setLinesText(pretty(network.lines));
-      setSourceName(file.name);
       generateFrom(
         network.stations,
         network.lines,
         network.moscowRings ?? [],
+        style,
+        file.name,
       );
+      setStationsText(pretty(network.stations));
+      setLinesText(pretty(network.lines));
+      setSourceName(file.name);
       setNotice(
         `Excel 匯入完成：${network.stations.length} 個車站、${network.lines.length} 條路線、${network.moscowRings?.length ?? 0} 個莫斯科環；環閉合驗證通過。`,
       );

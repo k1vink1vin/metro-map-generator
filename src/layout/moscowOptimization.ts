@@ -274,7 +274,8 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
         const signedGap = constraint.sign * (values[a] - values[b]);
         const gap = constraint.gap ?? 1;
         if (signedGap >= gap) continue;
-        const derivative = -2 * geographicWeight * (gap - signedGap) * constraint.sign;
+        const weight = constraint.gap === undefined ? geographicWeight : geographicWeight * 4;
+        const derivative = -2 * weight * (gap - signedGap) * constraint.sign;
         gradient[a] += derivative;
         gradient[b] -= derivative;
       }
@@ -372,6 +373,10 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
     if (localOrders.size === before) break;
     optimize(740, 0.65, 3000, 11000, 2200, 5, 1.2, 0.000001, 0.003);
   }
+
+  // Recover regular station intervals after the bend pass. The crossing
+  // constraints stay active, so rhythm recovery cannot swap corridors back.
+  optimize(1600, 0.32, 4200, 17000, 2600, 1.2, 0.9, 0.000002);
 
   const output = Object.fromEntries(ids.map((id, index) => [id, {
     x: fixed[index] ? fixedOrigins[index * 2] : values[index * 2],

@@ -718,6 +718,7 @@ export function SvgMap({
   const labelWidth = (node: GraphNode | undefined) => node ? markerSize(graph, node, stationStyle, stationVisualScale).width : 0;
   const symbolColumn = Math.max(labelWidth(ordinary), labelWidth(interchange), 16) / 2 + 6;
   const routeIndex = new Map(routePaths.map((path, index) => [path, index]));
+  const centerName = layout.radialCenterNodeId && graph.nodeById.get(layout.radialCenterNodeId)?.name;
   const sourceLabel = Array.from(sourceName).length > 19 ? `${Array.from(sourceName).slice(0, 18).join('')}…` : sourceName;
 
   return (
@@ -736,6 +737,7 @@ export function SvgMap({
       data-station-visual-scale={stationVisualScale}
       data-label-font-size={fontSize}
       data-layout-style={layout.style}
+      data-concentric-center={layout.radialCenterNodeId}
       lang="zh-Hant"
       xmlns="http://www.w3.org/2000/svg"
       role={onStationSelect ? 'group' : 'img'}
@@ -753,7 +755,7 @@ export function SvgMap({
 
       <g id="map-heading" className="map-ink">
         <text x={bounds.x + 30} y={fullBounds.y + 50} fontSize="40" fontWeight="700">{mapTitle}</text>
-        <text x={bounds.x + 31} y={fullBounds.y + 78} fontSize="18">{headingByStyle[layout.style]}・{taipeiNetwork ? '工作簿全路網（含規劃路線）' : '路網示意圖'}</text>
+        <text x={bounds.x + 31} y={fullBounds.y + 78} fontSize="18">{headingByStyle[layout.style]}{centerName ? `（中心 ${centerName}）` : ''}・{taipeiNetwork ? '工作簿全路網（含規劃路線）' : '路網示意圖'}</text>
       </g>
 
       {taipeiRiver ? (

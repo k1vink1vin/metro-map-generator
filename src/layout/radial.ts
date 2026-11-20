@@ -2440,7 +2440,7 @@ export function layoutConcentric(
   graph: GraphModel,
   geographic: Record<string, Point>,
   centerNodeId?: string,
-): { positions: Record<string, Point>; center: Point } {
+) {
   const resolvedCenterNodeId = centerNodeId
     ? graph.nodeById.has(centerNodeId)
       ? centerNodeId
@@ -2641,6 +2641,6 @@ export function layoutConcentric(
     center,
     centerNode?.id,
   );
-  return { positions: equidistant, center };
+  return { positions: equidistant, center, centerNodeId: centerNode?.id };
 
 }

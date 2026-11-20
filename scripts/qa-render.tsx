@@ -5,7 +5,7 @@ import { buildRenderedRoutePaths, sampledSelfCrossings } from '../src/renderer/r
 import { SvgMap } from '../src/renderer/SvgMap.tsx';
 import type { StationVisualStyle, StyleId } from '../src/types.ts';
 
-import { graph, rings, input, workbookSha256, workbookLayout } from './workbook-fixture';
+import { graph, rings, input, concentricCenterNodeId, workbookSha256, workbookLayout } from './workbook-fixture';
 
 const styles: StyleId[] = [
   'geographic',
@@ -21,6 +21,7 @@ writeFileSync('qa-artifacts/workbook-manifest.json', JSON.stringify({
   source: 'TPE_Metro.xlsm',
   sha256: workbookSha256,
   stationRecords: input.stations.length,
+  concentricCenterNodeId,
   stations: graph.nodes.map(({ id, name, nameEn, stationIds }) => ({ id, name, nameEn, stationIds })),
   routes: graph.lines.map(line => ({
     id: line.id,
@@ -128,6 +129,13 @@ let renderCount = 0;
 const renderFailures: string[] = [];
 for (const style of selectedStyles) {
   const layout = workbookLayout(style);
+  if (style === 'concentric') {
+    const center = layout.positions[concentricCenterNodeId];
+    if (layout.radialCenterNodeId !== concentricCenterNodeId || !layout.radialCenter ||
+      Math.hypot(center.x - layout.radialCenter.x, center.y - layout.radialCenter.y) > 1e-5) {
+      renderFailures.push('concentric: 台北車站 does not coincide with its selected centre');
+    }
+  }
 
   if (style !== 'geographic') {
     let minimum = Number.POSITIVE_INFINITY;
