@@ -22,7 +22,7 @@ writeFileSync('qa-artifacts/workbook-manifest.json', JSON.stringify({
   sha256: workbookSha256,
   stationRecords: input.stations.length,
   concentricCenterNodeId,
-  stations: graph.nodes.map(({ id, name, nameEn, stationIds }) => ({ id, name, nameEn, stationIds })),
+  stations: graph.nodes.map(({ id, name, nameEn, stationIds, lat }) => ({ id, name, nameEn, stationIds, lat })),
   routes: graph.lines.map(line => ({
     id: line.id,
     paths: line.paths.map((nodes, index) => ({

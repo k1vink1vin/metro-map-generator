@@ -3,6 +3,7 @@ import type { GraphModel, Point } from '../types';
 export const CANVAS_WIDTH = 1000;
 export const CANVAS_HEIGHT = 720;
 export const CANVAS_PADDING = 86;
+export const KILOMETRES_PER_LATITUDE_DEGREE = 111.195;
 
 export function projectGeographic(
   graph: GraphModel,
@@ -55,4 +56,28 @@ export function projectGeographic(
       },
     ]),
   );
+}
+
+export function geographicScaleBar(graph: GraphModel, positions: Record<string, Point>, maxWidth: number) {
+  if (graph.nodes.length < 2 || maxWidth <= 0) return undefined;
+  const latitudeOrder = [...graph.nodes].sort((a, b) => a.lat - b.lat);
+  const south = latitudeOrder[0];
+  const north = latitudeOrder[latitudeOrder.length - 1];
+  let spanKm = (north.lat - south.lat) * KILOMETRES_PER_LATITUDE_DEGREE;
+  let spanUnits = Math.abs(positions[north.id].y - positions[south.id].y);
+
+  if (spanKm < 1e-8) {
+    const longitudeOrder = [...graph.nodes].sort((a, b) => a.lon - b.lon);
+    const west = longitudeOrder[0];
+    const east = longitudeOrder[longitudeOrder.length - 1];
+    spanKm = (east.lon - west.lon) * KILOMETRES_PER_LATITUDE_DEGREE * Math.cos(north.lat * Math.PI / 180);
+    spanUnits = Math.abs(positions[east.id].x - positions[west.id].x);
+  }
+  if (spanKm < 1e-8 || spanUnits < 1e-8) return undefined;
+
+  const maxKm = maxWidth * spanKm / spanUnits;
+  const decade = 10 ** Math.floor(Math.log10(maxKm));
+  const kilometres = [5, 2, 1].map(step => step * decade).find(step => step <= maxKm);
+  if (!kilometres) return undefined;
+  return { kilometres, width: kilometres * spanUnits / spanKm };
 }

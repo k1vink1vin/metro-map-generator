@@ -51,6 +51,7 @@ jobs:
         if: always()
         env:
           METRO_PRINT_PDF: '1'
+          METRO_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run qa:print
 
       - name: Upload workbook SVGs, print PDFs and audit data

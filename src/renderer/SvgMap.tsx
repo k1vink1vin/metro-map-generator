@@ -1,3 +1,4 @@
+import { geographicScaleBar } from '../core/projection';
 import { buildRenderedRoutePaths, circleThroughStations, type RenderedRoutePath } from './routeGeometry';
 import type {
   GraphModel,
@@ -711,9 +712,20 @@ export function SvgMap({
   const legendX = 18;
   const legendY = 38;
   const footnoteY = legendY + 53 + legendEntries.length * 31;
-  const noteCount = Number(partialRailCoverage) + Number(missingEnglishNames > 0);
+  const noteCount = Number(partialRailCoverage) + Number(missingEnglishNames > 0) + Number(isGeographic);
   const hasCorridors = corridorBands.some(bands => bands.length);
-  const notesOffset = hasCorridors ? 176 : 145;
+  const maxGuideRadius = concentricGuide ? Math.min(
+    concentricGuide.center.x - bounds.x, bounds.x + bounds.width - concentricGuide.center.x,
+    concentricGuide.center.y - bounds.y, bounds.y + bounds.height - concentricGuide.center.y,
+  ) : 0;
+  const crossingClips = crossingGaps.map(disjointGapGroups);
+  const hasCrossings = crossingClips.some(clips => clips.length);
+  const guideRadii = concentricGuide
+    ? [0.2, 0.4, 0.6, 0.8, 1].map(ratio => concentricGuide.maxRadius * ratio).filter(radius => radius <= maxGuideRadius)
+    : [];
+  const scaleBar = isGeographic ? geographicScaleBar(graph, layout.positions, 146 * keyScale) : undefined;
+  const referenceY = 106 + (Number(hasCorridors) + Number(hasCrossings)) * 31;
+  const notesOffset = scaleBar || guideRadii.length ? referenceY + 55 : hasCorridors ? 176 : 145;
   const legendHeight = footnoteY + notesOffset + 55 + noteCount * 23;
 
   const markers = graph.nodes.map(node => centeredRect(
@@ -742,12 +754,6 @@ export function SvgMap({
       textWidth(mapTitle, titleSize) + 72, textWidth(subtitle, subtitleSize) + 72),
     height: Math.max(bounds.height, legend.inside ? 0 : panel.y - bounds.y + panel.height + 24) + headingHeight,
   };
-  const maxGuideRadius = concentricGuide ? Math.min(
-    concentricGuide.center.x - bounds.x, bounds.x + bounds.width - concentricGuide.center.x,
-    concentricGuide.center.y - bounds.y, bounds.y + bounds.height - concentricGuide.center.y,
-  ) : 0;
-  const crossingClips = crossingGaps.map(disjointGapGroups);
-  const hasCrossings = crossingClips.some(clips => clips.length);
   const clipFrame = `M ${fullBounds.x} ${fullBounds.y} h ${fullBounds.width} v ${fullBounds.height} h ${-fullBounds.width} Z`;
   const labelWidth = (node: GraphNode | undefined) => node ? markerSize(graph, node, stationStyle, stationVisualScale).width : 0;
   const symbolColumn = Math.max(labelWidth(ordinary), labelWidth(interchange), 16) / 2 + 6;
@@ -817,12 +823,12 @@ export function SvgMap({
 
       {concentricGuide ? (
         <g className="concentric-guides" aria-hidden="true">
-          {[0.2, 0.4, 0.6, 0.8, 1].filter(ratio => concentricGuide.maxRadius * ratio <= maxGuideRadius).map((ratio) => (
+          {guideRadii.map(radius => (
             <circle
-              key={ratio}
+              key={radius}
               cx={concentricGuide.center.x}
               cy={concentricGuide.center.y}
-              r={concentricGuide.maxRadius * ratio}
+              r={radius}
               className="concentric-guide"
             />
           ))}
@@ -990,6 +996,21 @@ export function SvgMap({
               <path d={`M ${symbolColumn - 16} 2 h 32`} stroke="#C35617" strokeWidth="3.2" />
               <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>並行路線</text>
             </g> : null}
+            {guideRadii.length ? (
+              <g id="concentric-guide-key" transform={`translate(0 ${referenceY})`}>
+                <line x1={symbolColumn - 16} x2={symbolColumn + 16} className="concentric-guide guide-swatch" />
+                <text x={symbolColumn * 2 + 16} y={6} fontSize={16}>同心圓輔助線</text>
+              </g>
+            ) : null}
+            {scaleBar ? (
+              <g id="geographic-scale" className="map-ink" data-km={scaleBar.kilometres} transform={`translate(0 ${referenceY})`}>
+                <line x2={scaleBar.width / keyScale} stroke="#475569" strokeWidth="2" />
+                <path d={`M0 -4 v8 M${scaleBar.width / keyScale} -4 v8`} stroke="#475569" fill="none" />
+                <text x={scaleBar.width / keyScale + 12} y={6} fontSize={16}>
+                  {scaleBar.kilometres >= 1 ? `${scaleBar.kilometres} km` : `${Number((scaleBar.kilometres * 1000).toPrecision(3))} m`}
+                </text>
+              </g>
+            ) : null}
           </g>
         </g>
         {isGeographic ? (
@@ -1011,6 +1032,9 @@ export function SvgMap({
             <text y={23 + Number(partialRailCoverage) * 23} fontSize={14}>
               英文站名缺漏：{missingEnglishNames} 站
             </text>
+          ) : null}
+          {isGeographic ? (
+            <text y={noteCount * 23} fontSize={14}>線條為相鄰站點直連示意</text>
           ) : null}
           <text y={23 + noteCount * 23} fontSize={14} fill="#7f1d1d">規劃示意・以營運單位公告為準</text>
         </g>

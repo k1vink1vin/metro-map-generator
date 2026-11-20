@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -11,13 +12,15 @@ const names = styleIds.filter(style => !requested.length || requested.includes(s
 if (!names.length) throw new Error('No matching workbook layout styles.');
 const makePdf = process.env.METRO_PRINT_PDF === '1';
 if (makePdf) mkdirSync(`${directory}/print`, { recursive: true });
+const sha256 = (contents) => createHash('sha256').update(contents).digest('hex');
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage();
 const reports = [];
 try {
   for (const name of names) {
-    const svg = readFileSync(`${directory}/${name}.svg`, 'utf8').replace(/^<\?xml[^>]*>\s*/, '');
+    const sourceSvg = readFileSync(`${directory}/${name}.svg`, 'utf8');
+    const svg = sourceSvg.replace(/^<\?xml[^>]*>\s*/, '');
     await page.setContent(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><body style="margin:0">${svg}</body></html>`);
     await page.evaluate(() => document.fonts.ready);
     const audit = await page.evaluate(({ fixture }) => {
@@ -106,6 +109,36 @@ try {
       const labelsByCell = new Map();
       const cell = 64;
       const visiblePaths = [...svg.querySelectorAll('#lines path')];
+      const referenceDefects = [];
+      const guide = svg.querySelector('.concentric-guides > circle');
+      const guideKey = svg.querySelector('#concentric-guide-key line');
+      if (Boolean(guide) !== Boolean(guideKey) || (guideKey && getComputedStyle(guideKey).strokeDasharray === 'none')) {
+        referenceDefects.push('concentric guide legend differs from rendered map');
+      }
+      if (visiblePaths.some(path => getComputedStyle(path).strokeDasharray !== 'none')) {
+        referenceDefects.push('route strokes must be solid');
+      }
+      let geographicScale = null;
+      if (svg.dataset.layoutStyle === 'geographic') {
+        const scale = svg.querySelector('#geographic-scale');
+        const scaleLine = scale?.querySelector('line');
+        const stations = fixture.stations.filter(station => stationsById.has(station.id));
+        stations.sort((a, b) => a.lat - b.lat);
+        const south = stations[0];
+        const north = stations.at(-1);
+        if (scaleLine && south && north) {
+          const y = station => rootMatrix.multiply(stationsById.get(station.id).getCTM()).f;
+          const spanKm = (north.lat - south.lat) * 111.195;
+          const km = Number(scale.dataset.km);
+          const measuredKm = box(scaleLine).w * spanKm / Math.abs(y(north) - y(south));
+          geographicScale = { km, measuredKm };
+          if (!(km > 0 && Math.abs(measuredKm / km - 1) < 0.0001)) {
+            referenceDefects.push('geographic scale disagrees with projected stations');
+          }
+        } else {
+          referenceDefects.push('geographic scale could not be measured');
+        }
+      }
       const gap = Math.max(7, ...visiblePaths.map(path => stroke(path))) + 3;
       for (const label of labels) {
         for (let x = Math.floor((label.x - gap) / cell); x <= Math.floor((label.x + label.w + gap) / cell); x++) {
@@ -173,6 +206,7 @@ try {
         labelCollisions, markerCollisions, labelMarkerCollisions, outside, routeLabelCollisions: [...routeLabelCollisions],
         legendPlacement: panel?.parentElement.dataset.placement, legendCollisions,
         routeLegendCollisions: [...routeLegendCollisions], leaderLabelCollisions,
+        geographicScale, referenceDefects,
       };
     }, { fixture });
     // A 4.5 mm Chinese em is the minimum for this proof set. Keep the vector
@@ -182,18 +216,20 @@ try {
       width: Math.ceil(audit.dimensions.width * mmPerUnit + 20),
       height: Math.ceil(audit.dimensions.height * mmPerUnit + 20),
     };
+    let pdfSha256;
     if (makePdf) {
       await page.addStyleTag({ content: `
         @page { size: ${pageMm.width}mm ${pageMm.height}mm; margin: 0; }
         body { margin: 0; width: ${pageMm.width}mm; padding: 10mm; box-sizing: border-box; }
         .map-svg { display: block; width: ${audit.dimensions.width * mmPerUnit}mm; height: ${audit.dimensions.height * mmPerUnit}mm; }
       ` });
-      await page.pdf({ path: `${directory}/print/${name}.pdf`, preferCSSPageSize: true, printBackground: true });
+      const pdf = await page.pdf({ path: `${directory}/print/${name}.pdf`, preferCSSPageSize: true, printBackground: true });
+      pdfSha256 = sha256(pdf);
     }
     const defects = [...audit.missing, ...audit.badCodes, ...audit.badRoutes, ...audit.labelCollisions,
       ...audit.markerCollisions, ...audit.labelMarkerCollisions, ...audit.outside, ...audit.routeLabelCollisions,
-      ...audit.legendCollisions, ...audit.routeLegendCollisions, ...audit.leaderLabelCollisions];
-    reports.push({ name, ...audit, pageMm, passed: !defects.length });
+      ...audit.legendCollisions, ...audit.routeLegendCollisions, ...audit.leaderLabelCollisions, ...audit.referenceDefects];
+    reports.push({ name, svgSha256: sha256(sourceSvg), pdfSha256, ...audit, pageMm, passed: !defects.length });
     console.log(`${name} ${pageMm.width} × ${pageMm.height} mm, ${audit.labels} labels, ${defects.length} defects`);
   }
 } finally {
@@ -202,6 +238,7 @@ try {
 
 writeFileSync(`${directory}/print-audit.json`, JSON.stringify({
   workbookSha256: fixture.sha256,
+  sourceRevision: process.env.METRO_SOURCE_REVISION,
   maps: reports,
 }, null, 2));
 if (reports.some(report => !report.passed)) {

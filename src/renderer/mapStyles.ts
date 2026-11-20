@@ -53,6 +53,11 @@ export const mapStyles = `
   pointer-events: none;
 }
 
+.guide-swatch {
+  stroke: #64748b;
+  stroke-dasharray: 4 3;
+}
+
 .tokyo-badge-shell {
   fill: #9ca3af;
   stroke: #30343b;
