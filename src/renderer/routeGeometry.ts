@@ -1482,11 +1482,11 @@ function orthoradialTopologyFallbackPath(
         a.reversals - b.reversals ||
         (
           a.rhythmPenalty * 8 +
-          a.detourPenalty * 1.5 + a.corners * 0.12 + a.radialExcess * 0.018
+          a.detourPenalty * 1.5 + a.corners * 0.06 + a.radialExcess * 0.018
         ) -
           (
             b.rhythmPenalty * 8 +
-            b.detourPenalty * 1.5 + b.corners * 0.12 + b.radialExcess * 0.018
+            b.detourPenalty * 1.5 + b.corners * 0.06 + b.radialExcess * 0.018
           ) ||
         a.detourPenalty - b.detourPenalty ||
         a.length - b.length,
@@ -1501,11 +1501,11 @@ function orthoradialTopologyFallbackPath(
       a.reversals - b.reversals ||
       (
         a.rhythmPenalty * 8 +
-        a.detourPenalty * 1.5 + a.corners * 0.12 + a.radialExcess * 0.018
+        a.detourPenalty * 1.5 + a.corners * 0.06 + a.radialExcess * 0.018
       ) -
         (
           b.rhythmPenalty * 8 +
-          b.detourPenalty * 1.5 + b.corners * 0.12 + b.radialExcess * 0.018
+          b.detourPenalty * 1.5 + b.corners * 0.06 + b.radialExcess * 0.018
         ) ||
       a.detourPenalty - b.detourPenalty ||
       a.length - b.length,
@@ -1639,11 +1639,11 @@ function orthoradialPath(
         a.reversals - b.reversals ||
         (
           a.rhythmPenalty * 8 +
-          a.detourPenalty * 2 + a.corners * 0.12 + a.radialExcess * 0.018
+          a.detourPenalty * 2 + a.corners * 0.06 + a.radialExcess * 0.018
         ) -
           (
             b.rhythmPenalty * 8 +
-            b.detourPenalty * 2 + b.corners * 0.12 + b.radialExcess * 0.018
+            b.detourPenalty * 2 + b.corners * 0.06 + b.radialExcess * 0.018
           ) ||
         a.detourPenalty - b.detourPenalty ||
         a.length - b.length ||
@@ -1663,11 +1663,11 @@ function orthoradialPath(
       a.reversals - b.reversals ||
       (
         a.rhythmPenalty * 8 +
-        a.detourPenalty * 2 + a.corners * 0.12 + a.radialExcess * 0.018
+        a.detourPenalty * 2 + a.corners * 0.06 + a.radialExcess * 0.018
       ) -
         (
           b.rhythmPenalty * 8 +
-          b.detourPenalty * 2 + b.corners * 0.12 + b.radialExcess * 0.018
+          b.detourPenalty * 2 + b.corners * 0.06 + b.radialExcess * 0.018
         ) ||
       a.detourPenalty - b.detourPenalty ||
       a.length - b.length ||
