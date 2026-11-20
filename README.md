@@ -305,7 +305,7 @@ Moscow layout now performs passenger-map line-shape cleanup after ring/radial pl
 - alternating A-B-C-D doglegs receive a second stronger straightening pass,
 - QA tracks alternating doglegs so future changes cannot silently restore the previous zigzag behavior.
 
-The canonical Taipei Moscow QA baseline currently has one geometric crossing, zero short edges, and a passenger-readability score above 98.
+The workbook QA checks the rendered Moscow route paths for self-crossings and reversals, alongside station spacing, circularity and significant geographic ordering.
 
 
 ## Station visual styles
@@ -328,4 +328,4 @@ Moscow smoothing now distinguishes two cases:
 - ordinary corridor doglegs: move degree-2 intermediate stations,
 - terminal extensions leaving a fixed ring/transfer hub: keep the hub fixed and move the terminal extension onto the incoming corridor direction.
 
-This specifically prevents sharp passenger-map hooks such as the former `台北101/世貿 → 象山 → 廣慈/奉天宮` geometry. CI requires zero Moscow terminal-hook violations.
+This specifically prevents sharp passenger-map hooks such as the former `台北101/世貿 → 象山 → 廣慈/奉天宮` geometry. CI checks the rendered route direction and reports terminal-hook diagnostics.

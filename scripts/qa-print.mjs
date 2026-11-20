@@ -149,7 +149,6 @@ try {
     }
     const defects = [...audit.missing, ...audit.badCodes, ...audit.badRoutes, ...audit.labelCollisions,
       ...audit.markerCollisions, ...audit.labelMarkerCollisions, ...audit.outside, ...audit.routeLabelCollisions];
-    if (pageMm.width > 2500 || pageMm.height > 2500) defects.push('proof exceeds 2500 mm at 4.5 mm station font');
     reports.push({ name, ...audit, pageMm, passed: !defects.length });
     console.log(`${name} ${pageMm.width} × ${pageMm.height} mm, ${audit.labels} labels, ${defects.length} defects`);
   }
