@@ -1,0 +1,121 @@
+{
+  "workbookSha256": "155f7bd67fe0740729eb08d034426a1ea9c16daaec1fbfd8b270feba8f829045",
+  "maps": [
+    {
+      "name": "concentric--stations-taipei",
+      "dimensions": {
+        "width": 4034.01416015625,
+        "height": 2572.66259765625
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 13,
+      "leaders": 57,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "side",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 1317,
+        "height": 847
+      },
+      "passed": true
+    },
+    {
+      "name": "concentric--stations-tokyo",
+      "dimensions": {
+        "width": 4034.01416015625,
+        "height": 2582.84716796875
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 13,
+      "leaders": 67,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "side",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 1317,
+        "height": 851
+      },
+      "passed": true
+    },
+    {
+      "name": "concentric--stations-osaka",
+      "dimensions": {
+        "width": 4053.51416015625,
+        "height": 2591.235595703125
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 13,
+      "leaders": 55,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "side",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 1323,
+        "height": 853
+      },
+      "passed": true
+    },
+    {
+      "name": "concentric--stations-moscow",
+      "dimensions": {
+        "width": 4033.01416015625,
+        "height": 2572.66259765625
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 13,
+      "leaders": 65,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "side",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 1317,
+        "height": 847
+      },
+      "passed": true
+    }
+  ]
+}

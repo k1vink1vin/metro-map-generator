@@ -1,0 +1,170 @@
+[
+  {
+    "line": "TPE_BR",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 8
+  },
+  {
+    "line": "TPE_R",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 15
+  },
+  {
+    "line": "TPE_R",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TPE_G",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 16
+  },
+  {
+    "line": "TPE_G",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TPE_O",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 15
+  },
+  {
+    "line": "TPE_O",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 3
+  },
+  {
+    "line": "TPE_BL",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 11
+  },
+  {
+    "line": "TPE_Y",
+    "path": "main",
+    "stationRadialDirectionChanges": 9,
+    "renderedRadialDirectionChanges": 9,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 25
+  },
+  {
+    "line": "TPE_LG",
+    "path": "main",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 7
+  },
+  {
+    "line": "TPE_LG",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TPE_LB",
+    "path": "main",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 3
+  },
+  {
+    "line": "TPE_V",
+    "path": "main",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 3
+  },
+  {
+    "line": "TPE_V",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TPE_K",
+    "path": "main",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TAO_A",
+    "path": "main",
+    "stationRadialDirectionChanges": 2,
+    "renderedRadialDirectionChanges": 2,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 10
+  },
+  {
+    "line": "TAO_GR",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 3,
+    "extraRadialTravel": 48,
+    "rightAngleJoins": 14
+  },
+  {
+    "line": "TAO_GR",
+    "path": "branch",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "TAO_BN",
+    "path": "main",
+    "stationRadialDirectionChanges": 0,
+    "renderedRadialDirectionChanges": 0,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 1
+  },
+  {
+    "line": "THSR",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 2
+  },
+  {
+    "line": "TR",
+    "path": "main",
+    "stationRadialDirectionChanges": 1,
+    "renderedRadialDirectionChanges": 1,
+    "extraRadialTravel": 0,
+    "rightAngleJoins": 12
+  }
+]

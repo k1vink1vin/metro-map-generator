@@ -1,0 +1,65 @@
+diff --git a/src/layout/radial.ts b/src/layout/radial.ts
+index 311b182..92196fb 100644
+--- a/src/layout/radial.ts
++++ b/src/layout/radial.ts
+@@ -1751,7 +1751,7 @@ export function layoutMoscow(
+   const positions: Record<string, Point> = {};
+   const ringNodeSet = new Set<string>();
+ 
+-  const ringInfos = definedRings.map((definition) => {
++  const ringInfos = definedRings.map((definition, index) => {
+     const rawPoints = definition.nodes.map((id) => geographic[id]);
+     const geoCenter = {
+       x:
+@@ -1788,14 +1788,17 @@ export function layoutMoscow(
+       radiusForStationSpacing,
+       165,
+     );
++    const primaryRadius = 36 / (2 * Math.sin(Math.PI / definedRings[0].nodes.length));
++    const requestedRatio = Number(process.env.TEST_RADIUS_RATIO);
++    const experimentRadius = index === 1 && requestedRatio > 0 ? primaryRadius * requestedRatio : targetRadius;
+ 
+     ring.forEach((id, index) => {
+       ringNodeSet.add(id);
+       const angle = -Math.PI / 2 + slot * index;
+ 
+       positions[id] = {
+-        x: geoCenter.x + Math.cos(angle) * targetRadius,
+-        y: geoCenter.y + Math.sin(angle) * targetRadius,
++        x: geoCenter.x + Math.cos(angle) * experimentRadius,
++        y: geoCenter.y + Math.sin(angle) * experimentRadius,
+       };
+     });
+ 
+@@ -1803,7 +1806,7 @@ export function layoutMoscow(
+       definition: { ...definition, nodes: ring },
+       geoCenter,
+       geoRadius,
+-      targetRadius,
++      targetRadius: experimentRadius,
+       phase: 0,
+       angles: ring.map((_, index) => -Math.PI / 2 + slot * index),
+     };
+@@ -2635,6 +2638,22 @@ export function layoutConcentric(
+       y: radial.y * 0.22 + (center.y + (source.y - center.y) * geographicScale) * 0.78,
+     };
+   }
++  if (process.env.TEST_OUTER_RADIUS === '1') {
++    const ring = graph.lines.find(line => line.id === 'TPE_Y');
++    const radius = (point: Point) => Math.hypot(point.x - center.x, point.y - center.y);
++    const ringRadius = Math.max(...(ring?.paths.flat() ?? []).map(id => radius(target[id])));
++    const outerSpan = Math.max(...Object.values(target).map(radius)) - ringRadius;
++    if (ringRadius > 0 && outerSpan > 0) {
++      const offset = outerSpan / 10;
++      for (const point of Object.values(target)) {
++        const r = radius(point);
++        if (r <= ringRadius) continue;
++        const compressed = ringRadius + offset ** 0.35 / 0.65 * ((r - ringRadius + offset) ** 0.65 - offset ** 0.65);
++        point.x = center.x + (point.x - center.x) * compressed / r;
++        point.y = center.y + (point.y - center.y) * compressed / r;
++      }
++    }
++  }
+   const equidistant = redistributeConcentricStations(
+     graph,
+     target,

@@ -1,0 +1,828 @@
+[
+  {
+    "style": "taipei",
+    "compliant": {
+      "topology": true,
+      "angles": true,
+      "roundedCorners": true,
+      "parallelSpacing": true,
+      "equidistantStations": true
+    },
+    "topology": {
+      "valid": true,
+      "expectedPaths": 21,
+      "renderedPaths": 21,
+      "addedSelfCrossings": 0,
+      "observedSelfCrossings": 0,
+      "selfCrossingDetails": [],
+      "stationOrderFailures": 0
+    },
+    "angles": {
+      "worstDegrees": 8.396664359063685e-13,
+      "checked": 454,
+      "illegalCurveCommands": 0,
+      "circleArcs": 0,
+      "invalidArcs": 0,
+      "abruptReversals": 0,
+      "reversalDetails": []
+    },
+    "rounded": {
+      "routeCount": 21,
+      "rounded": true,
+      "uniformStroke": true,
+      "cornerRadius": 4
+    },
+    "parallel": {
+      "samples": 0,
+      "worstGapError": 0,
+      "worstEndpointDrift": 0,
+      "synthetic45And60WorstGapError": 1.7763568394002505e-14
+    },
+    "spacing": {
+      "runs": 63,
+      "maxCvPercent": 1.09,
+      "p95CvPercent": 0.54,
+      "medianCvPercent": 0,
+      "worstRuns": [
+        {
+          "line": "TPE_K",
+          "path": "main",
+          "from": "雙城",
+          "to": "十四張",
+          "lengths": [
+            94.91,
+            94.91,
+            94.91,
+            94.71,
+            94.91,
+            94.91,
+            91.8,
+            95.03
+          ],
+          "cvPercent": 1.09
+        },
+        {
+          "line": "TPE_V",
+          "path": "branch",
+          "from": "淡水",
+          "to": "濱海沙崙",
+          "lengths": [
+            58.16,
+            58.16,
+            58.16,
+            58.16,
+            58.16,
+            56.73,
+            58.16,
+            58.16
+          ],
+          "cvPercent": 0.82
+        },
+        {
+          "line": "TAO_GR",
+          "path": "main",
+          "from": "大湳",
+          "to": "航空城一",
+          "lengths": [
+            99.31,
+            99.31,
+            99.31,
+            96.67,
+            99.31,
+            99.31,
+            99.31,
+            99.31,
+            99.31,
+            99.31,
+            98.97,
+            99.31
+          ],
+          "cvPercent": 0.74
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "象山",
+          "to": "動物園",
+          "lengths": [
+            169.93,
+            167.61
+          ],
+          "cvPercent": 0.69
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "板橋",
+          "to": "頭前庄",
+          "lengths": [
+            125.63,
+            126.98
+          ],
+          "cvPercent": 0.54
+        },
+        {
+          "line": "TPE_V",
+          "path": "main",
+          "from": "紅樹林",
+          "to": "濱海沙崙",
+          "lengths": [
+            66.95,
+            66.95,
+            66.95,
+            66.95,
+            66.95,
+            66.55,
+            66.95,
+            66.95
+          ],
+          "cvPercent": 0.19
+        },
+        {
+          "line": "TPE_LB",
+          "path": "main",
+          "from": "鶯歌",
+          "to": "大湳",
+          "lengths": [
+            82.61,
+            82.61,
+            82.61,
+            82.31,
+            82.61,
+            82.61,
+            82.61
+          ],
+          "cvPercent": 0.13
+        },
+        {
+          "line": "TPE_LG",
+          "path": "main",
+          "from": "土城",
+          "to": "迴龍",
+          "lengths": [
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77,
+            55.77
+          ],
+          "cvPercent": 0
+        }
+      ]
+    }
+  },
+  {
+    "style": "london",
+    "compliant": {
+      "topology": true,
+      "angles": true,
+      "roundedCorners": true,
+      "parallelSpacing": true,
+      "equidistantStations": true
+    },
+    "topology": {
+      "valid": true,
+      "expectedPaths": 21,
+      "renderedPaths": 21,
+      "addedSelfCrossings": 0,
+      "observedSelfCrossings": 0,
+      "selfCrossingDetails": [],
+      "stationOrderFailures": 0
+    },
+    "angles": {
+      "worstDegrees": 4.808998678372837e-12,
+      "checked": 454,
+      "illegalCurveCommands": 0,
+      "circleArcs": 0,
+      "invalidArcs": 0,
+      "abruptReversals": 0,
+      "reversalDetails": []
+    },
+    "rounded": {
+      "routeCount": 21,
+      "rounded": true,
+      "uniformStroke": true,
+      "cornerRadius": 4
+    },
+    "parallel": {
+      "samples": 0,
+      "worstGapError": 0,
+      "worstEndpointDrift": 0,
+      "synthetic45And60WorstGapError": 1.7763568394002505e-14
+    },
+    "spacing": {
+      "runs": 63,
+      "maxCvPercent": 0.02,
+      "p95CvPercent": 0,
+      "medianCvPercent": 0,
+      "worstRuns": [
+        {
+          "line": "TPE_LB",
+          "path": "main",
+          "from": "鶯歌",
+          "to": "大湳",
+          "lengths": [
+            51.09,
+            51.09,
+            51.09,
+            51.06,
+            51.09,
+            51.09,
+            51.09
+          ],
+          "cvPercent": 0.02
+        },
+        {
+          "line": "TAO_GR",
+          "path": "main",
+          "from": "大湳",
+          "to": "航空城一",
+          "lengths": [
+            79.23,
+            79.23,
+            79.23,
+            79.23,
+            79.21,
+            79.23,
+            79.23,
+            79.23,
+            79.23,
+            79.23,
+            79.23,
+            79.23
+          ],
+          "cvPercent": 0.01
+        },
+        {
+          "line": "TAO_BN",
+          "path": "main",
+          "from": "桃園",
+          "to": "迴龍",
+          "lengths": [
+            128.8,
+            128.8,
+            128.8,
+            128.8,
+            128.8,
+            128.8
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_LG",
+          "path": "main",
+          "from": "中和",
+          "to": "中和高中",
+          "lengths": [
+            49.77,
+            49.77
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "十四張",
+          "to": "景安",
+          "lengths": [
+            51.85,
+            51.85,
+            51.85
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "士林",
+          "to": "北投",
+          "lengths": [
+            43.81,
+            43.81,
+            43.81,
+            43.81,
+            43.81,
+            43.81
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "北投",
+          "to": "紅樹林",
+          "lengths": [
+            56.82,
+            56.82,
+            56.82,
+            56.82,
+            56.82
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "頭前庄",
+          "to": "新北產業園區",
+          "lengths": [
+            72.26,
+            72.26
+          ],
+          "cvPercent": 0
+        }
+      ]
+    }
+  },
+  {
+    "style": "moscow",
+    "compliant": {
+      "topology": true,
+      "angles": true,
+      "roundedCorners": true,
+      "parallelSpacing": true,
+      "equidistantStations": true
+    },
+    "topology": {
+      "valid": true,
+      "expectedPaths": 21,
+      "renderedPaths": 21,
+      "addedSelfCrossings": 0,
+      "observedSelfCrossings": 0,
+      "selfCrossingDetails": [],
+      "stationOrderFailures": 0
+    },
+    "angles": {
+      "worstDegrees": 1.4197996098053138e-11,
+      "checked": 458,
+      "illegalCurveCommands": 0,
+      "circleArcs": 78,
+      "invalidArcs": 0,
+      "abruptReversals": 0,
+      "reversalDetails": []
+    },
+    "rounded": {
+      "routeCount": 21,
+      "rounded": true,
+      "uniformStroke": true,
+      "cornerRadius": 4
+    },
+    "parallel": {
+      "samples": 0,
+      "worstGapError": 0,
+      "worstEndpointDrift": 0,
+      "synthetic45And60WorstGapError": 1.7763568394002505e-14
+    },
+    "spacing": {
+      "runs": 63,
+      "maxCvPercent": 1.42,
+      "p95CvPercent": 0.06,
+      "medianCvPercent": 0,
+      "worstRuns": [
+        {
+          "line": "TAO_A",
+          "path": "main",
+          "from": "新北產業園區",
+          "to": "坑口",
+          "lengths": [
+            435.21,
+            436.12,
+            435.04,
+            435.95,
+            434.79,
+            430.97,
+            430.88,
+            448.43,
+            448.35
+          ],
+          "cvPercent": 1.42
+        },
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "大安",
+          "to": "東門",
+          "lengths": [
+            96.07,
+            96.48
+          ],
+          "cvPercent": 0.21
+        },
+        {
+          "line": "TPE_BR",
+          "path": "main",
+          "from": "動物園",
+          "to": "大安",
+          "lengths": [
+            91.79,
+            91.94,
+            91.74,
+            91.95,
+            91.72,
+            91.98,
+            91.68,
+            92.03
+          ],
+          "cvPercent": 0.14
+        },
+        {
+          "line": "TR",
+          "path": "main",
+          "from": "基隆",
+          "to": "南港",
+          "lengths": [
+            148.63,
+            148.4,
+            148.63,
+            148.39,
+            148.63,
+            148.4,
+            148.62,
+            148.4
+          ],
+          "cvPercent": 0.08
+        },
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "象山",
+          "to": "大安",
+          "lengths": [
+            259.22,
+            258.92,
+            259.32
+          ],
+          "cvPercent": 0.06
+        },
+        {
+          "line": "TPE_V",
+          "path": "main",
+          "from": "濱海沙崙",
+          "to": "屯山國小",
+          "lengths": [
+            79.72,
+            79.75,
+            79.68,
+            79.76,
+            79.68,
+            79.77
+          ],
+          "cvPercent": 0.05
+        },
+        {
+          "line": "TPE_BL",
+          "path": "main",
+          "from": "永春",
+          "to": "南港",
+          "lengths": [
+            279.55,
+            279.38,
+            279.6
+          ],
+          "cvPercent": 0.03
+        },
+        {
+          "line": "TPE_V",
+          "path": "branch",
+          "from": "淡水",
+          "to": "濱海沙崙",
+          "lengths": [
+            43.65,
+            43.63,
+            43.63,
+            43.63,
+            43.64,
+            43.6,
+            43.62,
+            43.63
+          ],
+          "cvPercent": 0.03
+        }
+      ]
+    }
+  },
+  {
+    "style": "concentric",
+    "compliant": {
+      "topology": true,
+      "angles": true,
+      "roundedCorners": true,
+      "parallelSpacing": true,
+      "equidistantStations": true
+    },
+    "topology": {
+      "valid": true,
+      "expectedPaths": 21,
+      "renderedPaths": 21,
+      "addedSelfCrossings": 0,
+      "observedSelfCrossings": 0,
+      "selfCrossingDetails": [],
+      "stationOrderFailures": 0
+    },
+    "angles": {
+      "worstDegrees": 1.7781285427393638e-08,
+      "checked": 200,
+      "illegalCurveCommands": 0,
+      "circleArcs": 201,
+      "invalidArcs": 0,
+      "abruptReversals": 0,
+      "reversalDetails": []
+    },
+    "rounded": {
+      "routeCount": 21,
+      "rounded": true,
+      "uniformStroke": true,
+      "cornerRadius": 4
+    },
+    "parallel": {
+      "samples": 0,
+      "worstGapError": 0,
+      "worstEndpointDrift": 0,
+      "synthetic45And60WorstGapError": 1.7763568394002505e-14
+    },
+    "spacing": {
+      "runs": 63,
+      "maxCvPercent": 0.02,
+      "p95CvPercent": 0.01,
+      "medianCvPercent": 0,
+      "worstRuns": [
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "中山",
+          "to": "民權西路",
+          "lengths": [
+            53.79,
+            53.81
+          ],
+          "cvPercent": 0.02
+        },
+        {
+          "line": "TPE_O",
+          "path": "main",
+          "from": "大橋頭",
+          "to": "三重",
+          "lengths": [
+            196.13,
+            196.22,
+            196.22
+          ],
+          "cvPercent": 0.02
+        },
+        {
+          "line": "TPE_LG",
+          "path": "main",
+          "from": "中正紀念堂",
+          "to": "中和",
+          "lengths": [
+            126.59,
+            126.65,
+            126.65,
+            126.65,
+            126.65
+          ],
+          "cvPercent": 0.02
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "象山",
+          "to": "動物園",
+          "lengths": [
+            209.71,
+            209.76
+          ],
+          "cvPercent": 0.01
+        },
+        {
+          "line": "TPE_O",
+          "path": "main",
+          "from": "三重",
+          "to": "頭前庄",
+          "lengths": [
+            168.11,
+            168.14
+          ],
+          "cvPercent": 0.01
+        },
+        {
+          "line": "TPE_G",
+          "path": "main",
+          "from": "中正紀念堂",
+          "to": "西門",
+          "lengths": [
+            111.37,
+            111.35
+          ],
+          "cvPercent": 0.01
+        },
+        {
+          "line": "TPE_BL",
+          "path": "main",
+          "from": "土城",
+          "to": "板橋",
+          "lengths": [
+            169.65,
+            169.65,
+            169.63,
+            169.63
+          ],
+          "cvPercent": 0.01
+        },
+        {
+          "line": "TPE_O",
+          "path": "main",
+          "from": "景安",
+          "to": "古亭",
+          "lengths": [
+            140.48,
+            140.47,
+            140.46
+          ],
+          "cvPercent": 0.01
+        }
+      ]
+    }
+  },
+  {
+    "style": "hex",
+    "compliant": {
+      "topology": true,
+      "angles": true,
+      "roundedCorners": true,
+      "parallelSpacing": true,
+      "equidistantStations": true
+    },
+    "topology": {
+      "valid": true,
+      "expectedPaths": 21,
+      "renderedPaths": 21,
+      "addedSelfCrossings": 0,
+      "observedSelfCrossings": 0,
+      "selfCrossingDetails": [],
+      "stationOrderFailures": 0
+    },
+    "angles": {
+      "worstDegrees": 1.8470117146194936e-10,
+      "checked": 470,
+      "illegalCurveCommands": 0,
+      "circleArcs": 123,
+      "invalidArcs": 0,
+      "abruptReversals": 0,
+      "reversalDetails": []
+    },
+    "rounded": {
+      "routeCount": 21,
+      "rounded": true,
+      "uniformStroke": true,
+      "cornerRadius": 4
+    },
+    "parallel": {
+      "samples": 0,
+      "worstGapError": 0,
+      "worstEndpointDrift": 0,
+      "synthetic45And60WorstGapError": 1.7763568394002505e-14
+    },
+    "spacing": {
+      "runs": 63,
+      "maxCvPercent": 1.21,
+      "p95CvPercent": 0.26,
+      "medianCvPercent": 0,
+      "worstRuns": [
+        {
+          "line": "TPE_O",
+          "path": "branch",
+          "from": "大橋頭",
+          "to": "徐匯中學",
+          "lengths": [
+            103.98,
+            100.93,
+            102.45
+          ],
+          "cvPercent": 1.21
+        },
+        {
+          "line": "TPE_LB",
+          "path": "main",
+          "from": "鶯歌",
+          "to": "大湳",
+          "lengths": [
+            63.5,
+            63.5,
+            63.5,
+            62.34,
+            63.5,
+            63.5,
+            63.5
+          ],
+          "cvPercent": 0.64
+        },
+        {
+          "line": "TPE_BL",
+          "path": "main",
+          "from": "土城",
+          "to": "板橋",
+          "lengths": [
+            114.5,
+            116.16,
+            115.33,
+            115.33
+          ],
+          "cvPercent": 0.51
+        },
+        {
+          "line": "TAO_GR",
+          "path": "main",
+          "from": "大湳",
+          "to": "航空城一",
+          "lengths": [
+            87.48,
+            87.48,
+            87.48,
+            87.48,
+            87.48,
+            87.48,
+            87.48,
+            86.17,
+            87.48,
+            87.11,
+            87.48,
+            87.48
+          ],
+          "cvPercent": 0.42
+        },
+        {
+          "line": "TPE_K",
+          "path": "main",
+          "from": "雙城",
+          "to": "十四張",
+          "lengths": [
+            81.49,
+            81.49,
+            81.49,
+            81.49,
+            80.87,
+            81.24,
+            81.49,
+            81.49
+          ],
+          "cvPercent": 0.26
+        },
+        {
+          "line": "TPE_Y",
+          "path": "main",
+          "from": "劍南路",
+          "to": "松山",
+          "lengths": [
+            80.07,
+            80.07,
+            80.07,
+            79.65,
+            80.07,
+            80.07,
+            80.07
+          ],
+          "cvPercent": 0.18
+        },
+        {
+          "line": "TPE_LG",
+          "path": "main",
+          "from": "土城",
+          "to": "迴龍",
+          "lengths": [
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89,
+            62.89
+          ],
+          "cvPercent": 0
+        },
+        {
+          "line": "TPE_R",
+          "path": "main",
+          "from": "北投",
+          "to": "紅樹林",
+          "lengths": [
+            84.56,
+            84.56,
+            84.56,
+            84.56,
+            84.56
+          ],
+          "cvPercent": 0
+        }
+      ]
+    }
+  }
+]

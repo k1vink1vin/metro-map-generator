@@ -1,0 +1,2750 @@
+{
+  "source": "TPE_Metro.xlsm",
+  "sha256": "155f7bd67fe0740729eb08d034426a1ea9c16daaec1fbfd8b270feba8f829045",
+  "stationRecords": 321,
+  "concentricCenterNodeId": "XFER_010",
+  "stations": [
+    {
+      "id": "XFER_001",
+      "name": "動物園",
+      "stationIds": [
+        "BR01",
+        "Y01"
+      ],
+      "lat": 24.998197
+    },
+    {
+      "id": "XFER_002",
+      "name": "大安",
+      "stationIds": [
+        "BR09",
+        "R05"
+      ],
+      "lat": 25.032943
+    },
+    {
+      "id": "XFER_003",
+      "name": "忠孝復興",
+      "stationIds": [
+        "BR10",
+        "BL15"
+      ],
+      "lat": 25.041629
+    },
+    {
+      "id": "XFER_004",
+      "name": "南京復興",
+      "stationIds": [
+        "BR11",
+        "G16"
+      ],
+      "lat": 25.052319
+    },
+    {
+      "id": "XFER_005",
+      "name": "劍南路",
+      "stationIds": [
+        "BR15",
+        "Y32"
+      ],
+      "lat": 25.084853
+    },
+    {
+      "id": "XFER_006",
+      "name": "南港展覽館",
+      "stationIds": [
+        "BR24",
+        "BL23"
+      ],
+      "lat": 25.055288
+    },
+    {
+      "id": "XFER_007",
+      "name": "象山",
+      "stationIds": [
+        "R02",
+        "Y41"
+      ],
+      "lat": 25.03283
+    },
+    {
+      "id": "XFER_008",
+      "name": "東門",
+      "stationIds": [
+        "R07",
+        "O06"
+      ],
+      "lat": 25.033847
+    },
+    {
+      "id": "XFER_009",
+      "name": "中正紀念堂",
+      "stationIds": [
+        "R08",
+        "G10",
+        "LG01"
+      ],
+      "lat": 25.032729
+    },
+    {
+      "id": "XFER_010",
+      "name": "台北車站",
+      "stationIds": [
+        "R10",
+        "BL12",
+        "A01",
+        "SR02",
+        "TR100"
+      ],
+      "lat": 25.046255
+    },
+    {
+      "id": "XFER_011",
+      "name": "中山",
+      "stationIds": [
+        "R11",
+        "G14"
+      ],
+      "lat": 25.052685
+    },
+    {
+      "id": "XFER_012",
+      "name": "民權西路",
+      "stationIds": [
+        "R13",
+        "O11"
+      ],
+      "lat": 25.062905
+    },
+    {
+      "id": "XFER_013",
+      "name": "士林",
+      "stationIds": [
+        "R16",
+        "Y29"
+      ],
+      "lat": 25.093535
+    },
+    {
+      "id": "XFER_014",
+      "name": "紅樹林",
+      "stationIds": [
+        "R27",
+        "V01"
+      ],
+      "lat": 25.154042
+    },
+    {
+      "id": "XFER_015",
+      "name": "淡水",
+      "stationIds": [
+        "R28",
+        "V21"
+      ],
+      "lat": 25.167818
+    },
+    {
+      "id": "XFER_016",
+      "name": "大坪林",
+      "stationIds": [
+        "G04",
+        "Y07"
+      ],
+      "lat": 24.982899
+    },
+    {
+      "id": "XFER_017",
+      "name": "古亭",
+      "stationIds": [
+        "G09",
+        "O05"
+      ],
+      "lat": 25.026357
+    },
+    {
+      "id": "XFER_018",
+      "name": "西門",
+      "stationIds": [
+        "G12",
+        "BL11"
+      ],
+      "lat": 25.04209
+    },
+    {
+      "id": "XFER_019",
+      "name": "松江南京",
+      "stationIds": [
+        "G15",
+        "O08"
+      ],
+      "lat": 25.052015
+    },
+    {
+      "id": "XFER_020",
+      "name": "松山",
+      "stationIds": [
+        "G19",
+        "Y39",
+        "TR099"
+      ],
+      "lat": 25.050118
+    },
+    {
+      "id": "XFER_021",
+      "name": "景安",
+      "stationIds": [
+        "O02",
+        "Y11"
+      ],
+      "lat": 24.993905
+    },
+    {
+      "id": "XFER_022",
+      "name": "忠孝新生",
+      "stationIds": [
+        "O07",
+        "BL14"
+      ],
+      "lat": 25.042356
+    },
+    {
+      "id": "XFER_023",
+      "name": "三重",
+      "stationIds": [
+        "O15",
+        "A02"
+      ],
+      "lat": 25.055791
+    },
+    {
+      "id": "XFER_024",
+      "name": "頭前庄",
+      "stationIds": [
+        "O17",
+        "Y18"
+      ],
+      "lat": 25.039705
+    },
+    {
+      "id": "XFER_025",
+      "name": "迴龍",
+      "stationIds": [
+        "O21",
+        "LG21",
+        "BN07"
+      ],
+      "lat": 25.021862
+    },
+    {
+      "id": "XFER_026",
+      "name": "徐匯中學",
+      "stationIds": [
+        "O52",
+        "Y24"
+      ],
+      "lat": 25.080728
+    },
+    {
+      "id": "XFER_027",
+      "name": "頂埔",
+      "stationIds": [
+        "BL01",
+        "LB01"
+      ],
+      "lat": 24.96012
+    },
+    {
+      "id": "XFER_028",
+      "name": "土城",
+      "stationIds": [
+        "BL03",
+        "LG11"
+      ],
+      "lat": 24.973094
+    },
+    {
+      "id": "XFER_029",
+      "name": "板橋",
+      "stationIds": [
+        "BL07",
+        "Y16",
+        "SR03",
+        "TR102"
+      ],
+      "lat": 25.013618
+    },
+    {
+      "id": "XFER_030",
+      "name": "永春",
+      "stationIds": [
+        "BL19",
+        "Y40"
+      ],
+      "lat": 25.040859
+    },
+    {
+      "id": "XFER_038",
+      "name": "南港",
+      "stationIds": [
+        "BL22",
+        "SR01",
+        "TR098"
+      ],
+      "lat": 25.052116
+    },
+    {
+      "id": "XFER_031",
+      "name": "十四張",
+      "stationIds": [
+        "Y08",
+        "K09"
+      ],
+      "lat": 24.9829302
+    },
+    {
+      "id": "XFER_032",
+      "name": "中和",
+      "stationIds": [
+        "Y12",
+        "LG06"
+      ],
+      "lat": 25.0019806
+    },
+    {
+      "id": "XFER_033",
+      "name": "新北產業園區",
+      "stationIds": [
+        "Y20",
+        "A03"
+      ],
+      "lat": 25.0615483
+    },
+    {
+      "id": "XFER_039",
+      "name": "鶯歌",
+      "stationIds": [
+        "LB08",
+        "TR107"
+      ],
+      "lat": 24.9531287
+    },
+    {
+      "id": "XFER_034",
+      "name": "大湳",
+      "stationIds": [
+        "LB14",
+        "GR04"
+      ],
+      "lat": 24.9564356
+    },
+    {
+      "id": "XFER_035",
+      "name": "坑口",
+      "stationIds": [
+        "A11",
+        "GR15b"
+      ],
+      "lat": 25.086516
+    },
+    {
+      "id": "XFER_036",
+      "name": "橫山",
+      "stationIds": [
+        "A16",
+        "GR18"
+      ],
+      "lat": 25.0460284
+    },
+    {
+      "id": "XFER_041",
+      "name": "高鐵桃園站",
+      "stationIds": [
+        "A18",
+        "SR04"
+      ],
+      "lat": 25.013762
+    },
+    {
+      "id": "XFER_037",
+      "name": "中壢",
+      "stationIds": [
+        "A23",
+        "GR25",
+        "TR110"
+      ],
+      "lat": 24.953117000000002
+    },
+    {
+      "id": "XFER_040",
+      "name": "桃園",
+      "stationIds": [
+        "BN01",
+        "TR108"
+      ],
+      "lat": 24.9894906
+    },
+    {
+      "id": "BR02",
+      "name": "木柵",
+      "stationIds": [
+        "BR02"
+      ],
+      "lat": 24.998241
+    },
+    {
+      "id": "BR03",
+      "name": "萬芳社區",
+      "stationIds": [
+        "BR03"
+      ],
+      "lat": 24.998585
+    },
+    {
+      "id": "BR04",
+      "name": "萬芳醫院",
+      "stationIds": [
+        "BR04"
+      ],
+      "lat": 24.999386
+    },
+    {
+      "id": "BR05",
+      "name": "辛亥",
+      "stationIds": [
+        "BR05"
+      ],
+      "lat": 25.005475
+    },
+    {
+      "id": "BR06",
+      "name": "麟光",
+      "stationIds": [
+        "BR06"
+      ],
+      "lat": 25.018535
+    },
+    {
+      "id": "BR07",
+      "name": "六張犁",
+      "stationIds": [
+        "BR07"
+      ],
+      "lat": 25.023777
+    },
+    {
+      "id": "BR08",
+      "name": "科技大樓",
+      "stationIds": [
+        "BR08"
+      ],
+      "lat": 25.026125
+    },
+    {
+      "id": "BR12",
+      "name": "中山國中",
+      "stationIds": [
+        "BR12"
+      ],
+      "lat": 25.060849
+    },
+    {
+      "id": "BR13",
+      "name": "松山機場",
+      "stationIds": [
+        "BR13"
+      ],
+      "lat": 25.063
+    },
+    {
+      "id": "BR14",
+      "name": "大直",
+      "stationIds": [
+        "BR14"
+      ],
+      "lat": 25.079477
+    },
+    {
+      "id": "BR16",
+      "name": "西湖",
+      "stationIds": [
+        "BR16"
+      ],
+      "lat": 25.082133
+    },
+    {
+      "id": "BR17",
+      "name": "港墘",
+      "stationIds": [
+        "BR17"
+      ],
+      "lat": 25.080028
+    },
+    {
+      "id": "BR18",
+      "name": "文德",
+      "stationIds": [
+        "BR18"
+      ],
+      "lat": 25.078532
+    },
+    {
+      "id": "BR19",
+      "name": "內湖",
+      "stationIds": [
+        "BR19"
+      ],
+      "lat": 25.083661
+    },
+    {
+      "id": "BR20",
+      "name": "大湖公園",
+      "stationIds": [
+        "BR20"
+      ],
+      "lat": 25.083845
+    },
+    {
+      "id": "BR21",
+      "name": "葫洲",
+      "stationIds": [
+        "BR21"
+      ],
+      "lat": 25.072701
+    },
+    {
+      "id": "BR22",
+      "name": "東湖",
+      "stationIds": [
+        "BR22"
+      ],
+      "lat": 25.067147
+    },
+    {
+      "id": "BR23",
+      "name": "南港軟體園區",
+      "stationIds": [
+        "BR23"
+      ],
+      "lat": 25.059905
+    },
+    {
+      "id": "R01",
+      "name": "廣慈/奉天宮",
+      "stationIds": [
+        "R01"
+      ],
+      "lat": 25.0378221
+    },
+    {
+      "id": "R03",
+      "name": "台北101/世貿",
+      "stationIds": [
+        "R03"
+      ],
+      "lat": 25.033102
+    },
+    {
+      "id": "R04",
+      "name": "信義安和",
+      "stationIds": [
+        "R04"
+      ],
+      "lat": 25.033326
+    },
+    {
+      "id": "R06",
+      "name": "大安森林公園",
+      "stationIds": [
+        "R06"
+      ],
+      "lat": 25.033396
+    },
+    {
+      "id": "R09",
+      "name": "台大醫院",
+      "stationIds": [
+        "R09"
+      ],
+      "lat": 25.041256
+    },
+    {
+      "id": "R12",
+      "name": "雙連",
+      "stationIds": [
+        "R12"
+      ],
+      "lat": 25.057805
+    },
+    {
+      "id": "R14",
+      "name": "圓山",
+      "stationIds": [
+        "R14"
+      ],
+      "lat": 25.071353
+    },
+    {
+      "id": "R15",
+      "name": "劍潭",
+      "stationIds": [
+        "R15"
+      ],
+      "lat": 25.084873
+    },
+    {
+      "id": "R17",
+      "name": "芝山",
+      "stationIds": [
+        "R17"
+      ],
+      "lat": 25.10306
+    },
+    {
+      "id": "R18",
+      "name": "明德",
+      "stationIds": [
+        "R18"
+      ],
+      "lat": 25.109721
+    },
+    {
+      "id": "R19",
+      "name": "石牌",
+      "stationIds": [
+        "R19"
+      ],
+      "lat": 25.114523
+    },
+    {
+      "id": "R20",
+      "name": "唭哩岸",
+      "stationIds": [
+        "R20"
+      ],
+      "lat": 25.120872
+    },
+    {
+      "id": "R21",
+      "name": "奇岩",
+      "stationIds": [
+        "R21"
+      ],
+      "lat": 25.125491
+    },
+    {
+      "id": "R22",
+      "name": "北投",
+      "stationIds": [
+        "R22"
+      ],
+      "lat": 25.131841
+    },
+    {
+      "id": "R22A",
+      "name": "新北投",
+      "stationIds": [
+        "R22A"
+      ],
+      "lat": 25.136933
+    },
+    {
+      "id": "R23",
+      "name": "復興崗",
+      "stationIds": [
+        "R23"
+      ],
+      "lat": 25.137474
+    },
+    {
+      "id": "R24",
+      "name": "忠義",
+      "stationIds": [
+        "R24"
+      ],
+      "lat": 25.130969
+    },
+    {
+      "id": "R25",
+      "name": "關渡",
+      "stationIds": [
+        "R25"
+      ],
+      "lat": 25.125633
+    },
+    {
+      "id": "R26",
+      "name": "竹圍",
+      "stationIds": [
+        "R26"
+      ],
+      "lat": 25.13694
+    },
+    {
+      "id": "G01",
+      "name": "新店",
+      "stationIds": [
+        "G01"
+      ],
+      "lat": 24.957855
+    },
+    {
+      "id": "G02",
+      "name": "新店區公所",
+      "stationIds": [
+        "G02"
+      ],
+      "lat": 24.967393
+    },
+    {
+      "id": "G03",
+      "name": "七張",
+      "stationIds": [
+        "G03"
+      ],
+      "lat": 24.975169
+    },
+    {
+      "id": "G03A",
+      "name": "小碧潭",
+      "stationIds": [
+        "G03A"
+      ],
+      "lat": 24.971907
+    },
+    {
+      "id": "G05",
+      "name": "景美",
+      "stationIds": [
+        "G05"
+      ],
+      "lat": 24.9921276
+    },
+    {
+      "id": "G06",
+      "name": "萬隆",
+      "stationIds": [
+        "G06"
+      ],
+      "lat": 25.001853
+    },
+    {
+      "id": "G07",
+      "name": "公館",
+      "stationIds": [
+        "G07"
+      ],
+      "lat": 25.016077
+    },
+    {
+      "id": "G08",
+      "name": "台電大樓",
+      "stationIds": [
+        "G08"
+      ],
+      "lat": 25.020725
+    },
+    {
+      "id": "G11",
+      "name": "小南門",
+      "stationIds": [
+        "G11"
+      ],
+      "lat": 25.035547
+    },
+    {
+      "id": "G13",
+      "name": "北門",
+      "stationIds": [
+        "G13"
+      ],
+      "lat": 25.049554
+    },
+    {
+      "id": "G17",
+      "name": "台北小巨蛋",
+      "stationIds": [
+        "G17"
+      ],
+      "lat": 25.051836
+    },
+    {
+      "id": "G18",
+      "name": "南京三民",
+      "stationIds": [
+        "G18"
+      ],
+      "lat": 25.051652
+    },
+    {
+      "id": "O01",
+      "name": "南勢角",
+      "stationIds": [
+        "O01"
+      ],
+      "lat": 24.990045
+    },
+    {
+      "id": "O03",
+      "name": "永安市場",
+      "stationIds": [
+        "O03"
+      ],
+      "lat": 25.002876
+    },
+    {
+      "id": "O04",
+      "name": "頂溪",
+      "stationIds": [
+        "O04"
+      ],
+      "lat": 25.013821
+    },
+    {
+      "id": "O09",
+      "name": "行天宮",
+      "stationIds": [
+        "O09"
+      ],
+      "lat": 25.059718
+    },
+    {
+      "id": "O10",
+      "name": "中山國小",
+      "stationIds": [
+        "O10"
+      ],
+      "lat": 25.062694
+    },
+    {
+      "id": "O12",
+      "name": "大橋頭",
+      "stationIds": [
+        "O12"
+      ],
+      "lat": 25.063256
+    },
+    {
+      "id": "O13",
+      "name": "台北橋",
+      "stationIds": [
+        "O13"
+      ],
+      "lat": 25.063274
+    },
+    {
+      "id": "O14",
+      "name": "菜寮",
+      "stationIds": [
+        "O14"
+      ],
+      "lat": 25.060274
+    },
+    {
+      "id": "O16",
+      "name": "先嗇宮",
+      "stationIds": [
+        "O16"
+      ],
+      "lat": 25.046493
+    },
+    {
+      "id": "O18",
+      "name": "新莊",
+      "stationIds": [
+        "O18"
+      ],
+      "lat": 25.036125
+    },
+    {
+      "id": "O19",
+      "name": "輔大",
+      "stationIds": [
+        "O19"
+      ],
+      "lat": 25.032718
+    },
+    {
+      "id": "O20",
+      "name": "丹鳳",
+      "stationIds": [
+        "O20"
+      ],
+      "lat": 25.0288671
+    },
+    {
+      "id": "O50",
+      "name": "三重國小",
+      "stationIds": [
+        "O50"
+      ],
+      "lat": 25.070319
+    },
+    {
+      "id": "O51",
+      "name": "三和國中",
+      "stationIds": [
+        "O51"
+      ],
+      "lat": 25.076859
+    },
+    {
+      "id": "O53",
+      "name": "三民高中",
+      "stationIds": [
+        "O53"
+      ],
+      "lat": 25.085456
+    },
+    {
+      "id": "O54",
+      "name": "蘆洲",
+      "stationIds": [
+        "O54"
+      ],
+      "lat": 25.091554
+    },
+    {
+      "id": "BL02",
+      "name": "永寧",
+      "stationIds": [
+        "BL02"
+      ],
+      "lat": 24.966726
+    },
+    {
+      "id": "BL04",
+      "name": "海山",
+      "stationIds": [
+        "BL04"
+      ],
+      "lat": 24.985339
+    },
+    {
+      "id": "BL05",
+      "name": "亞東醫院",
+      "stationIds": [
+        "BL05"
+      ],
+      "lat": 24.998037
+    },
+    {
+      "id": "BL06",
+      "name": "府中",
+      "stationIds": [
+        "BL06"
+      ],
+      "lat": 25.008619
+    },
+    {
+      "id": "BL08",
+      "name": "新埔",
+      "stationIds": [
+        "BL08"
+      ],
+      "lat": 25.023738
+    },
+    {
+      "id": "BL09",
+      "name": "江子翠",
+      "stationIds": [
+        "BL09"
+      ],
+      "lat": 25.03001
+    },
+    {
+      "id": "BL10",
+      "name": "龍山寺",
+      "stationIds": [
+        "BL10"
+      ],
+      "lat": 25.03528
+    },
+    {
+      "id": "BL13",
+      "name": "善導寺",
+      "stationIds": [
+        "BL13"
+      ],
+      "lat": 25.044823
+    },
+    {
+      "id": "BL16",
+      "name": "忠孝敦化",
+      "stationIds": [
+        "BL16"
+      ],
+      "lat": 25.041478
+    },
+    {
+      "id": "BL17",
+      "name": "國父紀念館",
+      "stationIds": [
+        "BL17"
+      ],
+      "lat": 25.041349
+    },
+    {
+      "id": "BL18",
+      "name": "市政府",
+      "stationIds": [
+        "BL18"
+      ],
+      "lat": 25.041171
+    },
+    {
+      "id": "BL20",
+      "name": "後山埤",
+      "stationIds": [
+        "BL20"
+      ],
+      "lat": 25.045055
+    },
+    {
+      "id": "BL21",
+      "name": "昆陽",
+      "stationIds": [
+        "BL21"
+      ],
+      "lat": 25.050461
+    },
+    {
+      "id": "Y02",
+      "name": "政大",
+      "stationIds": [
+        "Y02"
+      ],
+      "lat": 24.9881257
+    },
+    {
+      "id": "Y03",
+      "name": "文山區公所",
+      "stationIds": [
+        "Y03"
+      ],
+      "lat": 24.9902354
+    },
+    {
+      "id": "Y04",
+      "name": "馬明潭",
+      "stationIds": [
+        "Y04"
+      ],
+      "lat": 24.9887665
+    },
+    {
+      "id": "Y05",
+      "name": "溝子口",
+      "stationIds": [
+        "Y05"
+      ],
+      "lat": 24.9877193
+    },
+    {
+      "id": "Y06",
+      "name": "寶斗厝",
+      "stationIds": [
+        "Y06"
+      ],
+      "lat": 24.983687
+    },
+    {
+      "id": "Y09",
+      "name": "秀朗橋",
+      "stationIds": [
+        "Y09"
+      ],
+      "lat": 24.9905493
+    },
+    {
+      "id": "Y10",
+      "name": "景平",
+      "stationIds": [
+        "Y10"
+      ],
+      "lat": 24.9919681
+    },
+    {
+      "id": "Y13",
+      "name": "橋和",
+      "stationIds": [
+        "Y13"
+      ],
+      "lat": 25.0044131
+    },
+    {
+      "id": "Y14",
+      "name": "中原",
+      "stationIds": [
+        "Y14"
+      ],
+      "lat": 25.0084104
+    },
+    {
+      "id": "Y15",
+      "name": "板新",
+      "stationIds": [
+        "Y15"
+      ],
+      "lat": 25.0144914
+    },
+    {
+      "id": "Y17",
+      "name": "新埔民生",
+      "stationIds": [
+        "Y17"
+      ],
+      "lat": 25.026125
+    },
+    {
+      "id": "Y19",
+      "name": "幸福",
+      "stationIds": [
+        "Y19"
+      ],
+      "lat": 25.050282
+    },
+    {
+      "id": "Y21",
+      "name": "工商展覽中心",
+      "stationIds": [
+        "Y21"
+      ],
+      "lat": 25.0674708
+    },
+    {
+      "id": "Y22",
+      "name": "更寮",
+      "stationIds": [
+        "Y22"
+      ],
+      "lat": 25.0749046
+    },
+    {
+      "id": "Y23",
+      "name": "得仁",
+      "stationIds": [
+        "Y23"
+      ],
+      "lat": 25.0773597
+    },
+    {
+      "id": "Y25",
+      "name": "分子尾",
+      "stationIds": [
+        "Y25"
+      ],
+      "lat": 25.0891135
+    },
+    {
+      "id": "Y26",
+      "name": "五華",
+      "stationIds": [
+        "Y26"
+      ],
+      "lat": 25.0881655
+    },
+    {
+      "id": "Y27",
+      "name": "社子",
+      "stationIds": [
+        "Y27"
+      ],
+      "lat": 25.0875395
+    },
+    {
+      "id": "Y28",
+      "name": "士林區公所",
+      "stationIds": [
+        "Y28"
+      ],
+      "lat": 25.0928819
+    },
+    {
+      "id": "Y30",
+      "name": "士林官邸",
+      "stationIds": [
+        "Y30"
+      ],
+      "lat": 25.0963423
+    },
+    {
+      "id": "Y31",
+      "name": "故宮",
+      "stationIds": [
+        "Y31"
+      ],
+      "lat": 25.0984464
+    },
+    {
+      "id": "Y33",
+      "name": "下塔悠",
+      "stationIds": [
+        "Y33"
+      ],
+      "lat": 25.0799215
+    },
+    {
+      "id": "Y34",
+      "name": "洲子",
+      "stationIds": [
+        "Y34"
+      ],
+      "lat": 25.0792879
+    },
+    {
+      "id": "Y35",
+      "name": "內湖科學園區",
+      "stationIds": [
+        "Y35"
+      ],
+      "lat": 25.0771015
+    },
+    {
+      "id": "Y36",
+      "name": "瑞光公園",
+      "stationIds": [
+        "Y36"
+      ],
+      "lat": 25.0723107
+    },
+    {
+      "id": "Y37",
+      "name": "粉寮",
+      "stationIds": [
+        "Y37"
+      ],
+      "lat": 25.0669102
+    },
+    {
+      "id": "Y38",
+      "name": "舊宗",
+      "stationIds": [
+        "Y38"
+      ],
+      "lat": 25.0608288
+    },
+    {
+      "id": "Y42",
+      "name": "三張犁",
+      "stationIds": [
+        "Y42"
+      ],
+      "lat": 25.023415
+    },
+    {
+      "id": "LG02",
+      "name": "植物園(南機場)",
+      "stationIds": [
+        "LG02"
+      ],
+      "lat": 25.0308474
+    },
+    {
+      "id": "LG03",
+      "name": "廈安",
+      "stationIds": [
+        "LG03"
+      ],
+      "lat": 25.0300793
+    },
+    {
+      "id": "LG04",
+      "name": "加蚋",
+      "stationIds": [
+        "LG04"
+      ],
+      "lat": 25.0219814
+    },
+    {
+      "id": "LG05",
+      "name": "永和永平國小",
+      "stationIds": [
+        "LG05"
+      ],
+      "lat": 25.0083552
+    },
+    {
+      "id": "LG07",
+      "name": "連城錦和",
+      "stationIds": [
+        "LG07"
+      ],
+      "lat": 24.9963552
+    },
+    {
+      "id": "LG08",
+      "name": "中和高中",
+      "stationIds": [
+        "LG08"
+      ],
+      "lat": 24.9950168
+    },
+    {
+      "id": "LG08A",
+      "name": "莒光",
+      "stationIds": [
+        "LG08A"
+      ],
+      "lat": 24.994504
+    },
+    {
+      "id": "LG09",
+      "name": "廷寮",
+      "stationIds": [
+        "LG09"
+      ],
+      "lat": 24.9883158
+    },
+    {
+      "id": "LG10",
+      "name": "清水",
+      "stationIds": [
+        "LG10"
+      ],
+      "lat": 24.9831897
+    },
+    {
+      "id": "LG12",
+      "name": "埤塘",
+      "stationIds": [
+        "LG12"
+      ],
+      "lat": 24.9691733
+    },
+    {
+      "id": "LG13",
+      "name": "城林橋",
+      "stationIds": [
+        "LG13"
+      ],
+      "lat": 24.974094
+    },
+    {
+      "id": "LG14",
+      "name": "溪洲",
+      "stationIds": [
+        "LG14"
+      ],
+      "lat": 24.9840644
+    },
+    {
+      "id": "LG15",
+      "name": "彭福",
+      "stationIds": [
+        "LG15"
+      ],
+      "lat": 24.9823353
+    },
+    {
+      "id": "LG16",
+      "name": "育林國小",
+      "stationIds": [
+        "LG16"
+      ],
+      "lat": 24.9873384
+    },
+    {
+      "id": "LG17",
+      "name": "樹林(樹人家商)",
+      "stationIds": [
+        "LG17"
+      ],
+      "lat": 24.9935153
+    },
+    {
+      "id": "LG18",
+      "name": "潭底",
+      "stationIds": [
+        "LG18"
+      ],
+      "lat": 25.0014415
+    },
+    {
+      "id": "LG19",
+      "name": "監理所",
+      "stationIds": [
+        "LG19"
+      ],
+      "lat": 25.0083874
+    },
+    {
+      "id": "LG20",
+      "name": "三角埔",
+      "stationIds": [
+        "LG20"
+      ],
+      "lat": 25.0149278
+    },
+    {
+      "id": "LB02",
+      "name": "馬祖田",
+      "stationIds": [
+        "LB02"
+      ],
+      "lat": 24.9534902
+    },
+    {
+      "id": "LB03",
+      "name": "長壽山",
+      "stationIds": [
+        "LB03"
+      ],
+      "lat": 24.9441929
+    },
+    {
+      "id": "LB04",
+      "name": "橫溪",
+      "stationIds": [
+        "LB04"
+      ],
+      "lat": 24.9370183
+    },
+    {
+      "id": "LB05",
+      "name": "龍埔(三峽廣行宮)",
+      "stationIds": [
+        "LB05"
+      ],
+      "lat": 24.9399005
+    },
+    {
+      "id": "LB06",
+      "name": "三峽(國家教育研究院)",
+      "stationIds": [
+        "LB06"
+      ],
+      "lat": 24.9384534
+    },
+    {
+      "id": "LB07",
+      "name": "臺北大學(恩主公醫院)",
+      "stationIds": [
+        "LB07"
+      ],
+      "lat": 24.9389747
+    },
+    {
+      "id": "LB09",
+      "name": "陶瓷老街",
+      "stationIds": [
+        "LB09"
+      ],
+      "lat": 24.9527377
+    },
+    {
+      "id": "LB10",
+      "name": "國華",
+      "stationIds": [
+        "LB10"
+      ],
+      "lat": 24.9552801
+    },
+    {
+      "id": "LB11",
+      "name": "永吉公園",
+      "stationIds": [
+        "LB11"
+      ],
+      "lat": 24.9603976
+    },
+    {
+      "id": "LB12",
+      "name": "鶯桃福德",
+      "stationIds": [
+        "LB12"
+      ],
+      "lat": 24.9669104
+    },
+    {
+      "id": "LB12A",
+      "name": "八德轉運",
+      "stationIds": [
+        "LB12A"
+      ],
+      "lat": 24.9602783
+    },
+    {
+      "id": "LB13",
+      "name": "豎銜埤",
+      "stationIds": [
+        "LB13"
+      ],
+      "lat": 24.9576557
+    },
+    {
+      "id": "V02",
+      "name": "竿蓁林",
+      "stationIds": [
+        "V02"
+      ],
+      "lat": 25.1623957
+    },
+    {
+      "id": "V03",
+      "name": "淡金鄧公",
+      "stationIds": [
+        "V03"
+      ],
+      "lat": 25.1692653
+    },
+    {
+      "id": "V04",
+      "name": "淡江大學",
+      "stationIds": [
+        "V04"
+      ],
+      "lat": 25.1768667
+    },
+    {
+      "id": "V05",
+      "name": "淡金北新",
+      "stationIds": [
+        "V05"
+      ],
+      "lat": 25.1811391
+    },
+    {
+      "id": "V06",
+      "name": "新市一路",
+      "stationIds": [
+        "V06"
+      ],
+      "lat": 25.1837706
+    },
+    {
+      "id": "V07",
+      "name": "淡水行政中心",
+      "stationIds": [
+        "V07"
+      ],
+      "lat": 25.1890219
+    },
+    {
+      "id": "V08",
+      "name": "濱海濱海義山",
+      "stationIds": [
+        "V08"
+      ],
+      "lat": 25.1897281
+    },
+    {
+      "id": "V09",
+      "name": "濱海沙崙",
+      "stationIds": [
+        "V09"
+      ],
+      "lat": 25.1905014
+    },
+    {
+      "id": "V10",
+      "name": "淡海新市鎮",
+      "stationIds": [
+        "V10"
+      ],
+      "lat": 25.195687
+    },
+    {
+      "id": "V11",
+      "name": "崁頂",
+      "stationIds": [
+        "V11"
+      ],
+      "lat": 25.2008979
+    },
+    {
+      "id": "V12",
+      "name": "下圭柔",
+      "stationIds": [
+        "V12"
+      ],
+      "lat": 25.2082353
+    },
+    {
+      "id": "V13",
+      "name": "前洲子",
+      "stationIds": [
+        "V13"
+      ],
+      "lat": 25.2170637
+    },
+    {
+      "id": "V14",
+      "name": "聖約翰科技大學",
+      "stationIds": [
+        "V14"
+      ],
+      "lat": 25.2271597
+    },
+    {
+      "id": "V15",
+      "name": "屯山國小",
+      "stationIds": [
+        "V15"
+      ],
+      "lat": 25.2355168
+    },
+    {
+      "id": "V22",
+      "name": "觀潮廣場",
+      "stationIds": [
+        "V22"
+      ],
+      "lat": 25.1716432
+    },
+    {
+      "id": "V23",
+      "name": "紅毛城",
+      "stationIds": [
+        "V23"
+      ],
+      "lat": 25.1743563
+    },
+    {
+      "id": "V24",
+      "name": "滬尾砲台",
+      "stationIds": [
+        "V24"
+      ],
+      "lat": 25.1754831
+    },
+    {
+      "id": "V25",
+      "name": "油車口",
+      "stationIds": [
+        "V25"
+      ],
+      "lat": 25.1777883
+    },
+    {
+      "id": "V26",
+      "name": "淡水漁人碼頭",
+      "stationIds": [
+        "V26"
+      ],
+      "lat": 25.1820639
+    },
+    {
+      "id": "V27",
+      "name": "沙崙",
+      "stationIds": [
+        "V27"
+      ],
+      "lat": 25.1875605
+    },
+    {
+      "id": "V28",
+      "name": "台北海洋大學",
+      "stationIds": [
+        "V28"
+      ],
+      "lat": 25.1911484
+    },
+    {
+      "id": "K01",
+      "name": "雙城",
+      "stationIds": [
+        "K01"
+      ],
+      "lat": 24.9463482
+    },
+    {
+      "id": "K02",
+      "name": "玫瑰中國城",
+      "stationIds": [
+        "K02"
+      ],
+      "lat": 24.9507188
+    },
+    {
+      "id": "K03",
+      "name": "台北小城",
+      "stationIds": [
+        "K03"
+      ],
+      "lat": 24.9536998
+    },
+    {
+      "id": "K04",
+      "name": "耕莘安康院區",
+      "stationIds": [
+        "K04"
+      ],
+      "lat": 24.954469
+    },
+    {
+      "id": "K05",
+      "name": "景文科大",
+      "stationIds": [
+        "K05"
+      ],
+      "lat": 24.9554804
+    },
+    {
+      "id": "K06",
+      "name": "安康",
+      "stationIds": [
+        "K06"
+      ],
+      "lat": 24.9651887
+    },
+    {
+      "id": "K07",
+      "name": "陽光運動公園",
+      "stationIds": [
+        "K07"
+      ],
+      "lat": 24.9722942
+    },
+    {
+      "id": "K08",
+      "name": "新和國小",
+      "stationIds": [
+        "K08"
+      ],
+      "lat": 24.9835371
+    },
+    {
+      "id": "A02a",
+      "name": "二重",
+      "stationIds": [
+        "A02a"
+      ],
+      "lat": 25.0660498
+    },
+    {
+      "id": "A04",
+      "name": "新莊副都心",
+      "stationIds": [
+        "A04"
+      ],
+      "lat": 25.0591305
+    },
+    {
+      "id": "A05",
+      "name": "泰山",
+      "stationIds": [
+        "A05"
+      ],
+      "lat": 25.0532726
+    },
+    {
+      "id": "A05a",
+      "name": "輔大醫院",
+      "stationIds": [
+        "A05a"
+      ],
+      "lat": 25.0449826
+    },
+    {
+      "id": "A06",
+      "name": "泰山貴和",
+      "stationIds": [
+        "A06"
+      ],
+      "lat": 25.0334752
+    },
+    {
+      "id": "A07",
+      "name": "體育大學",
+      "stationIds": [
+        "A07"
+      ],
+      "lat": 25.041246
+    },
+    {
+      "id": "A08",
+      "name": "長庚醫院",
+      "stationIds": [
+        "A08"
+      ],
+      "lat": 25.0604363
+    },
+    {
+      "id": "A09",
+      "name": "林口",
+      "stationIds": [
+        "A09"
+      ],
+      "lat": 25.0665023
+    },
+    {
+      "id": "A10",
+      "name": "山鼻",
+      "stationIds": [
+        "A10"
+      ],
+      "lat": 25.0803514
+    },
+    {
+      "id": "A12",
+      "name": "機場第一航廈",
+      "stationIds": [
+        "A12"
+      ],
+      "lat": 25.081385
+    },
+    {
+      "id": "A13",
+      "name": "機場第二航廈",
+      "stationIds": [
+        "A13"
+      ],
+      "lat": 25.0772703
+    },
+    {
+      "id": "A14",
+      "name": "機場第三航廈",
+      "stationIds": [
+        "A14"
+      ],
+      "lat": 25.0730623133409
+    },
+    {
+      "id": "A14a",
+      "name": "機場旅館",
+      "stationIds": [
+        "A14a"
+      ],
+      "lat": 25.0692598
+    },
+    {
+      "id": "A15",
+      "name": "大園",
+      "stationIds": [
+        "A15"
+      ],
+      "lat": 25.0560465
+    },
+    {
+      "id": "A17",
+      "name": "領航",
+      "stationIds": [
+        "A17"
+      ],
+      "lat": 25.0189695
+    },
+    {
+      "id": "A19",
+      "name": "桃園體育園區",
+      "stationIds": [
+        "A19"
+      ],
+      "lat": 25.001996
+    },
+    {
+      "id": "A20",
+      "name": "興南",
+      "stationIds": [
+        "A20"
+      ],
+      "lat": 24.9802492
+    },
+    {
+      "id": "A21",
+      "name": "環北",
+      "stationIds": [
+        "A21"
+      ],
+      "lat": 24.967381
+    },
+    {
+      "id": "A22",
+      "name": "老溪街",
+      "stationIds": [
+        "A22"
+      ],
+      "lat": 24.9586697
+    },
+    {
+      "id": "GR01",
+      "name": "八德",
+      "stationIds": [
+        "GR01"
+      ],
+      "lat": 24.9294678
+    },
+    {
+      "id": "GR02",
+      "name": "建國",
+      "stationIds": [
+        "GR02"
+      ],
+      "lat": 24.9369967
+    },
+    {
+      "id": "GR03",
+      "name": "麻園",
+      "stationIds": [
+        "GR03"
+      ],
+      "lat": 24.9430083
+    },
+    {
+      "id": "GR05",
+      "name": "忠勇西街（小大湳）",
+      "stationIds": [
+        "GR05"
+      ],
+      "lat": 24.9684817
+    },
+    {
+      "id": "GR06",
+      "name": "陽明公園",
+      "stationIds": [
+        "GR06"
+      ],
+      "lat": 24.9809562
+    },
+    {
+      "id": "GR07",
+      "name": "桃園車站",
+      "stationIds": [
+        "GR07"
+      ],
+      "lat": 24.9887887
+    },
+    {
+      "id": "GR08",
+      "name": "永和市場",
+      "stationIds": [
+        "GR08"
+      ],
+      "lat": 24.9967972
+    },
+    {
+      "id": "GR09",
+      "name": "民光路",
+      "stationIds": [
+        "GR09"
+      ],
+      "lat": 25.0035087
+    },
+    {
+      "id": "GR10",
+      "name": "大興西路",
+      "stationIds": [
+        "GR10"
+      ],
+      "lat": 25.0121732
+    },
+    {
+      "id": "GR11",
+      "name": "展演中心",
+      "stationIds": [
+        "GR11"
+      ],
+      "lat": 25.0172909
+    },
+    {
+      "id": "GR12",
+      "name": "南崁轉運站",
+      "stationIds": [
+        "GR12"
+      ],
+      "lat": 25.0270023
+    },
+    {
+      "id": "GR13",
+      "name": "南竹",
+      "stationIds": [
+        "GR13"
+      ],
+      "lat": 25.0391445
+    },
+    {
+      "id": "GR13a",
+      "name": "蘆竹工業區站",
+      "stationIds": [
+        "GR13a"
+      ],
+      "lat": 25.0494647
+    },
+    {
+      "id": "GR14",
+      "name": "長興",
+      "stationIds": [
+        "GR14"
+      ],
+      "lat": 25.0629103
+    },
+    {
+      "id": "GR15",
+      "name": "航空城一",
+      "stationIds": [
+        "GR15"
+      ],
+      "lat": 25.0625703
+    },
+    {
+      "id": "GR16",
+      "name": "航空城二",
+      "stationIds": [
+        "GR16"
+      ],
+      "lat": 25.0544936
+    },
+    {
+      "id": "GR17",
+      "name": "航空城三",
+      "stationIds": [
+        "GR17"
+      ],
+      "lat": 25.0447117
+    },
+    {
+      "id": "GR15a",
+      "name": "菓林",
+      "stationIds": [
+        "GR15a"
+      ],
+      "lat": 25.0776392
+    },
+    {
+      "id": "GR30",
+      "name": "霄裡",
+      "stationIds": [
+        "GR30"
+      ],
+      "lat": 24.9300332
+    },
+    {
+      "id": "GR29",
+      "name": "士校",
+      "stationIds": [
+        "GR29"
+      ],
+      "lat": 24.9348148
+    },
+    {
+      "id": "GR28",
+      "name": "富台國小",
+      "stationIds": [
+        "GR28"
+      ],
+      "lat": 24.9412496
+    },
+    {
+      "id": "GR27",
+      "name": "普仁",
+      "stationIds": [
+        "GR27"
+      ],
+      "lat": 24.9478068
+    },
+    {
+      "id": "GR26",
+      "name": "中壢體育園區",
+      "stationIds": [
+        "GR26"
+      ],
+      "lat": 24.9474829
+    },
+    {
+      "id": "BN02",
+      "name": "桃園巨蛋",
+      "stationIds": [
+        "BN02"
+      ],
+      "lat": 24.9927754
+    },
+    {
+      "id": "BN03",
+      "name": "龜山",
+      "stationIds": [
+        "BN03"
+      ],
+      "lat": 24.9948958
+    },
+    {
+      "id": "BN04",
+      "name": "半嶺",
+      "stationIds": [
+        "BN04"
+      ],
+      "lat": 25.0018836
+    },
+    {
+      "id": "BN05",
+      "name": "嶺頂",
+      "stationIds": [
+        "BN05"
+      ],
+      "lat": 25.0007745
+    },
+    {
+      "id": "BN06",
+      "name": "龍華",
+      "stationIds": [
+        "BN06"
+      ],
+      "lat": 25.0173521
+    },
+    {
+      "id": "TR090",
+      "name": "基隆",
+      "stationIds": [
+        "TR090"
+      ],
+      "lat": 25.1323018
+    },
+    {
+      "id": "TR091",
+      "name": "三坑",
+      "stationIds": [
+        "TR091"
+      ],
+      "lat": 25.1230089
+    },
+    {
+      "id": "TR092",
+      "name": "八堵",
+      "stationIds": [
+        "TR092"
+      ],
+      "lat": 25.1083342
+    },
+    {
+      "id": "TR093",
+      "name": "七堵",
+      "stationIds": [
+        "TR093"
+      ],
+      "lat": 25.0934531
+    },
+    {
+      "id": "TR094",
+      "name": "百福",
+      "stationIds": [
+        "TR094"
+      ],
+      "lat": 25.0779244
+    },
+    {
+      "id": "TR095",
+      "name": "五堵",
+      "stationIds": [
+        "TR095"
+      ],
+      "lat": 25.077857
+    },
+    {
+      "id": "TR096",
+      "name": "汐止",
+      "stationIds": [
+        "TR096"
+      ],
+      "lat": 25.068316
+    },
+    {
+      "id": "TR097",
+      "name": "汐科",
+      "stationIds": [
+        "TR097"
+      ],
+      "lat": 25.062563
+    },
+    {
+      "id": "TR101",
+      "name": "萬華",
+      "stationIds": [
+        "TR101"
+      ],
+      "lat": 25.0333965
+    },
+    {
+      "id": "TR103",
+      "name": "浮洲",
+      "stationIds": [
+        "TR103"
+      ],
+      "lat": 25.0041922
+    },
+    {
+      "id": "TR104",
+      "name": "樹林",
+      "stationIds": [
+        "TR104"
+      ],
+      "lat": 24.9914074
+    },
+    {
+      "id": "TR105",
+      "name": "南樹林",
+      "stationIds": [
+        "TR105"
+      ],
+      "lat": 24.9804377
+    },
+    {
+      "id": "TR106",
+      "name": "山佳",
+      "stationIds": [
+        "TR106"
+      ],
+      "lat": 24.9724808
+    },
+    {
+      "id": "TR109",
+      "name": "內壢",
+      "stationIds": [
+        "TR109"
+      ],
+      "lat": 24.9744782
+    },
+    {
+      "id": "TR111",
+      "name": "埔心",
+      "stationIds": [
+        "TR111"
+      ],
+      "lat": 24.9192082
+    },
+    {
+      "id": "TR112",
+      "name": "楊梅",
+      "stationIds": [
+        "TR112"
+      ],
+      "lat": 24.9108316
+    },
+    {
+      "id": "TR113",
+      "name": "富岡",
+      "stationIds": [
+        "TR113"
+      ],
+      "lat": 24.9343559
+    }
+  ],
+  "routes": [
+    {
+      "id": "TPE_BR",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_001",
+            "BR02",
+            "BR03",
+            "BR04",
+            "BR05",
+            "BR06",
+            "BR07",
+            "BR08",
+            "XFER_002",
+            "XFER_003",
+            "XFER_004",
+            "BR12",
+            "BR13",
+            "BR14",
+            "XFER_005",
+            "BR16",
+            "BR17",
+            "BR18",
+            "BR19",
+            "BR20",
+            "BR21",
+            "BR22",
+            "BR23",
+            "XFER_006"
+          ],
+          "id": "main",
+          "color": "#C48C31"
+        }
+      ]
+    },
+    {
+      "id": "TPE_R",
+      "paths": [
+        {
+          "nodes": [
+            "R01",
+            "XFER_007",
+            "R03",
+            "R04",
+            "XFER_002",
+            "R06",
+            "XFER_008",
+            "XFER_009",
+            "R09",
+            "XFER_010",
+            "XFER_011",
+            "R12",
+            "XFER_012",
+            "R14",
+            "R15",
+            "XFER_013",
+            "R17",
+            "R18",
+            "R19",
+            "R20",
+            "R21",
+            "R22",
+            "R23",
+            "R24",
+            "R25",
+            "R26",
+            "XFER_014",
+            "XFER_015"
+          ],
+          "id": "main",
+          "color": "#E3002C"
+        },
+        {
+          "nodes": [
+            "R22",
+            "R22A"
+          ],
+          "id": "branch",
+          "color": "#FD92A3"
+        }
+      ]
+    },
+    {
+      "id": "TPE_G",
+      "paths": [
+        {
+          "nodes": [
+            "G01",
+            "G02",
+            "G03",
+            "XFER_016",
+            "G05",
+            "G06",
+            "G07",
+            "G08",
+            "XFER_017",
+            "XFER_009",
+            "G11",
+            "XFER_018",
+            "G13",
+            "XFER_011",
+            "XFER_019",
+            "XFER_004",
+            "G17",
+            "G18",
+            "XFER_020"
+          ],
+          "id": "main",
+          "color": "#008659"
+        },
+        {
+          "nodes": [
+            "G03",
+            "G03A"
+          ],
+          "id": "branch",
+          "color": "#CFDB00"
+        }
+      ]
+    },
+    {
+      "id": "TPE_O",
+      "paths": [
+        {
+          "nodes": [
+            "O01",
+            "XFER_021",
+            "O03",
+            "O04",
+            "XFER_017",
+            "XFER_008",
+            "XFER_022",
+            "XFER_019",
+            "O09",
+            "O10",
+            "XFER_012",
+            "O12",
+            "O13",
+            "O14",
+            "XFER_023",
+            "O16",
+            "XFER_024",
+            "O18",
+            "O19",
+            "O20",
+            "XFER_025"
+          ],
+          "id": "main",
+          "color": "#F8B61C"
+        },
+        {
+          "nodes": [
+            "O12",
+            "O50",
+            "O51",
+            "XFER_026",
+            "O53",
+            "O54"
+          ],
+          "id": "branch",
+          "color": "#F8B61C"
+        }
+      ]
+    },
+    {
+      "id": "TPE_BL",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_027",
+            "BL02",
+            "XFER_028",
+            "BL04",
+            "BL05",
+            "BL06",
+            "XFER_029",
+            "BL08",
+            "BL09",
+            "BL10",
+            "XFER_018",
+            "XFER_010",
+            "BL13",
+            "XFER_022",
+            "XFER_003",
+            "BL16",
+            "BL17",
+            "BL18",
+            "XFER_030",
+            "BL20",
+            "BL21",
+            "XFER_038",
+            "XFER_006"
+          ],
+          "id": "main",
+          "color": "#0070BD"
+        }
+      ]
+    },
+    {
+      "id": "TPE_Y",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_001",
+            "Y02",
+            "Y03",
+            "Y04",
+            "Y05",
+            "Y06",
+            "XFER_016",
+            "XFER_031",
+            "Y09",
+            "Y10",
+            "XFER_021",
+            "XFER_032",
+            "Y13",
+            "Y14",
+            "Y15",
+            "XFER_029",
+            "Y17",
+            "XFER_024",
+            "Y19",
+            "XFER_033",
+            "Y21",
+            "Y22",
+            "Y23",
+            "XFER_026",
+            "Y25",
+            "Y26",
+            "Y27",
+            "Y28",
+            "XFER_013",
+            "Y30",
+            "Y31",
+            "XFER_005",
+            "Y33",
+            "Y34",
+            "Y35",
+            "Y36",
+            "Y37",
+            "Y38",
+            "XFER_020",
+            "XFER_030",
+            "XFER_007",
+            "Y42",
+            "XFER_001"
+          ],
+          "id": "main",
+          "color": "#FFDB00"
+        }
+      ]
+    },
+    {
+      "id": "TPE_LG",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_009",
+            "LG02",
+            "LG03",
+            "LG04",
+            "LG05",
+            "XFER_032",
+            "LG07",
+            "LG08",
+            "LG09",
+            "LG10",
+            "XFER_028",
+            "LG12",
+            "LG13",
+            "LG14",
+            "LG15",
+            "LG16",
+            "LG17",
+            "LG18",
+            "LG19",
+            "LG20",
+            "XFER_025"
+          ],
+          "id": "main",
+          "color": "#A1D884"
+        },
+        {
+          "nodes": [
+            "LG08",
+            "LG08A"
+          ],
+          "id": "branch",
+          "color": "#A1D884"
+        }
+      ]
+    },
+    {
+      "id": "TPE_LB",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_027",
+            "LB02",
+            "LB03",
+            "LB04",
+            "LB05",
+            "LB06",
+            "LB07",
+            "XFER_039",
+            "LB09",
+            "LB10",
+            "LB11",
+            "LB12",
+            "LB12A",
+            "LB13",
+            "XFER_034"
+          ],
+          "id": "main",
+          "color": "#79BCE8"
+        }
+      ]
+    },
+    {
+      "id": "TPE_V",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_014",
+            "V02",
+            "V03",
+            "V04",
+            "V05",
+            "V06",
+            "V07",
+            "V08",
+            "V09",
+            "V10",
+            "V11",
+            "V12",
+            "V13",
+            "V14",
+            "V15"
+          ],
+          "id": "main",
+          "color": "#E5554F"
+        },
+        {
+          "nodes": [
+            "XFER_015",
+            "V22",
+            "V23",
+            "V24",
+            "V25",
+            "V26",
+            "V27",
+            "V28",
+            "V09"
+          ],
+          "id": "branch",
+          "color": "#E5554F"
+        }
+      ]
+    },
+    {
+      "id": "TPE_K",
+      "paths": [
+        {
+          "nodes": [
+            "K01",
+            "K02",
+            "K03",
+            "K04",
+            "K05",
+            "K06",
+            "K07",
+            "K08",
+            "XFER_031"
+          ],
+          "id": "main",
+          "color": "#C3B091"
+        }
+      ]
+    },
+    {
+      "id": "TAO_A",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_010",
+            "XFER_023",
+            "A02a",
+            "XFER_033",
+            "A04",
+            "A05",
+            "A05a",
+            "A06",
+            "A07",
+            "A08",
+            "A09",
+            "A10",
+            "XFER_035",
+            "A12",
+            "A13",
+            "A14",
+            "A14a",
+            "A15",
+            "XFER_036",
+            "A17",
+            "XFER_041",
+            "A19",
+            "A20",
+            "A21",
+            "A22",
+            "XFER_037"
+          ],
+          "id": "main",
+          "color": "#8246AF"
+        }
+      ]
+    },
+    {
+      "id": "TAO_GR",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_037",
+            "GR26",
+            "GR27",
+            "GR28",
+            "GR29",
+            "GR30",
+            "GR01",
+            "GR02",
+            "GR03",
+            "XFER_034",
+            "GR05",
+            "GR06",
+            "GR07",
+            "GR08",
+            "GR09",
+            "GR10",
+            "GR11",
+            "GR12",
+            "GR13",
+            "GR13a",
+            "GR14",
+            "GR15",
+            "GR16",
+            "GR17",
+            "XFER_036"
+          ],
+          "id": "main",
+          "color": "#62A033"
+        },
+        {
+          "nodes": [
+            "GR15",
+            "GR15a",
+            "XFER_035"
+          ],
+          "id": "branch",
+          "color": "#62A033"
+        }
+      ]
+    },
+    {
+      "id": "TAO_BN",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_040",
+            "BN02",
+            "BN03",
+            "BN04",
+            "BN05",
+            "BN06",
+            "XFER_025"
+          ],
+          "id": "main",
+          "color": "#824729"
+        }
+      ]
+    },
+    {
+      "id": "THSR",
+      "paths": [
+        {
+          "nodes": [
+            "XFER_038",
+            "XFER_010",
+            "XFER_029",
+            "XFER_041"
+          ],
+          "id": "main",
+          "color": "#C35617"
+        }
+      ]
+    },
+    {
+      "id": "TR",
+      "paths": [
+        {
+          "nodes": [
+            "TR090",
+            "TR091",
+            "TR092",
+            "TR093",
+            "TR094",
+            "TR095",
+            "TR096",
+            "TR097",
+            "XFER_038",
+            "XFER_020",
+            "XFER_010",
+            "TR101",
+            "XFER_029",
+            "TR103",
+            "TR104",
+            "TR105",
+            "TR106",
+            "XFER_039",
+            "XFER_040",
+            "TR109",
+            "XFER_037",
+            "TR111",
+            "TR112",
+            "TR113"
+          ],
+          "id": "main",
+          "color": "#020281"
+        }
+      ]
+    }
+  ]
+}

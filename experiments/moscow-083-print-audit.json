@@ -1,0 +1,123 @@
+{
+  "workbookSha256": "155f7bd67fe0740729eb08d034426a1ea9c16daaec1fbfd8b270feba8f829045",
+  "maps": [
+    {
+      "name": "moscow--stations-taipei",
+      "dimensions": {
+        "width": 7666.6787109375,
+        "height": 4353.3701171875
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 9,
+      "leaders": 15,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "inset",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 2485,
+        "height": 1420
+      },
+      "passed": true
+    },
+    {
+      "name": "moscow--stations-tokyo",
+      "dimensions": {
+        "width": 7666.6787109375,
+        "height": 4353.3701171875
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 9,
+      "leaders": 16,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "inset",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 2485,
+        "height": 1420
+      },
+      "passed": true
+    },
+    {
+      "name": "moscow--stations-osaka",
+      "dimensions": {
+        "width": 7686.1787109375,
+        "height": 4353.3701171875
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 9,
+      "leaders": 16,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "inset",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 2491,
+        "height": 1420
+      },
+      "passed": true
+    },
+    {
+      "name": "moscow--stations-moscow",
+      "dimensions": {
+        "width": 7665.6787109375,
+        "height": 4353.3701171875
+      },
+      "minText": 14,
+      "labels": 270,
+      "routes": 21,
+      "crossingClips": 9,
+      "leaders": 16,
+      "missing": [],
+      "badCodes": [],
+      "badRoutes": [],
+      "labelCollisions": [],
+      "markerCollisions": [],
+      "labelMarkerCollisions": [
+        "V22"
+      ],
+      "outside": [],
+      "routeLabelCollisions": [],
+      "legendPlacement": "inset",
+      "legendCollisions": [],
+      "routeLegendCollisions": [],
+      "leaderLabelCollisions": [],
+      "pageMm": {
+        "width": 2484,
+        "height": 1420
+      },
+      "passed": false
+    }
+  ]
+}

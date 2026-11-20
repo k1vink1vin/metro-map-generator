@@ -1,0 +1,48 @@
+{
+  "projectedSignificance": 45,
+  "approximateGapKm": 3.615433442342111,
+  "layouts": [
+    {
+      "style": "concentric",
+      "northComparisons": 25843,
+      "northPercent": 98.10393530162906,
+      "eastComparisons": 28788,
+      "eastPercent": 99.65263304154509,
+      "checks": [
+        {
+          "a": "淡水",
+          "b": "台北車站",
+          "axes": [
+            "y"
+          ],
+          "matches": true
+        },
+        {
+          "a": "南港展覽館",
+          "b": "台北車站",
+          "axes": [
+            "x"
+          ],
+          "matches": true
+        },
+        {
+          "a": "高鐵桃園站",
+          "b": "板橋",
+          "axes": [
+            "x"
+          ],
+          "matches": true
+        },
+        {
+          "a": "迴龍",
+          "b": "桃園車站",
+          "axes": [
+            "x",
+            "y"
+          ],
+          "matches": true
+        }
+      ]
+    }
+  ]
+}
