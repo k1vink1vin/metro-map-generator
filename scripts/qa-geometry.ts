@@ -4,6 +4,7 @@ import { computeLayout } from '../src/layout/index';
 import { circleThroughStations, sampledSelfCrossings, stationAnchoredPath } from '../src/renderer/routeGeometry';
 import { buildGeometricBundleMap, offsetPathForLine } from '../src/renderer/geometry';
 import type { LayoutResult, Point, StyleId } from '../src/types';
+import { routeCorridorBands } from '../src/renderer/routeCorridors';
 
 function fixture(
   positions: Record<string, Point>,
@@ -221,3 +222,25 @@ for (let segment = 0; segment < 2; segment += 1) {
   }
 }
 console.log('Parallel-lane QA passed: exact 12px gap is preserved through a 45-degree bend.');
+
+
+const bandPath = (lineId: string, lineColor: string, d: string) => ({
+  lineId, lineColor, d, pathIndex: 0, arcCount: 0, fallbackCount: 0, samples: [], points: [],
+});
+const horizontalBands = routeCorridorBands([
+  bandPath('blue', '#0070bd', 'M 0 10 L 80 10'),
+  bandPath('orange', '#c35617', 'M 100 10 L 40 10'),
+  bandPath('crossing', '#333333', 'M 50 0 L 50 60'),
+], 8);
+assert.deepEqual(horizontalBands.map(bands => bands.length), [0, 1, 0]);
+assert.match(horizontalBands[1][0].casing, /^M 40 10 L 80 10$/);
+assert.deepEqual(horizontalBands[1][0].stripes.map(stripe => stripe.color), ['#0070bd', '#c35617']);
+
+const circularBands = routeCorridorBands([
+  bandPath('outbound', '#0070bd', 'M 100 0 A 100 100 0 0 1 0 100'),
+  bandPath('inbound', '#c35617', 'M 0 100 A 100 100 0 0 0 100 0'),
+], 8);
+assert.equal(circularBands[1].length, 1);
+assert.ok(circularBands[1][0].stripes[0].d.includes('A 97.25 97.25'));
+assert.ok(circularBands[1][0].stripes[1].d.includes('A 102.75 102.75'));
+console.log('Painted corridor QA passed: coincident straight and circular routes keep both colors visible.');

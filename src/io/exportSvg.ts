@@ -146,6 +146,12 @@ export function downloadSvg(
   const clone = svg.cloneNode(true) as SVGSVGElement;
   // UI-only selection highlights must not leak into the exported public map.
   clone.querySelector('.station-focus-ring')?.remove();
+  clone.setAttribute('role', 'img');
+  for (const station of clone.querySelectorAll('#stations > g')) {
+    station.removeAttribute('role');
+    station.removeAttribute('tabindex');
+    station.removeAttribute('aria-label');
+  }
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
   const detailZoom = Math.max(
@@ -182,23 +188,6 @@ export function downloadSvg(
   });
   clone.insertBefore(metadata, clone.firstChild);
 
-  const css = Array.from(document.styleSheets)
-    .flatMap((sheet) => {
-      try {
-        return Array.from(sheet.cssRules).map((rule) => rule.cssText);
-      } catch {
-        return [];
-      }
-    })
-    .join('\n');
-
-  const style = document.createElementNS(
-    'http://www.w3.org/2000/svg',
-    'style',
-  );
-  style.textContent = css;
-  clone.insertBefore(style, clone.firstChild);
-
   const content =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     new XMLSerializer().serializeToString(clone);
@@ -209,7 +198,7 @@ export function downloadSvg(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'metro-map.svg';
+  anchor.download = `metro-map-${svg.dataset.layoutStyle ?? 'schematic'}-${stationStyle}.svg`;
   anchor.click();
   URL.revokeObjectURL(url);
 }

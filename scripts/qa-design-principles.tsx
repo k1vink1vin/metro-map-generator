@@ -1,12 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { buildGraph } from '../src/core/graph.ts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
-import { buildGraph } from '../src/core/graph.ts';
-import { validateMoscowRings } from '../src/core/moscowRings.ts';
-import { importExcelBuffer } from '../src/io/importData.ts';
-import { computeLayout } from '../src/layout/index.ts';
 import {
   buildRenderedRoutePaths,
+  circleThroughStations,
   sampledSelfCrossings,
   stationAnchoredPath,
 } from '../src/renderer/routeGeometry.ts';
@@ -17,12 +15,8 @@ import {
 import { SvgMap } from '../src/renderer/SvgMap.tsx';
 import type { GraphModel, LayoutResult, Point, StyleId } from '../src/types.ts';
 
-const data = new Uint8Array(
-  readFileSync(new URL('../TPE_Metro.xlsm', import.meta.url)),
-);
-const input = await importExcelBuffer(data);
-const graph = buildGraph(input);
-const rings = validateMoscowRings(graph, input.moscowRings ?? []);
+import { graph, workbookLayout } from './workbook-fixture';
+
 const allStyles: StyleId[] = ['taipei', 'london', 'moscow', 'concentric', 'hex'];
 const requestedStyles = process.argv.slice(2);
 for (const requested of requestedStyles) {
@@ -72,12 +66,15 @@ function angleErrorDegrees(a: Point, b: Point, stepDegrees: number): number {
   return (diff * 180) / Math.PI;
 }
 
-function parseCommands(d: string): Array<{
+interface PathCommand {
   command: string;
   from?: Point;
   to: Point;
-}> {
-  const result: Array<{ command: string; from?: Point; to: Point }> = [];
+  operands: number[];
+}
+
+function parseCommands(d: string): PathCommand[] {
+  const result: PathCommand[] = [];
   const regex = /([MLA])\s*([^MLA]*)/g;
   let match: RegExpExecArray | null;
   let current: Point | undefined;
@@ -95,10 +92,38 @@ function parseCommands(d: string): Array<{
       };
     }
     if (!to) continue;
-    result.push({ command, from: current, to });
+    result.push({ command, from: current, to, operands: numbers });
     current = to;
   }
   return result;
+}
+
+function circularCenter(item: PathCommand): Point | undefined {
+  if (!item.from) return undefined;
+  const [rx, ry, rotation, large, sweep] = item.operands;
+  const chord = distance(item.from, item.to);
+  if (rotation !== 0 || Math.abs(rx - ry) > 1e-6 || rx <= 0 ||
+      ![0, 1].includes(large) || ![0, 1].includes(sweep) || chord <= 1e-8 || chord > 2 * rx + 1e-6) return undefined;
+  const h = Math.sqrt(Math.max(0, rx * rx - chord * chord / 4));
+  const sign = large === sweep ? -1 : 1;
+  return {
+    x: (item.from.x + item.to.x) / 2 - sign * h * (item.to.y - item.from.y) / chord,
+    y: (item.from.y + item.to.y) / 2 + sign * h * (item.to.x - item.from.x) / chord,
+  };
+}
+
+function isHexFillet(arc: PathCommand, incoming?: PathCommand, outgoing?: PathCommand) {
+  const center = circularCenter(arc);
+  if (!center || !arc.from || !incoming?.from || !outgoing?.from ||
+      incoming.command !== 'L' || outgoing.command !== 'L' || arc.operands[0] > 14.00001) return false;
+  const radius = arc.operands[0];
+  const chord = distance(arc.from, arc.to);
+  const angle = 2 * Math.asin(Math.min(1, chord / (2 * radius))) * 180 / Math.PI;
+  if (arc.operands[3] !== 0 || Math.min(Math.abs(angle - 60), Math.abs(angle - 120)) > 1e-5) return false;
+  return [[incoming.from, arc.from], [outgoing.to, arc.to]].every(([a, b]) =>
+    Math.abs((a.x - b.x) * (center.x - b.x) + (a.y - b.y) * (center.y - b.y)) <
+       1e-5 * Math.max(1, radius * distance(a, b)),
+  );
 }
 
 function renderedAngleAudit(layout: LayoutResult) {
@@ -106,6 +131,14 @@ function renderedAngleAudit(layout: LayoutResult) {
   let checked = 0;
   let illegalCurveCommands = 0;
   let abruptReversals = 0;
+  let circleArcs = 0;
+  let invalidArcs = 0;
+  const centers = layout.style === 'concentric'
+    ? [layout.radialCenter!]
+    : (layout.moscowRings ?? []).flatMap(ring => {
+      const circle = circleThroughStations(ring.nodes.map(id => layout.positions[id]));
+      return circle ? [circle.center] : [];
+    });
   const reversalDetails: Array<{
     line: string;
     path: string;
@@ -144,8 +177,17 @@ function renderedAngleAudit(layout: LayoutResult) {
     illegalCurveCommands +=
       (route.d.match(/[QC]/g) ?? []).length;
     const commands = parseCommands(route.d);
-    for (const item of commands) {
+    for (const [index, item] of commands.entries()) {
       if (!item.from) continue;
+      if (item.command === 'A') {
+        circleArcs++;
+        const center = circularCenter(item);
+        const valid = layout.style === 'hex'
+          ? isHexFillet(item, commands[index - 1], commands[index + 1])
+          : center && centers.some(expected => distance(center, expected) < 0.005);
+        if (!valid) invalidArcs++;
+        continue;
+      }
       if (layout.style === 'concentric') {
         if (item.command === 'L') {
           const center = layout.radialCenter!;
@@ -157,16 +199,12 @@ function renderedAngleAudit(layout: LayoutResult) {
           const scale = Math.max(1, Math.hypot(vx, vy) * Math.hypot(rx, ry));
           worst = Math.max(worst, (cross / scale) * 180 / Math.PI);
           checked += 1;
-        } else if (item.command !== 'A') {
+        } else {
           illegalCurveCommands += 1;
         }
         continue;
       }
 
-      if (item.command === 'A') {
-        if (layout.style !== 'moscow') illegalCurveCommands += 1;
-        continue;
-      }
       if (item.command !== 'L') continue;
       worst = Math.max(
         worst,
@@ -184,9 +222,41 @@ function renderedAngleAudit(layout: LayoutResult) {
     worstDegrees: worst,
     checked,
     illegalCurveCommands,
+    circleArcs,
+    invalidArcs,
     abruptReversals,
     reversalDetails,
   };
+}
+
+function concentricRouteAudit(layout: LayoutResult) {
+  const center = layout.radialCenter!;
+  const bundles = buildGeometricBundleMap(graph, layout.positions);
+  function measure(points: Point[]) {
+    let lastDirection = 0;
+    let changes = 0;
+    let travel = 0;
+    for (let i = 1; i < points.length; i++) {
+      const step = distance(points[i], center) - distance(points[i - 1], center);
+      if (Math.abs(step) < 1e-5) continue;
+      const direction = Math.sign(step);
+      changes += Number(lastDirection !== 0 && direction !== lastDirection);
+      lastDirection = direction;
+      travel += Math.abs(step);
+    }
+    return { changes, travel };
+  }
+  return buildRenderedRoutePaths(graph, layout).map(route => {
+    const line = graph.lines.find(item => item.id === route.lineId)!;
+    const anchors = offsetPathForLine(graph, line.paths[route.pathIndex], layout.positions, line.id, 12, bundles);
+    const stationSequence = measure(anchors);
+    const rendered = measure(route.samples);
+    const commands = parseCommands(route.d).slice(1);
+    const rightAngleJoins = commands.slice(1).filter((command, index) => command.command !== commands[index].command).length;
+    return { line: route.lineId, path: line.pathIds?.[route.pathIndex] ?? String(route.pathIndex),
+      stationRadialDirectionChanges: stationSequence.changes, renderedRadialDirectionChanges: rendered.changes,
+      extraRadialTravel: Number(Math.max(0, rendered.travel - stationSequence.travel).toFixed(3)), rightAngleJoins };
+  });
 }
 
 function topologyAudit(layout: LayoutResult) {
@@ -202,6 +272,7 @@ function topologyAudit(layout: LayoutResult) {
       : [],
   );
   let addedSelfCrossings = 0;
+  let observedSelfCrossings = 0;
   const selfCrossingDetails: Array<{
     line: string;
     path: string;
@@ -217,8 +288,9 @@ function topologyAudit(layout: LayoutResult) {
       path.map((nodeId) => layout.positions[nodeId]),
     );
     const renderedCrossings = sampledSelfCrossings(route.samples);
-    if (renderedCrossings > baseline) {
-      addedSelfCrossings += 1;
+    observedSelfCrossings += renderedCrossings;
+    addedSelfCrossings += Math.max(0, renderedCrossings - baseline);
+    if (renderedCrossings > 0) {
       selfCrossingDetails.push({
         line: route.lineId,
         path:
@@ -266,6 +338,7 @@ function topologyAudit(layout: LayoutResult) {
     expectedPaths,
     renderedPaths: rendered.length,
     addedSelfCrossings,
+    observedSelfCrossings,
     selfCrossingDetails,
     stationOrderFailures,
   };
@@ -547,7 +620,12 @@ const hardFailures: string[] = [];
 const syntheticParallel = syntheticParallelGapAudit();
 
 for (const style of styles) {
-  const layout = computeLayout(graph, style, { moscowRings: rings });
+  const layout = workbookLayout(style);
+  if (style === 'concentric') {
+    const routes = concentricRouteAudit(layout);
+    mkdirSync('qa-artifacts', { recursive: true });
+    writeFileSync('qa-artifacts/concentric-routing.json', JSON.stringify(routes, null, 2));
+  }
   const topology = topologyAudit(layout);
   const angles = renderedAngleAudit(layout);
   const rounded = roundedCornerAudit(layout);
@@ -555,9 +633,11 @@ for (const style of styles) {
   const spacing = equidistanceAudit(layout);
 
   const topologyCompliant =
-    topology.valid && topology.addedSelfCrossings === 0;
+    topology.valid && topology.observedSelfCrossings === 0;
   const angleCompliant =
     angles.illegalCurveCommands === 0 &&
+    angles.invalidArcs === 0 &&
+    (!(style === 'moscow' || style === 'concentric' || style === 'hex') || angles.circleArcs > 0) &&
     angles.abruptReversals === 0 &&
     angles.worstDegrees < 1e-6;
   const roundedCompliant =
@@ -571,9 +651,8 @@ for (const style of styles) {
         parallel.worstEndpointDrift < 0.25
       )
     );
-  // "Completely equidistant" is represented by a strict 2% CV target.
-  // Keep this diagnostic (not yet a deploy blocker) until the layout solvers
-  // are upgraded for all five schematic grammars.
+  // Measure the native distance of each station pair. Full-route detours
+  // can make actual printed station intervals longer than this baseline.
   const spacingCompliant = spacing.maxCv <= 0.02;
 
   if (!topologyCompliant) {
@@ -581,7 +660,7 @@ for (const style of styles) {
   }
   if (!angleCompliant) {
     hardFailures.push(
-      `${style}: angular grammar error ${angles.worstDegrees}°, reversals ${angles.abruptReversals}`,
+      `${style}: angular grammar error ${angles.worstDegrees}°, reversals ${angles.abruptReversals}, invalid circular arcs ${angles.invalidArcs}`,
     );
   }
   if (!roundedCompliant) {

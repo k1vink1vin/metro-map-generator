@@ -34,32 +34,36 @@ jobs:
       - name: TypeScript and production build
         run: npm run build
 
-      - name: Schematic design-principle audit
-        run: npm run qa:principles
-
-      - name: Moscow pairwise geographic order QA
-        if: always()
-        run: npm run qa:geography
-
-      - name: Station and ring geometry regression QA
-        if: always()
+      - name: Station and ring geometry regressions
         run: npm run qa:geometry
 
-      - name: TPE Metro layout QA
+      - name: Workbook layouts, geometry and SVGs
+        run: npm run qa:workbook
+
+      - name: Install Chromium and Traditional Chinese fonts
         if: always()
-        run: npm run qa:layouts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          npx playwright install --with-deps chromium
 
-
-      - name: Render TPE Metro QA SVGs
+      - name: Check all print layouts and create PDFs
         if: always()
-        run: npm run qa:render
+        env:
+          METRO_PRINT_PDF: '1'
+          METRO_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run qa:print
 
-      - name: Upload TPE Metro QA SVGs
+      - name: Verify workbook import, station focus and SVG download in Chromium
+        run: npm run qa:browser
+
+      - name: Upload workbook SVGs, print PDFs and audit data
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tpe-metro-style-qa
           path: |
             qa-artifacts/*.svg
-            qa-artifacts/moscow-geography.json
+            qa-artifacts/*.json
+            qa-artifacts/print/*.pdf
           if-no-files-found: error

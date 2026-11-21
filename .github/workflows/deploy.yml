@@ -34,21 +34,20 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
 
-      - name: Schematic design-principle audit
-        run: npm run qa:principles
-
-      - name: Passenger-map QA
-        run: npm run qa:layouts
-
-      - name: Moscow pairwise geographic order QA
-        run: npm run qa:geography
-
-      - name: Station and ring geometry regression QA
+      - name: Station and ring geometry regressions
         run: npm run qa:geometry
 
-      - name: Rendered route topology QA
-        run: npm run qa:render
+      - name: Workbook layouts, geometry and SVGs
+        run: npm run qa:workbook
 
+      - name: Install Chromium and Traditional Chinese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          npx playwright install --with-deps chromium
+
+      - name: Check all print layouts
+        run: npm run qa:print
 
       - name: Build
         run: npm run build

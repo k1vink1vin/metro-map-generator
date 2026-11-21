@@ -1,12 +1,7 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { importExcelBuffer } from '../src/io/importData';
-import { buildGraph } from '../src/core/graph';
-import { validateMoscowRings } from '../src/core/moscowRings';
-import { computeLayout } from '../src/layout';
-const input = await importExcelBuffer(new Uint8Array(readFileSync('TPE_Metro.xlsm')));
-const graph = buildGraph(input);
-const rings = validateMoscowRings(graph, input.moscowRings ?? []);
-const layout = computeLayout(graph, 'moscow', {moscowRings:rings});
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { graph, rings, workbookLayout } from './workbook-fixture';
+
+const layout = workbookLayout('moscow');
 const ringNodes = new Set(rings.flatMap(r => r.nodes));
 const violations: object[] = [];
 let checked = 0;

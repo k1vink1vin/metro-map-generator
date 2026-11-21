@@ -14,6 +14,19 @@ export interface LayoutOptions {
   concentricCenterNodeId?: string;
 }
 
+function scalePositions(layout: LayoutResult, factor: number, origin: { x: number; y: number }): LayoutResult {
+  if (factor === 1) return layout;
+  const scale = (point: { x: number; y: number }) => ({
+    x: origin.x + (point.x - origin.x) * factor,
+    y: origin.y + (point.y - origin.y) * factor,
+  });
+  return {
+    ...layout,
+    positions: Object.fromEntries(Object.entries(layout.positions).map(([id, point]) => [id, scale(point)])),
+    radialCenter: layout.radialCenter && scale(layout.radialCenter),
+  };
+}
+
 function finish(
   graph: GraphModel,
   style: StyleId,
@@ -22,7 +35,7 @@ function finish(
   extra: Partial<
     Pick<
       LayoutResult,
-      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings' | 'radialCenter'
+      'primaryRing' | 'primaryRingCandidateId' | 'ringCandidates' | 'moscowRings' | 'radialCenter' | 'radialCenterNodeId'
     >
   > = {},
 ): LayoutResult {
@@ -97,8 +110,26 @@ function finish(
     if (next === rhythm) break;
     rhythm = next;
   }
-  if (style === 'taipei' || style === 'hex') return refinePassengerClearance(graph, rhythm);
-  if (style === 'moscow') return refineMoscowPassengerMap(graph, rhythm);
+  if (style === 'taipei' || style === 'hex') {
+    const clearer = refinePassengerClearance(graph, rhythm);
+    // Reserve space for full station badges in the dense regional network.
+    // Uniform enlargement preserves direction, topology and interval ratios.
+    const growth = (style === 'taipei' ? 0.24 : 0.35) * Math.min(1, graph.nodes.length / 240);
+    return scalePositions(clearer, 1 + growth, { x: 86, y: 86 });
+  }
+  if (style === 'moscow') {
+    const clearer = refineMoscowPassengerMap(graph, rhythm);
+    const lengths = graph.edges.map(edge => {
+      const a = clearer.positions[edge.a];
+      const b = clearer.positions[edge.b];
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }).sort((a, b) => a - b);
+    // Keep compact radial branches readable after smoothing. The lower
+    // percentile leaves a few naturally close stops to the label callouts.
+    const shortInterval = lengths[Math.floor(lengths.length * 0.03)];
+    const scale = shortInterval ? Math.min(1.4, Math.max(1, 42.2 / shortInterval)) : 1;
+    return scalePositions(clearer, scale, { x: 86, y: 86 });
+  }
   if (style === 'london') {
     // Preserve equal station rhythm and 45-degree geometry. A local pairwise
     // repulsion here disturbs corridor spacing and failed the design audit.
@@ -118,14 +149,7 @@ function finish(
         x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
         y: points.reduce((sum, p) => sum + p.y, 0) / points.length,
       };
-      return {
-        ...rhythm,
-        positions: Object.fromEntries(Object.entries(rhythm.positions).map(([id, point]) => [
-          id,
-          { x: center.x + (point.x - center.x) * factor,
-            y: center.y + (point.y - center.y) * factor },
-        ])),
-      };
+      return scalePositions(rhythm, factor, center);
     }
   }
   return rhythm;
@@ -139,7 +163,10 @@ export function computeLayout(
   const geographic = projectGeographic(graph);
 
   if (style === 'geographic') {
-    return finish(graph, style, geographic, geographic);
+    const result = finish(graph, style, geographic, geographic);
+    // Uniform enlargement preserves the projected distances and north-up bearings.
+    const scale = Math.min(6, Math.max(1, Math.sqrt(graph.nodes.length / 8)));
+    return scalePositions(result, scale, { x: 86, y: 86 });
   }
 
   if (style === 'taipei') {
@@ -196,6 +223,6 @@ export function computeLayout(
     style,
     geographic,
     concentric.positions,
-    { radialCenter: concentric.center },
+    { radialCenter: concentric.center, radialCenterNodeId: concentric.centerNodeId },
   );
 }

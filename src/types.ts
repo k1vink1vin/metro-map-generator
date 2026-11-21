@@ -79,6 +79,7 @@ export interface GraphEdge {
 }
 
 export interface GraphLine {
+  stationPaths: string[][];
   id: string;
   name: string;
   color: string;
@@ -129,5 +130,6 @@ export interface LayoutResult {
   moscowRings?: ValidatedMoscowRing[];
   /** Exact common centre used by the orthoradial / concentric style. */
   radialCenter?: Point;
+  radialCenterNodeId?: string;
   integrity: LayoutIntegrity;
 }

@@ -1,7 +1,7 @@
 import type { GraphModel, LayoutResult, Point } from '../types';
 
 type Axis = 0 | 1;
-type OrderConstraint = { a: number; b: number; axis: Axis; sign: number };
+type OrderConstraint = { a: number; b: number; axis: Axis; sign: number; gap?: number };
 type OrdinarySection = number[];
 
 const norm = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -58,11 +58,7 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
   };
 
   const constraints: OrderConstraint[] = [];
-  const orderPerAxis: number[][] = [[], []];
   for (const axis of [0, 1] as const) {
-    const sorted = ids.map((_, index) => index)
-      .sort((a, b) => geo(a, axis) - geo(b, axis));
-    orderPerAxis.push(sorted);
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const delta = geo(i, axis) - geo(j, axis);
@@ -177,6 +173,16 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
     fixedOrigins[i * 2 + 1] = positions[i].y;
   }
   let values = new Float64Array(fixedOrigins);
+  const routes = graph.lines.flatMap(line => line.paths.map(path => path.map(id => indices.get(id)!)));
+  const corridors = routes.flatMap(path => path.slice(1, -1).flatMap((node, index) =>
+    isOrdinary(graph, ids[node]) && !fixed[node] ? [[path[index], node, path[index + 2]]] : [],
+  ));
+  const terminals = routes.flatMap(path => {
+    if (path.length < 3) return [];
+    const last = path.length - 1;
+    return [[path[2], path[1], path[0]], [path[last - 2], path[last - 1], path[last]]]
+      .filter(([, , terminal]) => !fixed[terminal] && (graph.adjacency.get(ids[terminal])?.length ?? 0) === 1);
+  });
 
   const optimize = (
     iterations: number,
@@ -187,6 +193,7 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
     geographicWeight: number,
     distanceWeight: number,
     originWeight: number,
+    smoothWeight = 0,
   ) => {
     const origin = new Float64Array(values);
     const first = new Float64Array(n * 2);
@@ -265,8 +272,10 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
         const a = constraint.a * 2 + constraint.axis;
         const b = constraint.b * 2 + constraint.axis;
         const signedGap = constraint.sign * (values[a] - values[b]);
-        if (signedGap >= 1) continue;
-        const derivative = -2 * geographicWeight * (1 - signedGap) * constraint.sign;
+        const gap = constraint.gap ?? 1;
+        if (signedGap >= gap) continue;
+        const weight = constraint.gap === undefined ? geographicWeight : geographicWeight * 4;
+        const derivative = -2 * weight * (gap - signedGap) * constraint.sign;
         gradient[a] += derivative;
         gradient[b] -= derivative;
       }
@@ -280,6 +289,26 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
           const gain = -2 * distanceWeight * (30 - dist) / dist;
           gradient[a] += gain * dx; gradient[b] -= gain * dx;
           gradient[a + 1] += gain * dy; gradient[b + 1] -= gain * dy;
+        }
+      }
+
+      if (smoothWeight > 0) {
+        for (const [a, b, c] of corridors) {
+          const first = Math.hypot(values[b * 2] - values[a * 2], values[b * 2 + 1] - values[a * 2 + 1]);
+          const second = Math.hypot(values[c * 2] - values[b * 2], values[c * 2 + 1] - values[b * 2 + 1]);
+          const t = first / Math.max(1, first + second);
+          for (const axis of [0, 1] as const) {
+            const midpoint = values[a * 2 + axis] * (1 - t) + values[c * 2 + axis] * t;
+            gradient[b * 2 + axis] += smoothWeight * (values[b * 2 + axis] - midpoint);
+          }
+        }
+        for (const [a, b, c] of terminals) {
+          const length = Math.hypot(values[b * 2] - values[a * 2], values[b * 2 + 1] - values[a * 2 + 1]);
+          const last = Math.hypot(values[c * 2] - values[b * 2], values[c * 2 + 1] - values[b * 2 + 1]);
+          for (const axis of [0, 1] as const) {
+            const target = values[b * 2 + axis] + (values[b * 2 + axis] - values[a * 2 + axis]) * last / Math.max(1, length);
+            gradient[c * 2 + axis] += smoothWeight * 3 * (values[c * 2 + axis] - target);
+          }
         }
       }
 
@@ -301,6 +330,53 @@ export function refineMoscowPassengerMap(graph: GraphModel, layout: LayoutResult
 
   optimize(600, 1.8, 120, 70, 150, 0.03, 0.1, 0.000005);
   optimize(1600, 0.45, 4000, 14000, 2500, 1, 0.6, 0.0000001);
+
+  // Equal spacing can let one portion of a long route drift across another.
+  // Recover source ordering for those specific endpoints before the final fit.
+  const turn = (a: number, b: number, c: number) =>
+    (values[b * 2] - values[a * 2]) * (values[c * 2 + 1] - values[a * 2 + 1]) -
+    (values[b * 2 + 1] - values[a * 2 + 1]) * (values[c * 2] - values[a * 2]);
+  const localOrders = new Set<string>();
+  optimize(680, 0.55, 3000, 11000, 2200, 4, 1.2, 0.000001, 0.003);
+  for (let pass = 0; pass < 4; pass++) {
+    const before = localOrders.size;
+    for (const path of routes) {
+      for (let i = 0; i < path.length - 1; i++) {
+        for (let j = i + 2; j < path.length - 1; j++) {
+          const [a, b, c, d] = [path[i], path[i + 1], path[j], path[j + 1]];
+          if (turn(a, b, c) * turn(a, b, d) >= 0 || turn(c, d, a) * turn(c, d, b) >= 0) continue;
+          const separation = ([0, 1] as const).flatMap(axis => {
+            const right = Math.min(geo(a, axis), geo(b, axis)) - Math.max(geo(c, axis), geo(d, axis));
+            const left = Math.min(geo(c, axis), geo(d, axis)) - Math.max(geo(a, axis), geo(b, axis));
+            return [{ axis, sourceGap: right, sign: 1 }, { axis, sourceGap: left, sign: -1 }];
+          }).filter(({ axis, sourceGap, sign }) =>
+            sourceGap > 3 && [a, b].every(first => [c, d].every(second =>
+              !fixed[first] || !fixed[second] || sign * (values[first * 2 + axis] - values[second * 2 + axis]) > 16,
+            )),
+          ).sort((a, b) => b.sourceGap - a.sourceGap)[0];
+          if (separation) {
+            const firstRun = path.slice(Math.max(0, i - 2), i + 4);
+            const secondRun = path.slice(Math.max(i + 2, j - 2), j + 4);
+            for (const first of firstRun) for (const second of secondRun) {
+              const { axis, sign } = separation;
+              if (first === second || (fixed[first] && fixed[second])) continue;
+              if (sign * (geo(first, axis) - geo(second, axis)) <= 7) continue;
+              const key = `${first}:${second}:${axis}:${sign}`;
+              if (localOrders.has(key)) continue;
+              localOrders.add(key);
+              constraints.push({ a: first, b: second, axis, sign, gap: 17 });
+            }
+          }
+        }
+      }
+    }
+    if (localOrders.size === before) break;
+    optimize(740, 0.65, 3000, 11000, 2200, 5, 1.2, 0.000001, 0.003);
+  }
+
+  // Recover regular station intervals after the bend pass. The crossing
+  // constraints stay active, so rhythm recovery cannot swap corridors back.
+  optimize(1600, 0.32, 4200, 17000, 2600, 1.2, 0.9, 0.000002);
 
   const output = Object.fromEntries(ids.map((id, index) => [id, {
     x: fixed[index] ? fixedOrigins[index * 2] : values[index * 2],

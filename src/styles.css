@@ -260,6 +260,7 @@ textarea:focus {
 .toolbar {
   min-height: 62px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   background: #fff;
@@ -270,10 +271,11 @@ textarea:focus {
 .toolbar label {
   display: grid;
   gap: 3px;
+  max-width: 100%;
 }
 
 .ring-selector {
-  min-width: min(430px, 46vw);
+  min-width: min(430px, 100%);
 }
 
 .ring-selector select {
@@ -289,7 +291,8 @@ textarea:focus {
 }
 
 select {
-  min-width: 168px;
+  min-width: min(168px, 100%);
+  max-width: 100%;
   border: 0;
   border-bottom: 2px solid #111827;
   padding: 4px 2px 6px;
@@ -329,17 +332,21 @@ select {
   font-weight: 650;
 }
 
+.map-viewport {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #cfd6df;
+}
+
 .canvas-frame {
-  flex: 1;
-  min-height: 500px;
-  position: relative;
+  height: clamp(22rem, 65dvh, 48rem);
   overflow: auto;
+  overflow-anchor: none;
   background:
     linear-gradient(#eef2f7 1px, transparent 1px),
     linear-gradient(90deg, #eef2f7 1px, transparent 1px),
     #fff;
   background-size: 24px 24px;
-  border: 1px solid #cfd6df;
 }
 
 .map-zoom-stage {
@@ -358,19 +365,13 @@ select {
 }
 
 .zoom-controls {
-  position: sticky;
-  top: 10px;
-  z-index: 10;
-  width: max-content;
-  margin: 10px 10px -46px auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 4px;
-  padding: 5px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+  padding: 5px 10px;
+  border-bottom: 1px solid #cbd5e1;
 }
 
 .zoom-controls button {
@@ -399,7 +400,7 @@ select {
   outline: none;
   filter: drop-shadow(0 0 3px #2563eb);
 }
-.zoom-controls button[title*="四倍"] {
+.zoom-controls .zoom-detail {
   min-width: 70px;
   padding: 0 8px;
   font-size: 11px;
@@ -414,143 +415,6 @@ select {
   color: #64748b;
   font-size: 10px;
   white-space: nowrap;
-}
-
-.map-background {
-  fill: #ffffff;
-}
-
-.taipei-river-path {
-  fill: none;
-  stroke: #bfdbfe;
-  stroke-width: 22;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.62;
-  vector-effect: non-scaling-stroke;
-  pointer-events: none;
-}
-
-.taipei-river-label {
-  fill: #5b9bd5;
-  stroke: #ffffff;
-  stroke-width: 3px;
-  paint-order: stroke;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  pointer-events: none;
-}
-
-.moscow-ring-halo {
-  fill: none;
-  stroke: #d8dee8;
-  stroke-width: 16;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.72;
-  vector-effect: non-scaling-stroke;
-  pointer-events: none;
-}
-
-.concentric-guide {
-  fill: none;
-  stroke: #dbe4ee;
-  stroke-width: 1.2;
-  stroke-dasharray: 5 9;
-  vector-effect: non-scaling-stroke;
-  pointer-events: none;
-}
-
-.station {
-  vector-effect: non-scaling-stroke;
-}
-
-.station-normal {
-  fill: #ffffff;
-  stroke: #111827;
-  stroke-width: 3;
-}
-
-.interchange-outer {
-  fill: #ffffff;
-  stroke: #111827;
-  stroke-width: 3;
-}
-
-.interchange-inner {
-  fill: #111827;
-}
-
-.tokyo-badge-shell {
-  fill: #9ca3af;
-  stroke: #30343b;
-}
-
-.tokyo-badge-inner,
-.taipei-code-badge {
-  fill: #ffffff;
-}
-
-.taipei-transfer-shell {
-  fill: #9ca3af;
-  stroke: #30343b;
-}
-
-.station-code-prefix,
-.station-code-number,
-.station-code-suffix {
-  fill: #111827;
-  stroke: none;
-  font-family: Arial, "Noto Sans TC", sans-serif;
-  font-weight: 900;
-  dominant-baseline: alphabetic;
-  pointer-events: none;
-}
-
-.osaka-code-badge {
-  stroke: #ffffff;
-}
-
-.osaka-code-prefix,
-.osaka-code-number,
-.osaka-code-suffix,
-.osaka-code-text {
-  fill: #ffffff;
-  stroke: none;
-  font-family: Arial, "Noto Sans TC", sans-serif;
-  font-weight: 900;
-  pointer-events: none;
-}
-
-.osaka-code-text {
-  dominant-baseline: alphabetic;
-  letter-spacing: 0.01em;
-}
-
-.osaka-transfer-shell {
-  fill: #ffffff;
-  stroke: #4b5563;
-}
-
-.moscow-station,
-.moscow-transfer-ring {
-  fill: #ffffff;
-}
-
-.moscow-transfer-base {
-  fill: #ffffff;
-  stroke: #222222;
-}
-
-.station-label {
-  fill: #111827;
-  font-size: 11.5px;
-  font-weight: 700;
-  paint-order: stroke;
-  stroke: #ffffff;
-  stroke-width: 3.5px;
-  stroke-linejoin: round;
 }
 
 .status-grid {
@@ -626,14 +490,12 @@ footer {
     border-bottom: 1px solid #cbd5e1;
   }
 
-  .toolbar {
-    flex-wrap: wrap;
-  }
-
   .button.generate {
     margin-left: 0;
   }
+}
 
+@media (max-width: 1000px) {
   .status-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -641,5 +503,11 @@ footer {
   .coverage-status,
   .ring-status {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 420px) {
+  .zoom-controls > span {
+    display: none;
   }
 }
