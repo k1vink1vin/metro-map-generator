@@ -15,6 +15,7 @@ if (makePdf) mkdirSync(`${directory}/print`, { recursive: true });
 const sha256 = (contents) => createHash('sha256').update(contents).digest('hex');
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const runtime = { node: process.version, chromium: browser.version() };
 const page = await browser.newPage();
 const reports = [];
 try {
@@ -239,6 +240,7 @@ try {
 writeFileSync(`${directory}/print-audit.json`, JSON.stringify({
   workbookSha256: fixture.sha256,
   sourceRevision: process.env.METRO_SOURCE_REVISION,
+  runtime,
   maps: reports,
 }, null, 2));
 if (reports.some(report => !report.passed)) {

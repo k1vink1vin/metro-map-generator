@@ -260,6 +260,7 @@ textarea:focus {
 .toolbar {
   min-height: 62px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   background: #fff;
@@ -270,10 +271,11 @@ textarea:focus {
 .toolbar label {
   display: grid;
   gap: 3px;
+  max-width: 100%;
 }
 
 .ring-selector {
-  min-width: min(430px, 46vw);
+  min-width: min(430px, 100%);
 }
 
 .ring-selector select {
@@ -289,7 +291,8 @@ textarea:focus {
 }
 
 select {
-  min-width: 168px;
+  min-width: min(168px, 100%);
+  max-width: 100%;
   border: 0;
   border-bottom: 2px solid #111827;
   padding: 4px 2px 6px;
@@ -329,17 +332,21 @@ select {
   font-weight: 650;
 }
 
+.map-viewport {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #cfd6df;
+}
+
 .canvas-frame {
-  flex: 1;
-  min-height: 500px;
-  position: relative;
+  height: clamp(22rem, 65dvh, 48rem);
   overflow: auto;
+  overflow-anchor: none;
   background:
     linear-gradient(#eef2f7 1px, transparent 1px),
     linear-gradient(90deg, #eef2f7 1px, transparent 1px),
     #fff;
   background-size: 24px 24px;
-  border: 1px solid #cfd6df;
 }
 
 .map-zoom-stage {
@@ -358,19 +365,13 @@ select {
 }
 
 .zoom-controls {
-  position: sticky;
-  top: 10px;
-  z-index: 10;
-  width: max-content;
-  margin: 10px 10px -46px auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 4px;
-  padding: 5px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+  padding: 5px 10px;
+  border-bottom: 1px solid #cbd5e1;
 }
 
 .zoom-controls button {
@@ -399,7 +400,7 @@ select {
   outline: none;
   filter: drop-shadow(0 0 3px #2563eb);
 }
-.zoom-controls button[title*="四倍"] {
+.zoom-controls .zoom-detail {
   min-width: 70px;
   padding: 0 8px;
   font-size: 11px;
@@ -489,14 +490,12 @@ footer {
     border-bottom: 1px solid #cbd5e1;
   }
 
-  .toolbar {
-    flex-wrap: wrap;
-  }
-
   .button.generate {
     margin-left: 0;
   }
+}
 
+@media (max-width: 1000px) {
   .status-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -504,5 +503,11 @@ footer {
   .coverage-status,
   .ring-status {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 420px) {
+  .zoom-controls > span {
+    display: none;
   }
 }

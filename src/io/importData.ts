@@ -1,7 +1,15 @@
 import type { Worksheet } from 'exceljs';
 import type { MoscowRingDefinition, NetworkInput, Station, TransitLine } from '../types';
 
-type RecordRow = Record<string, string>;
+interface InputRow {
+  values: string[];
+  rowNumber: number;
+}
+
+interface RecordRow {
+  fields: Record<string, string>;
+  rowNumber: number;
+}
 
 function normalizeHeader(value: string): string {
   return value
@@ -13,7 +21,7 @@ function normalizeHeader(value: string): string {
 
 function pick(row: RecordRow, aliases: string[]): string {
   for (const alias of aliases) {
-    const value = row[normalizeHeader(alias)];
+    const value = row.fields[normalizeHeader(alias)];
     if (value != null && value.trim() !== '') return value.trim();
   }
   return '';
@@ -61,27 +69,18 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-function rowsToRecords(rows: string[][]): RecordRow[] {
+function rowsToRecords(rows: InputRow[]): RecordRow[] {
   if (rows.length < 2) return [];
-  const headers = rows[0].map((header) => normalizeHeader(header));
-  return rows.slice(1).map((values) =>
-    Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ''])),
-  );
+  const headers = rows[0].values.map((header) => normalizeHeader(header));
+  return rows.slice(1).map(({ values, rowNumber }) => ({
+    fields: Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ''])),
+    rowNumber,
+  }));
 }
 
 function stationRecordsToStations(records: RecordRow[]): Station[] {
-  const meaningfulRecords = records.filter((row) => {
-    const id = pick(row, ['id', 'stationId', 'station', '車站編號', '站號', '車站ID']);
-    const name = pick(row, ['name', 'stationName', '車站名稱', '站名']);
-    const latText = pick(row, ['lat', 'latitude', '緯度']);
-    const lonText = pick(row, ['lon', 'lng', 'longitude', '經度']);
-
-    // Ignore preformatted/template rows where only Transfer Group /
-    // Transfer Validation formulas exist. A-D are the actual station inputs.
-    return Boolean(id || name || latText || lonText);
-  });
-
-  return meaningfulRecords.map((row, index) => {
+  const stations: Station[] = [];
+  for (const row of records) {
     const id = pick(row, [
       'id',
       'stationId',
@@ -111,6 +110,17 @@ function stationRecordsToStations(records: RecordRow[]): Station[] {
       'longitude',
       '經度',
     ]);
+    // Ignore preformatted rows containing only transfer formulas.
+    if (!id && !name && !latText && !lonText) continue;
+    if (!id) {
+      throw new Error(`車站工作表第 ${row.rowNumber} 列：缺少車站編號。`);
+    }
+    const lat = Number(latText);
+    const lon = Number(lonText);
+    if (!latText || !lonText || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw new Error(`車站工作表第 ${row.rowNumber} 列：緯度 / 經度必須是數字。`);
+    }
+
     const complexId = pick(row, [
       'complexId',
       'transferId',
@@ -122,27 +132,16 @@ function stationRecordsToStations(records: RecordRow[]): Station[] {
       '轉乘',
     ]);
 
-    const lat = Number(latText);
-    const lon = Number(lonText);
-
-    if (!id) {
-      throw new Error(`車站工作表第 ${index + 2} 列：缺少車站編號。`);
-    }
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      throw new Error(
-        `車站工作表第 ${index + 2} 列：緯度 / 經度必須是數字。`,
-      );
-    }
-
-    return {
+    stations.push({
       id,
       name: name || undefined,
       nameEn: nameEn || undefined,
       lat,
       lon,
       complexId: complexId || undefined,
-    };
-  });
+    });
+  }
+  return stations;
 }
 
 function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
@@ -156,7 +155,7 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
 
   const buckets = new Map<string, PathBucket>();
 
-  records.forEach((row, index) => {
+  records.forEach((row) => {
     const lineId = pick(row, [
       'lineId',
       'routeId',
@@ -206,13 +205,13 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
     const sequence = Number(sequenceText);
 
     if (!lineId) {
-      throw new Error(`路線工作表第 ${index + 2} 列：缺少路線編號。`);
+      throw new Error(`路線工作表第 ${row.rowNumber} 列：缺少路線編號。`);
     }
     if (!stationId) {
-      throw new Error(`路線工作表第 ${index + 2} 列：缺少車站編號。`);
+      throw new Error(`路線工作表第 ${row.rowNumber} 列：缺少車站編號。`);
     }
-    if (!Number.isFinite(sequence)) {
-      throw new Error(`路線工作表第 ${index + 2} 列：順序必須是數字。`);
+    if (!sequenceText || !Number.isFinite(sequence)) {
+      throw new Error(`路線工作表第 ${row.rowNumber} 列：順序必須是數字。`);
     }
 
     const key = `${lineId}::${pathId}`;
@@ -225,7 +224,7 @@ function lineRecordsToLines(records: RecordRow[]): TransitLine[] {
     };
     if (!bucket.lineName && lineName) bucket.lineName = lineName;
     if ((!bucket.color || bucket.color === '#64748b') && color) bucket.color = color;
-    bucket.rows.push({ sequence, stationId, rowIndex: index + 2 });
+    bucket.rows.push({ sequence, stationId, rowIndex: row.rowNumber });
     buckets.set(key, bucket);
   });
 
@@ -272,22 +271,22 @@ function ringRecordsToDefinitions(records: RecordRow[]): MoscowRingDefinition[] 
   type RingRow = { sequence: number; stationId: string; rowIndex: number };
   const rings = new Map<string, RingRow[]>();
 
-  records.forEach((row, index) => {
+  records.forEach((row) => {
     const ringId = pick(row, ['ringId', 'ring', '環編號', '環ID']);
     const stationId = pick(row, ['stationId', 'station', '車站編號', '站號']);
     const sequenceText = pick(row, ['sequence', 'seq', 'order', '順序', '站序']);
 
     if (!ringId && !stationId && !sequenceText) return;
-    if (!ringId) throw new Error(`莫斯科環工作表第 ${index + 2} 列：缺少環編號。`);
-    if (!stationId) throw new Error(`莫斯科環工作表第 ${index + 2} 列：缺少車站編號。`);
+    if (!ringId) throw new Error(`莫斯科環工作表第 ${row.rowNumber} 列：缺少環編號。`);
+    if (!stationId) throw new Error(`莫斯科環工作表第 ${row.rowNumber} 列：缺少車站編號。`);
 
     const sequence = Number(sequenceText);
-    if (!Number.isFinite(sequence)) {
-      throw new Error(`莫斯科環工作表第 ${index + 2} 列：順序必須是數字。`);
+    if (!sequenceText || !Number.isFinite(sequence)) {
+      throw new Error(`莫斯科環工作表第 ${row.rowNumber} 列：順序必須是數字。`);
     }
 
     const bucket = rings.get(ringId) ?? [];
-    bucket.push({ sequence, stationId, rowIndex: index + 2 });
+    bucket.push({ sequence, stationId, rowIndex: row.rowNumber });
     rings.set(ringId, bucket);
   });
 
@@ -302,21 +301,25 @@ function ringRecordsToDefinitions(records: RecordRow[]): MoscowRingDefinition[] 
 }
 
 export function parseStationsCsv(text: string): Station[] {
-  return stationRecordsToStations(rowsToRecords(parseCsv(text)));
+  return stationRecordsToStations(csvToRecords(text));
 }
 
 export function parseLinesCsv(text: string): TransitLine[] {
-  return lineRecordsToLines(rowsToRecords(parseCsv(text)));
+  return lineRecordsToLines(csvToRecords(text));
 }
 
-function worksheetToRows(worksheet: Worksheet): string[][] {
-  const rows: string[][] = [];
-  worksheet.eachRow({ includeEmpty: false }, (row) => {
-    const values: string[] = [];
+function csvToRecords(text: string): RecordRow[] {
+  return rowsToRecords(parseCsv(text).map((values, index) => ({ values, rowNumber: index + 1 })));
+}
+
+function worksheetToRows(worksheet: Worksheet): InputRow[] {
+  const rows: InputRow[] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    const values: string[] = Array.from({ length: row.cellCount }, () => '');
     row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
       values[columnNumber - 1] = cell.text?.trim?.() ?? String(cell.value ?? '').trim();
     });
-    rows.push(values);
+    rows.push({ values, rowNumber });
   });
   return rows;
 }

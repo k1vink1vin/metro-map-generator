@@ -12,7 +12,7 @@ export const workbookSha256 = createHash('sha256').update(workbook).digest('hex'
 export const input = await importExcelBuffer(new Uint8Array(workbook));
 export const graph = buildGraph(input);
 export const rings = validateMoscowRings(graph, input.moscowRings ?? []);
-export const concentricCenterNodeId = defaultConcentricCenter(graph, 'TPE_Metro.xlsm');
+export const concentricCenterNodeId = defaultConcentricCenter(graph);
 if (!concentricCenterNodeId || graph.nodeById.get(concentricCenterNodeId)?.name !== '台北車站') {
   throw new Error('The canonical workbook must provide 台北車站 as the concentric centre.');
 }

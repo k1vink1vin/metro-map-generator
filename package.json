@@ -14,6 +14,7 @@
     "qa:principles": "node --import tsx scripts/qa-design-principles.tsx",
     "qa:workbook": "node --import tsx scripts/qa-workbook.ts",
     "qa:print": "node scripts/qa-print.mjs",
+    "qa:browser": "node scripts/qa-browser.mjs",
     "qa:centres": "node --import tsx scripts/qa-centres.tsx"
   },
   "dependencies": {

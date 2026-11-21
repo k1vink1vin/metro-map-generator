@@ -24,14 +24,17 @@ npm run qa:geometry
 npm run qa:workbook
 npx playwright install chromium
 METRO_PRINT_PDF=1 npm run qa:print
+npm run qa:browser
 ```
 
 CI 使用 Node.js 22 與 Chromium，並以 Noto Sans CJK TC 驗證排版。若系統已安裝 Chromium，可以設定 `CHROMIUM_PATH`。工作簿 QA 同一行程只算一次各版式，並產生以下檔案。CI 以 `tpe-metro-style-qa` 提供下載。
 
+瀏覽器回歸測試使用正式建置，驗證 Excel 空白值與錯誤列號、JSON 驗證失敗時的版式和來源、活頁簿改名後的預設圓心、桌面及手機的站點定位與 SVG 下載。
+
 - `qa-artifacts/*--stations-*.svg` 為 24 張完整圖，沿用網頁實際使用的 SVG 元件和樣式。
 - `qa-artifacts/print/*.pdf` 為 24 張單頁校樣，四周留白 10 mm，中文站名字級 4.5 mm。每張的實際尺寸記在印刷 QA 報告。按 PDF 的尺寸原大印製，字級會隨紙張縮放。
 - `qa-artifacts/workbook-manifest.json` 包含輸入檔 SHA-256、站名、站碼、路徑順序及配色。
-- `qa-artifacts/print-audit.json` 記錄每張圖的頁面尺寸、站名與站牌重疊、站名與路線相交、裁切、站碼、路徑差異及圖面比例尺實測。報告附工作簿、各 SVG 和 PDF 的 SHA-256，CI 另記錄原始碼版本。
+- `qa-artifacts/print-audit.json` 記錄每張圖的頁面尺寸、站名與站牌重疊、站名與路線相交、裁切、站碼、路徑差異及圖面比例尺實測。報告附工作簿、各 SVG 和 PDF 的 SHA-256 以及 Node.js 和 Chromium 版本，CI 另記錄原始碼版本。
 - `qa-artifacts/geographic-order.json` 記錄每種版式的東西與南北順序正確率，以及淡水、台北車站、南港展覽館、桃園和板橋的具名方位檢查。每軸比較約 3.6 km 以上的差距，示意版式每軸須達 97%。
 - `qa-artifacts/moscow-geography.json` 列出莫斯科版全部顯著方向反轉。`moscow--huilong-taoyuan-detail.svg` 用來複驗迴龍與桃園車站的相對位置。
 

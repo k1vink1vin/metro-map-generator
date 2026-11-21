@@ -54,6 +54,9 @@ jobs:
           METRO_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run qa:print
 
+      - name: Verify workbook import, station focus and SVG download in Chromium
+        run: npm run qa:browser
+
       - name: Upload workbook SVGs, print PDFs and audit data
         if: always()
         uses: actions/upload-artifact@v4

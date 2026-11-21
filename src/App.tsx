@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildGraph } from './core/graph';
 import { validateMoscowRings } from './core/moscowRings';
 import { defaultConcentricCenter } from './core/workbookPresentation';
@@ -11,6 +11,7 @@ import type {
   GraphModel,
   LayoutResult,
   MoscowRingDefinition,
+  Point,
   ValidatedMoscowRing,
   Station,
   StationVisualStyle,
@@ -52,6 +53,11 @@ const STYLE_GROUPS: Array<{
   },
 ];
 
+const MIN_MAP_ZOOM = 0.5;
+const MAX_MAP_ZOOM = 32;
+const MIN_READING_ZOOM = 8;
+const READING_LABEL_PIXELS = 14;
+
 function pretty(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
@@ -71,11 +77,35 @@ function createInitial() {
   return { graph, layout };
 }
 
+function canvasCenter(frame: HTMLDivElement) {
+  const bounds = frame.getBoundingClientRect();
+  return new DOMPoint(
+    bounds.left + frame.clientLeft + frame.clientWidth / 2,
+    bounds.top + frame.clientTop + frame.clientHeight / 2,
+  );
+}
+
+function centerMapPoint(frame: HTMLDivElement, svg: SVGSVGElement, point: Point) {
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return;
+  const target = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+  const center = canvasCenter(frame);
+  frame.scrollBy(target.x - center.x, target.y - center.y);
+}
+
+function zoomForReading(frame: HTMLDivElement | null) {
+  const svg = frame?.querySelector<SVGSVGElement>('svg.map-svg');
+  if (!frame?.clientWidth || !svg) return MIN_READING_ZOOM;
+  const fittedLabelPixels = Number(svg.dataset.labelFontSize) * frame.clientWidth / svg.viewBox.baseVal.width;
+  if (!(fittedLabelPixels > 0)) return MIN_READING_ZOOM;
+  const readingZoom = Math.ceil(READING_LABEL_PIXELS / fittedLabelPixels * 4) / 4;
+  return Math.min(MAX_MAP_ZOOM, Math.max(MIN_READING_ZOOM, readingZoom));
+}
+
 export function App() {
   const initial = useMemo(createInitial, []);
   const [stationsText, setStationsText] = useState(pretty(sampleNetwork.stations));
   const [linesText, setLinesText] = useState(pretty(sampleNetwork.lines));
-  const [style, setStyle] = useState<StyleId>('taipei');
   const [stationStyle, setStationStyle] =
     useState<StationVisualStyle>('taipei');
   const [graph, setGraph] = useState<GraphModel>(initial.graph);
@@ -88,69 +118,77 @@ export function App() {
   const [dataOpen, setDataOpen] = useState(true);
   const [mapZoom, setMapZoom] = useState(1);
   const [sourceName, setSourceName] = useState('內建測試資料');
+  const [draftEdited, setDraftEdited] = useState(false);
   const [focusedStationId, setFocusedStationId] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
-
-  // Centre the chosen station AFTER React updates the SVG size and viewBox.
-  // Scheduling this in the selection handler used the previous zoom width
-  // and left stations outside the visible viewport.
+  const zoomAnchor = useRef<Point | null>(null);
+  const importVersion = useRef(0);
+  const style = layout.style;
+  const currentStyle = useRef(style);
   useLayoutEffect(() => {
-    if (!focusedStationId) return;
-    const frame = canvasRef.current;
-    const svg = frame?.querySelector('svg.map-svg') as SVGSVGElement | null;
-    const point = layout.positions[focusedStationId];
-    if (!frame || !svg || !point) return;
-    const viewBox = svg.viewBox.baseVal;
-    const bounds = svg.getBoundingClientRect();
-    if (!viewBox.width || !viewBox.height || !bounds.width) return;
-    const x = ((point.x - viewBox.x) / viewBox.width) * bounds.width;
-    const y = ((point.y - viewBox.y) / viewBox.height) * bounds.height;
-    frame.scrollLeft = Math.max(0, x - frame.clientWidth / 2);
-    frame.scrollTop = Math.max(0, y - frame.clientHeight / 2);
-  }, [focusedStationId, mapZoom, layout]);
+    currentStyle.current = style;
+  }, [style]);
 
-  const changeMapZoom = (nextZoom: number) => {
-    const next = Math.min(12, Math.max(0.5, nextZoom));
+  // Recenter after React applies the new SVG dimensions and viewBox.
+  useLayoutEffect(() => {
+    const frame = canvasRef.current;
+    const svg = frame?.querySelector<SVGSVGElement>('svg.map-svg');
+    const focused = focusedStationId ? layout.positions[focusedStationId] : undefined;
+    const point = focused ?? zoomAnchor.current;
+    zoomAnchor.current = null;
+    if (!frame || !svg || !point) return;
+
+    const center = () => centerMapPoint(frame, svg, point);
+    center();
+    if (!focused) return;
+    const resize = new ResizeObserver(center);
+    resize.observe(frame);
+    return () => resize.disconnect();
+  }, [focusedStationId, mapZoom, layout, stationStyle]);
+
+  const changeMapZoom = useCallback((nextZoom: number) => {
+    const next = Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, nextZoom));
     if (next === mapZoom) return;
 
     const frame = canvasRef.current;
-    const centerX = frame
-      ? (frame.scrollLeft + frame.clientWidth / 2) / Math.max(1, frame.scrollWidth)
-      : 0.5;
-    const centerY = frame
-      ? (frame.scrollTop + frame.clientHeight / 2) / Math.max(1, frame.scrollHeight)
-      : 0.5;
-
-    setMapZoom(next);
-
-    if (frame && !focusedStationId) {
-      requestAnimationFrame(() => {
-        frame.scrollLeft =
-          centerX * frame.scrollWidth - frame.clientWidth / 2;
-        frame.scrollTop =
-          centerY * frame.scrollHeight - frame.clientHeight / 2;
-      });
+    const svg = frame?.querySelector<SVGSVGElement>('svg.map-svg');
+    const matrix = svg?.getScreenCTM();
+    if (!focusedStationId && frame && svg && matrix) {
+      const center = canvasCenter(frame).matrixTransform(matrix.inverse());
+      const viewBox = svg.viewBox.baseVal;
+      zoomAnchor.current = {
+        x: Math.max(viewBox.x, Math.min(center.x, viewBox.x + viewBox.width)),
+        y: Math.max(viewBox.y, Math.min(center.y, viewBox.y + viewBox.height)),
+      };
     }
-  };
+    setMapZoom(next);
+  }, [focusedStationId, mapZoom]);
 
-  // Readable close-up: keep the requested station in the visible viewport.
-  // The viewBox is in layout coordinates, while scrolling is in CSS pixels.
+  useEffect(() => {
+    const frame = canvasRef.current;
+    if (!frame) return;
+    const zoomOnWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || event.deltaY === 0) return;
+      event.preventDefault();
+      changeMapZoom(mapZoom + (event.deltaY < 0 ? 0.25 : -0.25));
+    };
+    frame.addEventListener('wheel', zoomOnWheel, { passive: false });
+    return () => frame.removeEventListener('wheel', zoomOnWheel);
+  }, [changeMapZoom, mapZoom]);
+
   const focusStation = (stationId: string) => {
     setFocusedStationId(stationId);
     if (!graph.nodeById.has(stationId)) return;
-    // At 1000px screen width, 400% still displayed many labels under 12px.
-    // Eight times zoom provides a genuinely readable station-level view.
-    setMapZoom((current) => Math.max(8, current));
+    const detailZoom = zoomForReading(canvasRef.current);
+    setMapZoom((current) => Math.max(detailZoom, current));
+    canvasRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
 
-    const resetMapZoom = () => {
+  const resetMapZoom = () => {
+    zoomAnchor.current = null;
     setMapZoom(1);
     setFocusedStationId('');
-    requestAnimationFrame(() => {
-      if (!canvasRef.current) return;
-      canvasRef.current.scrollLeft = 0;
-      canvasRef.current.scrollTop = 0;
-    });
+    canvasRef.current?.scrollTo(0, 0);
   };
 
   const generateFrom = (
@@ -158,12 +196,12 @@ export function App() {
     lines: TransitLine[],
     rings: MoscowRingDefinition[] = moscowRingDefinitions,
     nextStyle = style,
-    importedFileName?: string,
+    fromWorkbook = false,
   ) => {
     const nextGraph = buildGraph({ stations, lines });
     const nextRings = validateMoscowRings(nextGraph, rings);
-    const center = importedFileName
-      ? defaultConcentricCenter(nextGraph, importedFileName)
+    const center = fromWorkbook
+      ? defaultConcentricCenter(nextGraph)
       : concentricCenterNodeId;
     const selectedConcentricCenter = center && nextGraph.nodeById.has(center) ? center : undefined;
     const nextLayout = computeLayout(nextGraph, nextStyle, {
@@ -193,43 +231,63 @@ export function App() {
         moscowRingDefinitions,
         nextStyle,
       );
+      if (draftEdited) {
+        setSourceName('手動編輯資料');
+        setDraftEdited(false);
+      }
       setNotice(
         nextStyle === 'moscow'
           ? `莫斯科環驗證通過：${generated.rings.length} 個環。`
           : '',
       );
     } catch (cause) {
+      setNotice('');
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
+  const editData = (setText: (value: string) => void, value: string) => {
+    importVersion.current += 1;
+    setText(value);
+    setDraftEdited(true);
+    setNotice('');
+  };
+
   const importExcelFile = async (file?: File) => {
     if (!file) return;
+    const version = ++importVersion.current;
+    setError('');
+    setNotice('正在匯入 Excel…');
     try {
       const network = await importExcelWorkbook(file);
+      if (version !== importVersion.current) return;
       generateFrom(
         network.stations,
         network.lines,
         network.moscowRings ?? [],
-        style,
-        file.name,
+        currentStyle.current,
+        true,
       );
       setStationsText(pretty(network.stations));
       setLinesText(pretty(network.lines));
       setSourceName(file.name);
+      setDraftEdited(false);
       setNotice(
         `Excel 匯入完成：${network.stations.length} 個車站、${network.lines.length} 條路線、${network.moscowRings?.length ?? 0} 個莫斯科環；環閉合驗證通過。`,
       );
     } catch (cause) {
+      if (version !== importVersion.current) return;
+      setNotice('');
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
   const resetSample = () => {
+    importVersion.current += 1;
     setSourceName('內建測試資料');
     setStationsText(pretty(sampleNetwork.stations));
     setLinesText(pretty(sampleNetwork.lines));
-    setStyle('taipei');
+    setDraftEdited(false);
     setStationStyle('taipei');
     setConcentricCenterNodeId('');
     setMoscowRingDefinitions(sampleNetwork.moscowRings ?? []);
@@ -340,7 +398,7 @@ export function App() {
               </div>
               <textarea
                 value={stationsText}
-                onChange={(event) => { setStationsText(event.target.value); setSourceName('手動編輯資料'); }}
+                onChange={(event) => editData(setStationsText, event.target.value)}
                 spellCheck={false}
                 aria-label="Stations JSON"
               />
@@ -355,7 +413,7 @@ export function App() {
               </div>
               <textarea
                 value={linesText}
-                onChange={(event) => { setLinesText(event.target.value); setSourceName('手動編輯資料'); }}
+                onChange={(event) => editData(setLinesText, event.target.value)}
                 spellCheck={false}
                 aria-label="Lines JSON"
               />
@@ -369,11 +427,7 @@ export function App() {
               <span>路網風格</span>
               <select
                 value={style}
-                onChange={(event) => {
-                  const next = event.target.value as StyleId;
-                  setStyle(next);
-                  generate(next);
-                }}
+                onChange={(event) => generate(event.target.value as StyleId)}
               >
                 {STYLE_GROUPS.map((group) => (
                   <optgroup key={group.label} label={group.label}>
@@ -478,27 +532,18 @@ export function App() {
           {error ? <div className="error-banner">{error}</div> : null}
           {notice ? <div className="notice-banner">{notice}</div> : null}
 
-          <div
-            ref={canvasRef}
-            className="canvas-frame"
-            onWheel={(event) => {
-              if (!event.ctrlKey) return;
-              event.preventDefault();
-              changeMapZoom(
-                mapZoom + (event.deltaY < 0 ? 0.25 : -0.25),
-              );
-            }}
-          >
-            <div className="zoom-controls" aria-label="地圖細節倍率">
+          <div className="map-viewport">
+            <div className="zoom-controls" role="group" aria-label="地圖細節倍率">
               <button
                 type="button"
-                onClick={() => changeMapZoom(Math.max(mapZoom, 8))}
-                title="放大至少八倍，查看車站名稱"
+                className="zoom-detail"
+                onClick={() => changeMapZoom(Math.max(mapZoom, zoomForReading(canvasRef.current)))}
+                title="放大地圖以閱讀車站名稱"
               >清晰閱讀</button>
               <button
                 type="button"
                 onClick={() => changeMapZoom(mapZoom - 0.25)}
-                disabled={mapZoom <= 0.5}
+                disabled={mapZoom <= MIN_MAP_ZOOM}
                 title="降低細節倍率"
               >
                 −
@@ -514,7 +559,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => changeMapZoom(mapZoom + 0.25)}
-                disabled={mapZoom >= 12}
+                disabled={mapZoom >= MAX_MAP_ZOOM}
                 title="提高細節倍率"
               >
                 +
@@ -522,19 +567,18 @@ export function App() {
               <span>Ctrl + 滾輪調整細節倍率</span>
             </div>
 
-            <div
-              className="map-zoom-stage"
-              style={{ width: `${mapZoom * 100}%` }}
-            >
-              <SvgMap
-                graph={graph}
-                layout={layout}
-                zoom={mapZoom}
-                stationStyle={stationStyle}
-                sourceName={sourceName}
-                focusedNodeId={focusedStationId}
-                onStationSelect={focusStation}
-              />
+            <div ref={canvasRef} className="canvas-frame">
+              <div className="map-zoom-stage" style={{ width: `${mapZoom * 100}%` }}>
+                <SvgMap
+                  graph={graph}
+                  layout={layout}
+                  zoom={mapZoom}
+                  stationStyle={stationStyle}
+                  sourceName={sourceName}
+                  focusedNodeId={focusedStationId}
+                  onStationSelect={focusStation}
+                />
+              </div>
             </div>
           </div>
 
